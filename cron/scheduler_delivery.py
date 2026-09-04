@@ -724,9 +724,12 @@ def _run_bot_chat_turn(argv: list, env: dict, report_path: str, timeout: float) 
     """
     from hermes_cli.quiet_single_query import read_turn_report
 
+    # The scheduler may sit in a directory that no longer exists (a kanban worker whose
+    # scratch workspace was reaped): a child inheriting that cwd dies at CLI startup
+    # (#102941). The target home is the one directory this lane has already verified.
     proc = subprocess.Popen(
         argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-        env=env, creationflags=windows_hide_flags())
+        env=env, cwd=env.get("HERMES_HOME") or None, creationflags=windows_hide_flags())
     streams: dict = {}
 
     def _drain() -> None:
