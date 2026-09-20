@@ -1,13 +1,13 @@
 {
   "name": "hermes",
-  "productName": "Hermes",
+  "productName": "JarvisAIGeorge",
   "private": true,
   "version": "0.17.6",
-  "description": "Native desktop shell for Hermes Agent.",
+  "description": "JarvisAIGeorge desktop app, built on Hermes Agent.",
   "author": "Nous Research",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NousResearch/hermes-agent.git"
+    "url": "git+https://github.com/georgewangyu/JarvisAIGeorgeDesktop.git"
   },
   "type": "module",
   "main": "dist/electron-main.mjs",
@@ -189,9 +189,9 @@
   },
   "build": {
     "electronVersion": "40.10.2",
-    "appId": "com.nousresearch.hermes",
-    "productName": "Hermes",
-    "executableName": "Hermes",
+    "appId": "com.georgewangyu.jarvisaigeorge",
+    "productName": "JarvisAIGeorge",
+    "executableName": "JarvisAIGeorge",
     "protocols": [
       {
         "name": "Hermes Protocol",
@@ -200,7 +200,7 @@
         ]
       }
     ],
-    "artifactName": "Hermes-${version}-${os}-${arch}.${ext}",
+    "artifactName": "JarvisAIGeorge-${version}-${os}-${arch}.${ext}",
     "icon": "assets/icon",
     "directories": {
       "output": "release"
@@ -236,9 +236,9 @@
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
       "extendInfo": {
-        "CFBundleDisplayName": "Hermes",
-        "CFBundleExecutable": "Hermes",
-        "CFBundleName": "Hermes",
+        "CFBundleDisplayName": "JarvisAIGeorge",
+        "CFBundleExecutable": "JarvisAIGeorge",
+        "CFBundleName": "JarvisAIGeorge",
         "NSAudioCaptureUsageDescription": "Hermes uses audio capture for voice conversations.",
         "NSCameraUsageDescription": "Hermes uses the camera when a plugin or feature you enable requests it.",
         "NSMicrophoneUsageDescription": "Hermes uses the microphone for voice input and voice conversations.",
@@ -258,7 +258,7 @@
       ]
     },
     "dmg": {
-      "title": "Install Hermes",
+      "title": "Install JarvisAIGeorge",
       "backgroundColor": "#f5f5f7",
       "iconSize": 96,
       "window": {
