@@ -364,11 +364,11 @@ class MCPServerTransportMixin:
         # cross-origin hop natively, but forwards every other configured header verbatim — under
         # strict_redirect_headers those must not leave the configured origin on the probe either.
         probe_transport = _httpx.AsyncHTTPTransport(verify=ssl_verify, **_present(cert=client_cert))
-        _client_cls = _make_redirect_header_stripper(
+        _build_client = _make_redirect_header_stripper(
             _httpx, _httpx.URL(url), strict=strict_redirect_headers,
             configured_header_names={key.lower() for key in probe_headers})
         try:
-            async with _client_cls(
+            async with _build_client(
                     follow_redirects=True, timeout=_httpx.Timeout(timeout), transport=probe_transport,
                     **_present(mounts=_mcp_proxy_mounts(_httpx, url, ssl_verify, client_cert, self.name))) as client:
                 resp = await client.head(url, headers=probe_headers)  # cheapest; GET on 405/501
@@ -477,7 +477,7 @@ class MCPServerTransportMixin:
         # Explicit AsyncClient matching the SDK's create_mcp_http_client defaults; MUST come from the
         # SDK's httpx (httpx2 on mcp >= 2.0) since the SDK sends its own Requests through it.
         httpx = _core.sdk_httpx()
-        _client_cls = _make_redirect_header_stripper(
+        _build_client = _make_redirect_header_stripper(
             httpx, httpx.URL(url), strict=strict_cfg_headers, configured_header_names=configured_header_names)
         # verify/cert live on the inner transport: a custom transport= makes client-level TLS kwargs
         # inert — and suppresses httpx's own proxy auto-detection, hence the explicit mounts=.
@@ -491,7 +491,7 @@ class MCPServerTransportMixin:
 
         @asynccontextmanager
         async def _owned_client_streams():  # the SDK skips cleanup when http_client is provided
-            async with _client_cls(**client_kwargs) as http_client:
+            async with _build_client(**client_kwargs) as http_client:
                 async with _core.streamable_http_client(url, http_client=http_client) as streams:
                     yield streams
         return _owned_client_streams()

@@ -3295,7 +3295,8 @@ class TestMCPDiscoveryCrossProcessLock:
 class TestRedirectHeaderStripper:
     """Cross-origin redirect header boundary (portable Agent Plugins v1).
 
-    The stripper is an ``AsyncClient`` subclass overriding ``_build_redirect_request`` — the only
+    The stripper is an ``AsyncClient`` factory overriding ``_build_redirect_request`` on each built
+    client — the only
     seam that sees the actual redirect follow-up (``response.next_request`` is unset when response
     hooks fire) without also touching non-redirect traffic (a request hook would strip the OAuth
     auth flow's token/registration calls to a different-origin authorization server)."""
@@ -3304,10 +3305,10 @@ class TestRedirectHeaderStripper:
                         headers, location):
         from tools.mcp_tool_errors import _make_redirect_header_stripper
 
-        client_cls = _make_redirect_header_stripper(
+        build_client = _make_redirect_header_stripper(
             httpx, httpx.URL("https://origin.example.test/mcp"),
             strict=strict, configured_header_names=configured)
-        client = client_cls()
+        client = build_client()
         request = httpx.Request("GET", "https://origin.example.test/mcp", headers=headers)
         response = httpx.Response(302, headers={"location": location}, request=request)
         return client._build_redirect_request(request, response)

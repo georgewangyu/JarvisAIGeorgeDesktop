@@ -264,21 +264,27 @@ def _apply_identity_header(server_name: str, config: dict, headers: dict) -> dic
 
 def _make_redirect_header_stripper(httpx_mod, original_url, *, strict: bool = False,
                                    configured_header_names: "set[str] | frozenset[str]" = frozenset()):
-    """AsyncClient subclass enforcing the redirect credential boundary: on a cross-origin redirect
+    """Client factory enforcing the redirect credential boundary: on a cross-origin redirect
     follow-up it strips ``Authorization``; with *strict* (Agent Plugins v1 ``strict_redirect_headers``)
     every configured header (lowercase names in *configured_header_names*) is stripped too — v1 forbids
     forwarding them cross-origin.
 
-    This MUST live on ``_build_redirect_request``: ``response.next_request`` is unset when response
-    event hooks fire (httpx populates it later in the redirect loop), so a response hook can never
-    mutate the follow-up; and a *request* hook would fire on non-redirect traffic too — the OAuth
-    auth flow yields token/metadata/registration requests through the same client, often to a
-    different-origin authorization server whose own credentials must NOT be stripped."""
+    The factory builds ``httpx_mod.AsyncClient(**kwargs)`` — resolved at call time, so the proxy
+    ``mounts=`` / ``transport=`` the caller passes reach the SDK's real client class (and anything a
+    caller swapped in for it) unchanged — and installs the boundary on that instance's
+    ``_build_redirect_request``. This MUST live on ``_build_redirect_request``: ``response.next_request``
+    is unset when response event hooks fire (httpx populates it later in the redirect loop), so a
+    response hook can never mutate the follow-up; and a *request* hook would fire on non-redirect traffic
+    too — the OAuth auth flow yields token/metadata/registration requests through the same client, often
+    to a different-origin authorization server whose own credentials must NOT be stripped."""
     origin = (original_url.scheme, original_url.host, original_url.port)
 
-    class _Client(httpx_mod.AsyncClient):
-        def _build_redirect_request(self, request, response):
-            next_request = super()._build_redirect_request(request, response)
+    def _build_client(**kwargs):
+        client = httpx_mod.AsyncClient(**kwargs)
+        base_build = getattr(type(client), "_build_redirect_request", None)
+
+        def _build_redirect_request(request, response):
+            next_request = base_build(client, request, response)
             target = next_request.url
             if (target.scheme, target.host, target.port) != origin:
                 headers = next_request.headers
@@ -289,7 +295,10 @@ def _make_redirect_header_stripper(httpx_mod, original_url, *, strict: bool = Fa
                         del headers[_name]
             return next_request
 
-    return _Client
+        client._build_redirect_request = _build_redirect_request
+        return client
+
+    return _build_client
 
 
 # Wire-body cap, applied at the httpx transport before the SDK buffers/JSON-parses a response. A
