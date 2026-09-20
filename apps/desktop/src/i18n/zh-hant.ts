@@ -3,6 +3,15 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 import { defineLocale } from './define-locale'
 
 export const zhHant = defineLocale({
+  jarvisIntro: {
+    eyebrow: 'JARVIS AI GEORGE',
+    kicker: '給思考留一點空間',
+    headline: '更從容地掌控一切。',
+    description: '無論是問題、專案，還是想交出去的任務，都可以從這裡開始。',
+    think: '一起理清思路',
+    delegate: '讓工作動起來',
+    return: '從上次的地方繼續'
+  },
   sessionImport: {
     title: '從其他應用程式繼續',
     subtitle: '將對話匯入 Hermes，接著上次的進度繼續。',

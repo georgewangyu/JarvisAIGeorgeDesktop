@@ -232,6 +232,7 @@
       "dist/**"
     ],
     "mac": {
+      "icon": "assets/jarvis-icon.icns",
       "category": "public.app-category.developer-tools",
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",

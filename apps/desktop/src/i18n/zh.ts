@@ -3,6 +3,15 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 import { defineLocale } from './define-locale'
 
 export const zh = defineLocale({
+  jarvisIntro: {
+    eyebrow: 'JARVIS AI GEORGE',
+    kicker: '给思考留一点空间',
+    headline: '更从容地掌控一切。',
+    description: '无论是问题、项目，还是想交出去的任务，都可以从这里开始。',
+    think: '一起理清思路',
+    delegate: '让工作动起来',
+    return: '从上次的地方继续'
+  },
   connectors: {
     title: '连接你的应用',
     connect: '连接',

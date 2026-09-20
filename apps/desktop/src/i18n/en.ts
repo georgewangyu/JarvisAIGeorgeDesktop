@@ -3,6 +3,15 @@ import { FIELD_DESCRIPTIONS, FIELD_LABELS } from '@/app/settings/constants'
 import type { Translations } from './types'
 
 export const en: Translations = {
+  jarvisIntro: {
+    eyebrow: 'JARVIS AI GEORGE',
+    kicker: 'YOUR SPACE TO THINK',
+    headline: 'A quieter kind of control.',
+    description: 'Bring a question, a project, or a task you want off your plate.',
+    think: 'Think it through',
+    delegate: 'Put work in motion',
+    return: 'Pick up where you left off'
+  },
   connectors: {
     title: 'Connect your apps',
     connect: 'Connect',

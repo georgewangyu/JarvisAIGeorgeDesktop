@@ -168,6 +168,68 @@ export const nousTheme: DesktopTheme = {
   }
 }
 
+/** Jarvis desktop's warm-paper palette, using the SnackVoice purple family. */
+export const jarvisTheme: DesktopTheme = {
+  name: 'jarvis',
+  label: 'Jarvis',
+  description: 'Warm paper and violet',
+  colors: {
+    ...THEME_PRESET_PALETTES.nous.colors,
+    background: '#fbfbfb',
+    foreground: '#0f0f0f',
+    card: '#ffffff',
+    cardForeground: '#0f0f0f',
+    muted: '#f7f2ea',
+    mutedForeground: '#66636d',
+    popover: '#ffffff',
+    popoverForeground: '#0f0f0f',
+    primary: '#5a4fbf',
+    primaryForeground: '#ffffff',
+    secondary: '#f1eeff',
+    secondaryForeground: '#2a1f6e',
+    accent: '#f5f1ff',
+    accentForeground: '#2a1f6e',
+    border: '#e8e3d8',
+    input: '#ffffff',
+    ring: '#5a4fbf',
+    midground: '#5a4fbf',
+    midgroundForeground: '#ffffff',
+    composerRing: '#7c6feb',
+    sidebarBackground: '#fbfaf7',
+    sidebarBorder: '#ece6dd',
+    userBubble: '#f1eeff',
+    userBubbleBorder: '#d7cff8'
+  },
+  darkColors: {
+    ...THEME_PRESET_PALETTES.nous.darkColors,
+    background: '#2c2b29',
+    foreground: '#fbfbfb',
+    card: '#353431',
+    cardForeground: '#fbfbfb',
+    muted: '#3a3936',
+    mutedForeground: '#b9b6bd',
+    popover: '#393834',
+    popoverForeground: '#fbfbfb',
+    primary: '#9b90f0',
+    primaryForeground: '#211b41',
+    secondary: '#403b59',
+    secondaryForeground: '#f6f3ff',
+    accent: '#45405e',
+    accentForeground: '#f6f3ff',
+    border: '#55515b',
+    input: '#383735',
+    ring: '#9b90f0',
+    midground: '#c4bbff',
+    midgroundForeground: '#211b41',
+    composerRing: '#9b90f0',
+    sidebarBackground: '#292826',
+    sidebarBorder: '#48454d',
+    userBubble: '#403b59',
+    userBubbleBorder: '#5c5480'
+  },
+  typography: { fontSans: SYSTEM_SANS, fontMono: SYSTEM_MONO }
+}
+
 /** Catppuccin — Latte in light, Mocha in dark (Catppuccin.catppuccin-vsc). */
 export const catppuccinTheme: DesktopTheme = {
   name: 'catppuccin',
@@ -388,6 +450,7 @@ export const slateTheme: DesktopTheme = {
 }
 
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
+  jarvis: jarvisTheme,
   nous: nousTheme,
   github: githubTheme,
   catppuccin: catppuccinTheme,
@@ -404,4 +467,4 @@ export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
 export const BUILTIN_THEME_LIST = Object.values(BUILTIN_THEMES)
 
 /** Skin used when nothing is persisted or the persisted name is retired. */
-export const DEFAULT_SKIN_NAME = 'nous'
+export const DEFAULT_SKIN_NAME = 'jarvis'

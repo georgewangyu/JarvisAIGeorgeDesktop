@@ -1,9 +1,9 @@
 import { useState } from 'react'
 
+import { useI18n } from '@/i18n/context'
 import { capitalize, normalize } from '@/lib/text'
 
 import introCopyJsonl from './intro-copy.jsonl?raw'
-import { Wordmark } from './wordmark'
 
 type IntroCopy = {
   headline: string
@@ -145,8 +145,6 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
   return copies[Math.abs(seed) % copies.length] || FALLBACK_COPY[0]
 }
 
-const WORDMARK = 'HERMES AGENT'
-
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)
 
@@ -158,18 +156,34 @@ function resolveCopy(personality?: string, seed?: number): IntroCopy {
 }
 
 export function Intro({ personality, seed }: IntroProps) {
+  const { t } = useI18n()
   const [mountSeed] = useState(() => Math.floor(Math.random() * 100000))
   const copy = resolveCopy(personality, mountSeed + (seed ?? 0))
+  const body = NEUTRAL_PERSONALITIES.has(normalizeKey(personality)) ? t.jarvisIntro.description : copy.body
 
   return (
     <div
-      className="pointer-events-none flex w-full min-w-0 flex-col items-center justify-center px-0.5 py-6 text-center text-muted-foreground sm:px-6 lg:px-8"
+      className="pointer-events-none mx-auto flex w-full max-w-3xl min-w-0 flex-col px-4 py-8 text-foreground sm:px-8 sm:py-12"
       data-slot="aui_intro"
     >
-      <div className="w-full min-w-0">
-        <Wordmark className="mb-1" text={WORDMARK} />
-
-        <p className="m-0 text-center leading-normal tracking-tight">{copy.body}</p>
+      <div className="mb-12 flex items-center gap-3">
+        <span aria-hidden="true" className="size-8 shrink-0 rounded-full bg-primary" />
+        <span className="text-xs font-semibold tracking-[0.2em] text-primary">{t.jarvisIntro.eyebrow}</span>
+      </div>
+      <div className="rounded-3xl bg-accent px-7 py-9 sm:px-10 sm:py-12">
+        <p className="mb-4 text-xs font-semibold tracking-[0.2em] text-primary">{t.jarvisIntro.kicker}</p>
+        <h1 className="max-w-xl text-4xl font-semibold leading-tight tracking-tight text-foreground sm:text-5xl">
+          {t.jarvisIntro.headline}
+        </h1>
+        <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">{body}</p>
+      </div>
+      <div className="mt-9 grid gap-0 text-sm font-medium sm:grid-cols-3">
+        {[t.jarvisIntro.think, t.jarvisIntro.delegate, t.jarvisIntro.return].map((label, index) => (
+          <div className="flex items-center gap-3 border-t border-border py-4 sm:pr-3" key={label}>
+            <span className="text-xs font-semibold text-primary">0{index + 1}</span>
+            <span>{label}</span>
+          </div>
+        ))}
       </div>
     </div>
   )

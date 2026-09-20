@@ -3,6 +3,15 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 import { defineLocale } from './define-locale'
 
 export const ja = defineLocale({
+  jarvisIntro: {
+    eyebrow: 'JARVIS AI GEORGE',
+    kicker: '考えるための場所',
+    headline: '静かで、確かなコントロール。',
+    description: '質問も、プロジェクトも、任せたい仕事も。ここから始めましょう。',
+    think: '一緒に考える',
+    delegate: '仕事を進める',
+    return: '続きから再開する'
+  },
   sessionImport: {
     title: '別のアプリから続ける',
     subtitle: '会話をHermesに取り込み、続きを始めましょう。',

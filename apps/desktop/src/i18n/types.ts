@@ -59,6 +59,15 @@ interface AuxTaskCopy {
 }
 
 export interface Translations {
+  jarvisIntro: {
+    eyebrow: string
+    kicker: string
+    headline: string
+    description: string
+    think: string
+    delegate: string
+    return: string
+  }
   connectors: {
     title: string
     connect: string
