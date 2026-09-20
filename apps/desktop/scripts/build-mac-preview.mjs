@@ -45,6 +45,5 @@ run([
   'run', 'builder', '--', '--mac',
   '-c.mac.identity=null',
   '-c.mac.hardenedRuntime=false',
-  '-c.afterSign=null',
   ...process.argv.slice(2)
 ])
