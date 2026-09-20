@@ -11,6 +11,7 @@ import {
   cachedScriptPath,
   cleanInstallerLogLine,
   hasExistingGitCheckout,
+  installScriptUrl,
   installedAgentInstallScript,
   installRefForStamp,
   isPinnedCommit,
@@ -21,6 +22,14 @@ import {
 
 const SCRIPT_NAME = process.platform === 'win32' ? 'install.ps1' : 'install.sh'
 const ZERO_COMMIT = '0000000000000000000000000000000000000000'
+
+test('packaged bootstrap fetches the installer from the Jarvis fork at its pinned ref', () => {
+  const ref = 'a'.repeat(40)
+  assert.equal(
+    installScriptUrl(ref, SCRIPT_NAME),
+    `https://raw.githubusercontent.com/georgewangyu/JarvisAIGeorgeDesktop/${ref}/scripts/${SCRIPT_NAME}`
+  )
+})
 
 function mkTmpHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-bootstrap-test-'))
