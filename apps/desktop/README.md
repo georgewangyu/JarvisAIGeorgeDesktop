@@ -94,12 +94,20 @@ npm run dev:fake-boot   # exercise the startup overlay with deterministic delays
 
 ```bash
 npm run dist:mac     # DMG + zip
+npm run dist:mac:preview # unsigned local DMG + zip; no keychain or notarization
 npm run dist:win     # NSIS + MSI
 npm run dist:linux   # AppImage + deb + rpm
 npm run pack         # unpacked app under release/ (no installer)
 ```
 
 Installers are built and uploaded to GitHub Releases manually. macOS/Windows signing & notarization happen automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
+
+Use `dist:mac:preview` for a local design review. It disables certificate
+auto-discovery, removes signing/notarization credentials from the build process,
+and produces an unnotarized app that is **not** a distributable release. To
+open it without touching an existing Hermes profile, launch its executable with
+`HERMES_DESKTOP_USER_DATA_DIR` set to a fresh temporary directory. A signed
+release should select its intended Developer ID identity and keychain explicitly.
 
 ### How it works
 
