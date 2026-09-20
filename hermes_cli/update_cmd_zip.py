@@ -435,7 +435,7 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False, _windo
         )
         _m().sys.exit(1)
     _abort_zip_update_if_dirty_tree()
-    _download_and_swap_zip(branch, f"https://github.com/NousResearch/hermes-agent/archive/refs/heads/{branch}.zip")
+    _download_and_swap_zip(branch, f"https://github.com/georgewangyu/JarvisAIGeorgeDesktop/archive/refs/heads/{branch}.zip")
     _sweep_bytecode_after_update(branch)
     from dataclasses import replace as _replace
     _hand_off_post_swap(

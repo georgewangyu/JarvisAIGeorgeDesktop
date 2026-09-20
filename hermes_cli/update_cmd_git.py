@@ -20,7 +20,7 @@ _ORPHAN_RESCUE_REF_MAX_AGE_DAYS = 30
 
 _GIT_TEXT_KW = dict(capture_output=True, text=True, encoding="utf-8", errors="replace")
 _BAR = "=" * 68
-_UPSTREAM_ADD_CMD = "git remote add upstream https://github.com/NousResearch/hermes-agent.git"
+_UPSTREAM_ADD_CMD = "git remote add upstream https://github.com/georgewangyu/JarvisAIGeorgeDesktop.git"
 
 
 def _git_ok(git_cmd, args, cwd, **kw) -> bool:
@@ -169,12 +169,12 @@ def _print_parked_branch_kept_notice(current_branch: str, target_branch: str, un
 
 
 OFFICIAL_REPO_URLS = {
-    "https://github.com/NousResearch/hermes-agent.git",
-    "git@github.com:NousResearch/hermes-agent.git",
-    "https://github.com/NousResearch/hermes-agent",
-    "git@github.com:NousResearch/hermes-agent",
+    "https://github.com/georgewangyu/JarvisAIGeorgeDesktop.git",
+    "git@github.com:georgewangyu/JarvisAIGeorgeDesktop.git",
+    "https://github.com/georgewangyu/JarvisAIGeorgeDesktop",
+    "git@github.com:georgewangyu/JarvisAIGeorgeDesktop",
 }
-OFFICIAL_REPO_URL = "https://github.com/NousResearch/hermes-agent.git"
+OFFICIAL_REPO_URL = "https://github.com/georgewangyu/JarvisAIGeorgeDesktop.git"
 SKIP_UPSTREAM_PROMPT_FILE = ".skip_upstream_prompt"
 
 
@@ -239,7 +239,7 @@ def _offer_upstream_remote(git_cmd: list[str], cwd: Path, *, assume_yes: bool, i
     from hermes_cli.update_cmd import _add_upstream_remote, _mark_skip_upstream_prompt
     print(
         "\nℹ Your fork is not tracking the official Hermes repository.\n"
-        "  This means you may miss updates from NousResearch/hermes-agent.\n"
+        "  This means you may miss updates from georgewangyu/JarvisAIGeorgeDesktop.\n"
     )
     if assume_yes or (input_fn is None and not (sys.stdin.isatty() and sys.stdout.isatty())):
         print(f"  Skipping upstream setup (non-interactive run).\n  Add it later with: {_UPSTREAM_ADD_CMD}")
@@ -260,7 +260,7 @@ def _offer_upstream_remote(git_cmd: list[str], cwd: Path, *, assume_yes: bool, i
     if not _add_upstream_remote(git_cmd, cwd):
         print("  ✗ Failed to add upstream remote. Skipping upstream sync.")
         return False
-    print("  ✓ Added upstream: https://github.com/NousResearch/hermes-agent.git")
+    print(f"  ✓ Added upstream: {OFFICIAL_REPO_URL}")
     return True
 
 

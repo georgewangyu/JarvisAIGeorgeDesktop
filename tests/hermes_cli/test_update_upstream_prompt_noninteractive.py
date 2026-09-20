@@ -17,6 +17,19 @@ import pytest
 from hermes_cli import update_cmd
 
 
+@pytest.mark.parametrize(
+    "origin,expected",
+    [
+        ("https://github.com/georgewangyu/JarvisAIGeorgeDesktop.git", False),
+        ("git@github.com:georgewangyu/JarvisAIGeorgeDesktop.git", False),
+        ("https://github.com/NousResearch/hermes-agent.git", True),
+        (None, False),
+    ],
+)
+def test_jarvis_install_updates_from_its_own_origin(origin, expected):
+    assert update_cmd._is_fork(origin) is expected
+
+
 @pytest.fixture
 def fork_without_upstream(tmp_path):
     with patch.object(

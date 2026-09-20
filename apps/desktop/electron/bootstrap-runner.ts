@@ -1084,9 +1084,9 @@ export {
   cachedScriptPath,
   cleanInstallerLogLine,
   hasExistingGitCheckout,
-  installScriptUrl,
   installedAgentInstallScript,
   installRefForStamp,
+  installScriptUrl,
   isPinnedCommit,
   // Exposed for testability
   parseStageResult,
