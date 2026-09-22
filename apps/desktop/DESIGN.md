@@ -80,10 +80,11 @@ shows worker topology, or steals focus for background changes.
 - **Pages are durable destinations.** Chat, Skills, Messaging, and Artifacts
   remain in shell chrome. Do not hide a distinct product noun inside an
   unrelated page.
-- **Route overlays are short tasks.** Settings, Command Center, Cron, Profiles,
+- **Route overlays are short tasks.** Settings, Command Center, Profiles,
   Agents, and Starmap render as `OverlayView` cards and return to the previous
-  route on close. Model/session pickers and dialogs layer above the current
-  surface; they are not navigation stacks.
+  route on close. Consumer Automations is a durable workspace page, so the
+  navigation rail remains usable. Model/session pickers and dialogs layer above
+  the current surface; they are not navigation stacks.
 - **Panes are working context.** Preview, files, review, and terminal remain
   attached to the current task. Their state survives temporary hiding and chat
   switches where the underlying tool is meant to persist.

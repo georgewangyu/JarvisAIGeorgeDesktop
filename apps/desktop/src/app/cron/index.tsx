@@ -303,6 +303,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
   const jobs = useStore($cronJobs)
   const [loading, setLoading] = useState(jobs.length === 0)
   const [query, setQuery] = useState('')
+  const [blueprintsExpanded, setBlueprintsExpanded] = useState(false)
   const [busyJobTokens, setBusyJobTokens] = useState<ReadonlyMap<string, symbol>>(() => new Map())
   const [triggeringJobKeys, setTriggeringJobKeys] = useState<ReadonlySet<string>>(() => new Set())
   const triggerControllerRef = useRef<CronTriggerController | null>(null)
@@ -631,7 +632,10 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
 
   return (
     <Panel closeLabel={c.close} inline={inline} onClose={onClose}>
-      <PanelHeader subtitle={c.count(totalCount)} title={c.title} />
+      <PanelHeader
+        subtitle={inline ? <span className="text-sm">{c.count(totalCount)}</span> : c.count(totalCount)}
+        title={inline ? <span className="text-2xl font-semibold tracking-tight">{c.title}</span> : c.title}
+      />
 
       {loading && jobs.length === 0 ? (
         <PageLoader label={c.loading} />
@@ -672,7 +676,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
                 onSelect={() => setSelectedJobId(job.id)}
               />
             ))}
-            {visibleJobs.length === 0 && (
+            {visibleJobs.length === 0 && (!query.trim() || visibleBlueprints.length === 0) && (
               <p className="px-2 py-4 text-center text-xs text-muted-foreground">
                 {query.trim() ? c.emptyTitleSearch : c.emptyTitleNew}
               </p>
@@ -680,17 +684,33 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
             <PanelAddButton label={c.newCron} onClick={() => setEditor({ mode: 'create' })} />
             {visibleBlueprints.length > 0 && (
               <>
-                <PanelSectionLabel className="mt-3 px-2">{c.blueprints.tab}</PanelSectionLabel>
-                {visibleBlueprints.map(item => (
-                  <PanelListRow
-                    active={false}
-                    icon="rocket"
-                    key={item.key}
-                    onSelect={() => setEditor({ blueprintKey: item.key, mode: 'create' })}
-                    rowKey={`blueprint-${item.key}`}
-                    title={item.title}
-                  />
-                ))}
+                <PanelSectionLabel className="mt-4 px-2">
+                  {query.trim() ? (
+                    <span>
+                      {c.blueprints.tab} · {visibleBlueprints.length}
+                    </span>
+                  ) : (
+                    <Button
+                      aria-expanded={blueprintsExpanded}
+                      onClick={() => setBlueprintsExpanded(value => !value)}
+                      size="inline"
+                      variant="text"
+                    >
+                      {c.blueprints.tab} · {visibleBlueprints.length}
+                    </Button>
+                  )}
+                </PanelSectionLabel>
+                {(blueprintsExpanded || query.trim()) &&
+                  visibleBlueprints.map(item => (
+                    <PanelListRow
+                      active={false}
+                      icon="rocket"
+                      key={item.key}
+                      onSelect={() => setEditor({ blueprintKey: item.key, mode: 'create' })}
+                      rowKey={`blueprint-${item.key}`}
+                      title={item.title}
+                    />
+                  ))}
               </>
             )}
           </PanelList>
@@ -706,7 +726,10 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
             />
           ) : query.trim() ? (
             // A search with no selected job: search-flavored copy is right.
-            <PanelEmpty description={c.emptyDescSearch} icon="search" />
+            <PanelEmpty
+              description={visibleBlueprints.length > 0 ? c.blueprints.subtitle : c.emptyDescSearch}
+              icon={visibleBlueprints.length > 0 ? 'rocket' : 'search'}
+            />
           ) : (
             // No selection and no search — "Try a broader search query" here
             // just confused people staring at an empty panel with zero jobs.
