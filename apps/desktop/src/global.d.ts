@@ -280,6 +280,12 @@ declare global {
       api: <T>(request: HermesApiRequest) => Promise<T>
       notify: (payload: HermesNotification) => Promise<boolean>
       requestMicrophoneAccess: () => Promise<boolean>
+      jarvisOnboarding?: {
+        getPermissions: () => Promise<JarvisOnboardingPermissionSnapshot>
+        openFullDiskAccess: () => Promise<boolean>
+        requestMicrophone: () => Promise<boolean>
+        startCodexOAuth: () => Promise<{ message?: string; ok: boolean }>
+      }
       /** read_window_below tool: metadata for the OS window directly underneath this one (never pixels). */
       readWindowBelow?: () => Promise<{
         frontmost: { app: string; title: string } | null
@@ -609,6 +615,15 @@ declare global {
       onOpenFindBarRequested: (callback: () => void) => () => void
     }
   }
+}
+
+export type JarvisPermissionStatus = 'denied' | 'granted' | 'not-determined' | 'restricted' | 'unknown'
+
+export interface JarvisOnboardingPermissionSnapshot {
+  apps: Record<'mail' | 'messages' | 'notes' | 'whatsapp', boolean>
+  fullDiskAccess: JarvisPermissionStatus
+  microphone: JarvisPermissionStatus
+  platform: NodeJS.Platform
 }
 
 export interface DesktopMarketplaceSearchItem {

@@ -15,11 +15,13 @@ import type {
   DesktopBootstrapState
 } from '@/global'
 import { useI18n } from '@/i18n'
-import { AlertCircle, ChevronDown, ChevronRight, Globe, iconSize, Loader2, Monitor } from '@/lib/icons'
+import { ChevronDown, ChevronRight, Globe, iconSize } from '@/lib/icons'
 import { capitalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
+import { completeDesktopOnboarding } from '@/store/onboarding'
 
 import { FirstRunRemoteForm } from './first-run-remote-form'
+import { JarvisSetupJourney } from './jarvis-setup-journey'
 
 /**
  * DesktopInstallOverlay
@@ -171,7 +173,11 @@ export function splitFailureDetails(text: string | null): [string, string | null
   }
 
   const lead = value.slice(0, marker).trim()
-  const detail = value.slice(marker).replace(/^\s*Details:\s*/, '').trim()
+
+  const detail = value
+    .slice(marker)
+    .replace(/^\s*Details:\s*/, '')
+    .trim()
 
   return [lead || value, detail || null]
 }
@@ -292,6 +298,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   const [copied, setCopied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [remoteOpen, setRemoteOpen] = useState(false)
+  const [guidedSetup, setGuidedSetup] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const logEndRef = useRef<HTMLDivElement | null>(null)
 
@@ -358,24 +365,6 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     }
   }, [state.error])
 
-  // The choice remains mounted while main hands off to local bootstrap. Once
-  // a manifest/failure takes ownership (or a later repair presents a fresh
-  // choice), this transient button state must not leak across phases — so it
-  // records the root it was produced under and is read back only under that
-  // same root. Deriving it beats clearing it in an effect: the choice paints
-  // as soon as the first snapshot commits, and a click landing before such an
-  // effect flushed would have its error wiped before it ever rendered.
-  const [localStart, setLocalStart] = useState<{
-    root: string | null
-    starting: boolean
-    error: string | null
-  }>({ root: null, starting: false, error: null })
-
-  const activeRoot = state.setupChoice?.activeRoot ?? null
-  const forActiveRoot = localStart.root === activeRoot
-  const localStarting = forActiveRoot && localStart.starting
-  const localStartError = forActiveRoot ? localStart.error : null
-
   // Mount logic: show whenever a bootstrap is in flight, completed-with-error,
   // or actively running with a manifest. Hide entirely after a successful
   // completion so the rest of the UI can take over.
@@ -400,8 +389,12 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       return true
     }
 
+    if (guidedSetup) {
+      return true
+    }
+
     return false
-  }, [enabled, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
+  }, [enabled, guidedSetup, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
 
   if (!shouldShow) {
     return null
@@ -411,76 +404,34 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     return <FirstRunRemoteForm onBack={() => setRemoteOpen(false)} />
   }
 
-  if (state.setupChoice) {
+  if (state.setupChoice || guidedSetup) {
     return (
-      <div className="fixed inset-0 z-(--z-setup) flex items-center justify-center bg-background/90 p-4 backdrop-blur-md">
-        <div className="w-full max-w-2xl rounded-xl border border-(--stroke-nous) bg-card p-8 shadow-nous">
-          <div className="flex items-start gap-4">
-            <BrandMark className="size-11 shrink-0" />
-            <div className="min-w-0">
-              <h2 className="text-xl font-semibold tracking-tight">{copy.setupChoiceTitle}</h2>
-              <p className="mt-1.5 text-sm text-muted-foreground">{copy.setupChoiceDesc}</p>
-            </div>
-          </div>
+      <JarvisSetupJourney
+        bootstrapComplete={Boolean(state.completedAt && !state.active && !state.error)}
+        bootstrapError={state.error}
+        onBeginSetup={async () => {
+          const desktop = window.hermesDesktop
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <button
-              className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-4 text-left transition hover:bg-(--chrome-action-hover)"
-              onClick={() => setRemoteOpen(true)}
-              type="button"
-            >
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Globe className="size-4 text-muted-foreground" />
-                <span>{copy.connectExistingTitle}</span>
-              </div>
-              <p className="mt-2 text-sm leading-5 text-muted-foreground">{copy.connectExistingDesc}</p>
-            </button>
+          if (!desktop || typeof desktop.continueBootstrapLocal !== 'function') {
+            throw new Error(copy.localStartUnavailable)
+          }
 
-            <button
-              className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-4 text-left transition hover:bg-(--chrome-action-hover) disabled:cursor-wait disabled:opacity-60"
-              disabled={localStarting}
-              onClick={async () => {
-                setLocalStart({ root: activeRoot, starting: true, error: null })
+          setGuidedSetup(true)
+          await desktop.continueBootstrapLocal()
+        }}
+        onConnectOther={() => setRemoteOpen(true)}
+        onFinish={async () => {
+          const result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
 
-                try {
-                  const desktop = window.hermesDesktop
+          if (!result?.ok) {
+            throw new Error(result?.message || 'ChatGPT sign-in could not start.')
+          }
 
-                  if (!desktop || typeof desktop.continueBootstrapLocal !== 'function') {
-                    throw new Error(copy.localStartUnavailable)
-                  }
-
-                  await desktop.continueBootstrapLocal()
-                } catch (err) {
-                  setLocalStart({ root: activeRoot, starting: false, error: errorMessage(err) })
-                }
-              }}
-              type="button"
-            >
-              <div className="flex items-center gap-2 text-sm font-medium">
-                {localStarting ? (
-                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                ) : (
-                  <Monitor className="size-4 text-muted-foreground" />
-                )}
-                <span>{copy.installLocalTitle}</span>
-              </div>
-              <p className="mt-2 text-sm leading-5 text-muted-foreground">{copy.installLocalDesc}</p>
-            </button>
-          </div>
-
-          {localStartError ? (
-            <div className="mt-4 flex items-start gap-2 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" />
-              <span>{localStartError}</span>
-            </div>
-          ) : null}
-
-          <div className="mt-6 text-xs text-muted-foreground">
-            {copy.installTo}{' '}
-            <code className="font-mono text-(--ui-text-secondary)">{state.setupChoice.activeRoot}</code>
-          </div>
-        </div>
-      </div>
+          completeDesktopOnboarding()
+          setGuidedSetup(false)
+        }}
+        onShowInstallDetails={() => setGuidedSetup(false)}
+      />
     )
   }
 

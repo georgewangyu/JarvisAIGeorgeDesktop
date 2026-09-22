@@ -1326,7 +1326,6 @@ export function ContribWiring({ children }: { children: ReactNode }) {
 
       {/* The full real overlay set (mirrors DesktopController's `overlays`). */}
       <RemoteDisplayBanner />
-      {!isAuxiliaryWindow() && <DesktopInstallOverlay />}
       {!isAuxiliaryWindow() && <IntroRevealGate enabled={gatewayState === 'open'} />}
       {!isAuxiliaryWindow() && (
         <OnboardingChatGate
@@ -1368,6 +1367,10 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       <UpdatesOverlay />
       <GatewayConnectingOverlay />
       <BootFailureOverlay />
+      {/* First-run setup owns the foreground while it is installing. Keeping
+          it after generic boot recovery prevents an expected backend timeout
+          from covering the permission journey mid-step. */}
+      {!isAuxiliaryWindow() && <DesktopInstallOverlay />}
       <CommandPalette />
       <PluginInstallModal />
       <PetGenerateOverlay />

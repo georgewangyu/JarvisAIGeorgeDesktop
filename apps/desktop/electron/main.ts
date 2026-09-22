@@ -256,6 +256,8 @@ import { createHudSnapShortcut } from './hud-snap-shortcut'
 import { buildHudWindowUrl } from './hud-url'
 import { resolveHudWindowing } from './hud-windowing'
 import { createIntroRevealWindowController } from './intro-reveal-window'
+import { registerJarvisCodexOAuth } from './jarvis-codex-oauth'
+import { registerJarvisOnboardingPermissions } from './jarvis-onboarding-permissions'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
 import { notifyLauncherWindowRevealed } from './linux-launcher-ready'
 import { createLocalBackendLifecycle, waitForTeardown } from './local-backend-lifecycle'
@@ -16287,6 +16289,14 @@ ipcMain.handle('hermes:profile:set', async (_event, name) => {
 
 ipcMain.on('hermes:previewShortcutActive', (_event, active) => {
   previewShortcutActive = Boolean(active)
+})
+
+registerJarvisOnboardingPermissions({ ipcMain, shell, systemPreferences })
+registerJarvisCodexOAuth({
+  agentRoot: ACTIVE_HERMES_ROOT,
+  hermesHome: HERMES_HOME,
+  ipcMain,
+  resolvePython: () => findPythonForRoot(ACTIVE_HERMES_ROOT)
 })
 
 ipcMain.handle('hermes:requestMicrophoneAccess', async () => {
