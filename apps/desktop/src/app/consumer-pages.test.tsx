@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it } from 'vitest'
 
 import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/composer'
-import { $cronJobs } from '@/store/cron'
+import { $cronFocusJobId, $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $goalsBySession } from '@/store/goals'
 import { $sessions } from '@/store/session'
 import { makeSessionInfo } from '@/test/session-info'
@@ -14,6 +14,7 @@ afterEach(() => {
   cleanup()
   clearSessionDraft(null)
   $cronJobs.set([])
+  setCronFocusJobId(null)
   $goalsBySession.set({})
   $sessions.set([])
 })
@@ -47,6 +48,27 @@ it('shows completed automation state instead of its expired one-time schedule', 
 
   expect(screen.getByRole('button', { name: /Morning briefing Completed/ })).toBeTruthy()
   expect(screen.queryByText('once in 1 minute')).toBeNull()
+})
+
+it('opens the exact automation selected from Feed', () => {
+  $cronJobs.set([
+    { id: 'first', name: 'Morning briefing', enabled: true },
+    { id: 'second', name: 'Weekly review', enabled: true }
+  ])
+
+  render(
+    <MemoryRouter initialEntries={['/feed']}>
+      <Routes>
+        <Route element={<ConsumerFeedView />} path="/feed" />
+        <Route element={<p>Opened automations</p>} path="/cron" />
+      </Routes>
+    </MemoryRouter>
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: /Weekly review/ }))
+
+  expect(screen.getByText('Opened automations')).toBeTruthy()
+  expect($cronFocusJobId.get()).toBe('second')
 })
 
 it('turns an Idea into an editable chat draft without sending it', () => {

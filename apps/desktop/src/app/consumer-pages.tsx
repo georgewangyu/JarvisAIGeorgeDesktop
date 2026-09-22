@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
-import { $cronJobs } from '@/store/cron'
+import { $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $goalsBySession, type GoalStatus } from '@/store/goals'
 import { $sessions } from '@/store/session'
 import type { CronJob } from '@/types/hermes'
@@ -157,7 +157,10 @@ export function ConsumerFeedView() {
                   <button
                     className="rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5 text-left transition-colors hover:bg-(--ui-control-hover-background)"
                     key={job.id}
-                    onClick={() => navigate(CRON_ROUTE)}
+                    onClick={() => {
+                      setCronFocusJobId(job.id)
+                      navigate(CRON_ROUTE)
+                    }}
                     type="button"
                   >
                     <div className="flex items-center justify-between gap-3">
