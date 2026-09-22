@@ -14,6 +14,7 @@ import { $activeGatewayProfile } from '@/store/profile'
 import { $sessions } from '@/store/session'
 import type { CronJob } from '@/types/hermes'
 
+import { ConsumerFeedUpdates } from './consumer-feed-updates'
 import { jobState, nextRunOverdueMs, STATE_DOT } from './cron/job-state'
 import { CRON_ROUTE, NEW_CHAT_ROUTE, sessionRoute } from './routes'
 
@@ -107,13 +108,14 @@ export function ConsumerFeedView() {
     .slice(0, 8)
 
   return (
-    <ConsumerPage description="Recent conversations and scheduled work, collected in one calm timeline." title="Feed">
+    <ConsumerPage description="Saved updates from Jarvis, with your recent activity close by." title="Feed">
       {recentSessions.length === 0 && jobs.length === 0 ? (
         <EmptyState icon="list-flat" title="Nothing new yet">
           Jarvis will collect recent conversations and automation activity here as you use the app.
         </EmptyState>
       ) : (
         <div className="space-y-8">
+          <ConsumerFeedUpdates />
           {recentSessions.length > 0 ? (
             <section>
               <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
