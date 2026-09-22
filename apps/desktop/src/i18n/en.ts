@@ -2783,6 +2783,8 @@ export const en: Translations = {
     projectLoadFailed: 'Could not load sessions',
     noSessions: 'No side chats yet',
     newSideChat: 'New side chat',
+    recentChats: 'Recents',
+    mainChat: 'Main chat',
     noFilterMatches: 'No sessions match these filters',
     projects: {
       showAllSessions: 'Show all sessions',

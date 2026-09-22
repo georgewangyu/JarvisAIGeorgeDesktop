@@ -2544,6 +2544,8 @@ export const ru = defineLocale({
     projectLoadFailed: 'Не удалось загрузить сеансы',
     noSessions: 'Сеансов пока нет',
     newSideChat: 'Новый дополнительный чат',
+    recentChats: 'Недавние',
+    mainChat: 'Основной чат',
     noFilterMatches: 'Нет сеансов по этим фильтрам',
     projects: {
       showAllSessions: 'Показать все сессии',

@@ -1948,6 +1948,8 @@ export const ar = defineLocale({
     projectLoadFailed: 'تعذر تحميل الجلسات',
     noSessions: 'لا توجد جلسات بعد',
     newSideChat: 'محادثة جانبية جديدة',
+    recentChats: 'الأخيرة',
+    mainChat: 'المحادثة الرئيسية',
     noFilterMatches: 'لا توجد جلسات تطابق عوامل التصفية هذه',
     projects: {
       showAllSessions: 'عرض جميع الجلسات',

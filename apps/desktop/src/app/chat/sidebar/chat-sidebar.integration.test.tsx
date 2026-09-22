@@ -22,7 +22,7 @@ const sessions = [
   makeSessionInfo({ id: 'side-two', last_active: 3, profile: 'default', started_at: 1, title: 'Side chat two' })
 ]
 
-function renderSidebar(pathname = '/', currentView: AppView = 'chat', onResumeSession = vi.fn()) {
+function renderSidebar(pathname = '/', currentView: AppView = 'chat', onResumeSession = vi.fn(), onNavigate = vi.fn()) {
   const result = render(
     <MemoryRouter initialEntries={[pathname]}>
       <SidebarProvider>
@@ -33,7 +33,7 @@ function renderSidebar(pathname = '/', currentView: AppView = 'chat', onResumeSe
           onDeleteSession={noop}
           onLoadMoreSessions={noop}
           onManageCronJob={noop}
-          onNavigate={noop}
+          onNavigate={onNavigate}
           onNewSessionInWorkspace={noop}
           onNewSessionSplit={noop}
           onResumeSession={onResumeSession}
@@ -43,7 +43,7 @@ function renderSidebar(pathname = '/', currentView: AppView = 'chat', onResumeSe
     </MemoryRouter>
   )
 
-  return { ...result, onResumeSession }
+  return { ...result, onResumeSession, onNavigate }
 }
 
 describe('consumer chat navigation', () => {
@@ -108,5 +108,18 @@ describe('consumer chat navigation', () => {
 
     act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
     expect(await screen.findByRole('textbox', { name: 'Search chats' })).toHaveProperty('value', '')
+  })
+
+  it('keeps Search usable with no side chats and returns to the permanent main chat', async () => {
+    $sessions.set([])
+    const { onNavigate } = renderSidebar()
+
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+
+    expect(await screen.findByRole('textbox', { name: 'Search chats' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Main chat' }))
+
+    expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({ id: 'new-session' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull())
   })
 })

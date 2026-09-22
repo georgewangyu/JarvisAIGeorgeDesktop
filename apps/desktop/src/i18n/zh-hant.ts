@@ -2276,6 +2276,8 @@ export const zhHant = defineLocale({
     projectLoadFailed: '會話載入失敗',
     noSessions: '尚無工作階段',
     newSideChat: '新增側邊聊天',
+    recentChats: '最近',
+    mainChat: '主對話',
     noFilterMatches: '沒有工作階段符合這些篩選條件',
     projects: {
       showAllSessions: '顯示所有工作階段',

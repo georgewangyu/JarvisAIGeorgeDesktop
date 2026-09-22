@@ -2924,6 +2924,8 @@ export const zh = defineLocale({
     projectLoadFailed: '会话加载失败',
     noSessions: '暂无会话',
     newSideChat: '新建侧边对话',
+    recentChats: '最近',
+    mainChat: '主对话',
     noFilterMatches: '没有会话符合这些筛选条件',
     projects: {
       showAllSessions: '显示所有会话',

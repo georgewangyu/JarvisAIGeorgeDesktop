@@ -251,6 +251,7 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
 ]
 
 const AUTOMATIONS_NAV_ITEM = SIDEBAR_NAV.find(item => item.id === 'cron')!
+const MAIN_CHAT_NAV_ITEM = SIDEBAR_NAV.find(item => item.id === 'new-session')!
 export const OPEN_CONSUMER_CHATS_EVENT = 'jarvis:open-chats'
 export const OPEN_CONSUMER_SEARCH_EVENT = 'jarvis:open-search'
 
@@ -1467,10 +1468,11 @@ export function ChatSidebar({
   // every background refresh instead of the empty state.
   const showSessionSkeletons = sessionsLoading && scopedSessions.length === 0
 
-  // Filtered down to nothing still renders the section: the empty state is what
-  // tells you the filter — not an empty account — is why the list is bare.
+  // An open drawer always keeps its search field and empty-state controls,
+  // including on a fresh account with no side chats yet. Outside the drawer,
+  // filtering to nothing still renders the explanation instead of blank space.
   const showSessionSections =
-    showSessionSkeletons || filtersActive || sortedSessions.length > 0 || projectModel.length > 0
+    chatsOpen || showSessionSkeletons || filtersActive || sortedSessions.length > 0 || projectModel.length > 0
 
   // The sidebar's session-area mode — exposed as data-attributes so custom
   // skins can target project mode (overview vs. entered), archived, or search
@@ -1694,6 +1696,25 @@ export function ChatSidebar({
                   data-sessions-mode={sessionsMode}
                   data-sessions-project={inProject ? (enteredProjectId ?? undefined) : undefined}
                 >
+                  {drawerMode === 'search' && !trimmedQuery && (
+                    <div className="px-2 pb-2 pt-1">
+                      <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wider text-(--ui-text-tertiary)">
+                        {s.recentChats}
+                      </div>
+                      <Button
+                        className="w-full justify-start"
+                        onClick={() => {
+                          setChatsOpen(false)
+                          onNavigate(MAIN_CHAT_NAV_ITEM)
+                        }}
+                        size="sm"
+                        variant="ghost"
+                      >
+                        <Codicon name="sparkle" size="0.75rem" />
+                        {s.mainChat}
+                      </Button>
+                    </div>
+                  )}
                   {trimmedQuery && (
                     <SidebarSessionsSection
                       activeSessionId={activeSidebarSessionId}
@@ -1750,7 +1771,7 @@ export function ChatSidebar({
                   {!trimmedQuery && drawerMode === 'chats' && inProject && projectLoadFailed && (
                     <SidebarLoadErrorState onRetry={retryProject} />
                   )}
-                  {!trimmedQuery && (
+                  {!trimmedQuery && (drawerMode === 'chats' || sortedSessions.length > 0) && (
                     <SidebarSessionsSection
                       activeProjectId={activeProjectId}
                       activeSessionId={activeSidebarSessionId}
@@ -1905,7 +1926,7 @@ export function ChatSidebar({
                           </div>
                         )
                       }
-                      label={drawerMode === 'search' ? 'Recents' : sessionsLabel}
+                      label={drawerMode === 'search' ? s.sessions : sessionsLabel}
                       labelMeta={
                         worktreeGroupingActive ? (
                           reposScanning && !projectsSkeletonVisible ? (

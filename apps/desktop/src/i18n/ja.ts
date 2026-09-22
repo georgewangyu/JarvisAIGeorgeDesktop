@@ -2287,6 +2287,8 @@ export const ja = defineLocale({
     projectLoadFailed: 'セッションの読み込みに失敗しました',
     noSessions: 'セッションはまだありません',
     newSideChat: '新しいサイドチャット',
+    recentChats: '最近',
+    mainChat: 'メインチャット',
     noFilterMatches: 'このフィルターに一致するセッションはありません',
     projects: {
       showAllSessions: 'すべてのセッションを表示',
