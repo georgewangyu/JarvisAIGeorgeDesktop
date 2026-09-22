@@ -3,7 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
 import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/composer'
-import { $cronFocusJobId, $cronJobs, setCronFocusJobId } from '@/store/cron'
+import { $cronJobs } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
 import { $goalsBySession } from '@/store/goals'
 import { $activeGatewayProfile, $freshSessionRequest } from '@/store/profile'
@@ -16,7 +16,6 @@ afterEach(() => {
   cleanup()
   clearSessionDraft(null)
   $cronJobs.set([])
-  setCronFocusJobId(null)
   $goalsBySession.set({})
   $gateway.set(null as never)
   $activeGatewayProfile.set('default')
@@ -42,7 +41,7 @@ it('opens a real recent conversation from Feed', () => {
   expect(screen.getByText('Opened recent chat')).toBeTruthy()
 })
 
-it('shows completed automation state instead of its expired one-time schedule', () => {
+it('keeps automation status cards on Automations rather than duplicating them in Feed', () => {
   $cronJobs.set([{ id: 'finished', name: 'Morning briefing', enabled: true, state: 'completed', schedule_display: 'once in 1 minute' }])
 
   render(
@@ -51,29 +50,9 @@ it('shows completed automation state instead of its expired one-time schedule', 
     </MemoryRouter>
   )
 
-  expect(screen.getByRole('button', { name: /Morning briefing Completed/ })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: /Automation updates/i })).toBeTruthy()
+  expect(screen.queryByRole('heading', { name: 'Automations' })).toBeNull()
   expect(screen.queryByText('once in 1 minute')).toBeNull()
-})
-
-it('opens the exact automation selected from Feed', () => {
-  $cronJobs.set([
-    { id: 'first', name: 'Morning briefing', enabled: true },
-    { id: 'second', name: 'Weekly review', enabled: true }
-  ])
-
-  render(
-    <MemoryRouter initialEntries={['/feed']}>
-      <Routes>
-        <Route element={<ConsumerFeedView />} path="/feed" />
-        <Route element={<p>Opened automations</p>} path="/cron" />
-      </Routes>
-    </MemoryRouter>
-  )
-
-  fireEvent.click(screen.getByRole('button', { name: /Weekly review/ }))
-
-  expect(screen.getByText('Opened automations')).toBeTruthy()
-  expect($cronFocusJobId.get()).toBe('second')
 })
 
 it('turns an Idea into an editable chat draft without sending it', () => {

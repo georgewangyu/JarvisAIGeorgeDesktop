@@ -7,16 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
-import { $cronJobs, setCronFocusJobId } from '@/store/cron'
+import { $cronJobs } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
 import { $goalsBySession, setSessionGoal } from '@/store/goals'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $sessions } from '@/store/session'
-import type { CronJob } from '@/types/hermes'
 
 import { ConsumerFeedUpdates } from './consumer-feed-updates'
-import { jobState, nextRunOverdueMs, STATE_DOT } from './cron/job-state'
-import { CRON_ROUTE, NEW_CHAT_ROUTE, sessionRoute } from './routes'
+import { NEW_CHAT_ROUTE, sessionRoute } from './routes'
 
 export function ConsumerPage({
   children,
@@ -75,28 +73,6 @@ function formatRelativeTime(seconds: number): string {
   return `${days}d ago`
 }
 
-function feedJobDescription(job: CronJob): string {
-  const state = jobState(job)
-
-  if (state === 'completed') {
-    return 'Completed'
-  }
-
-  if (state === 'running') {
-    return 'Running now'
-  }
-
-  if (state === 'paused' || state === 'disabled') {
-    return 'Paused'
-  }
-
-  if (state === 'error' || nextRunOverdueMs(job) !== null) {
-    return 'Needs attention'
-  }
-
-  return job.schedule_display || job.schedule?.display || 'Scheduled'
-}
-
 export function ConsumerFeedView() {
   const navigate = useNavigate()
   const sessions = useStore($sessions)
@@ -111,7 +87,7 @@ export function ConsumerFeedView() {
     <ConsumerPage description="Saved updates from Jarvis, with your recent activity close by." title="Feed">
       {recentSessions.length === 0 && jobs.length === 0 ? (
         <EmptyState icon="list-flat" title="Nothing new yet">
-          Jarvis will collect recent conversations and automation activity here as you use the app.
+          Saved automation updates will appear here after they produce an answer.
         </EmptyState>
       ) : (
         <div className="space-y-8">
@@ -147,39 +123,6 @@ export function ConsumerFeedView() {
             </section>
           ) : null}
 
-          {jobs.length > 0 ? (
-            <section>
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
-                  Automations
-                </h2>
-                <Button onClick={() => navigate(CRON_ROUTE)} size="sm" variant="text">
-                  View automations
-                </Button>
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {jobs.slice(0, 4).map(job => (
-                  <button
-                    className="rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5 text-left transition-colors hover:bg-(--ui-control-hover-background)"
-                    key={job.id}
-                    onClick={() => {
-                      setCronFocusJobId(job.id)
-                      navigate(CRON_ROUTE)
-                    }}
-                    type="button"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">{job.name || 'Scheduled task'}</span>
-                      <span className={cn('size-2 rounded-full', STATE_DOT[jobState(job)] ?? STATE_DOT.disabled)} />
-                    </div>
-                    <p className="mt-2 text-sm text-(--ui-text-tertiary)">
-                      {feedJobDescription(job)}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </div>
       )}
     </ConsumerPage>
