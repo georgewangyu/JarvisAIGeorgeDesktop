@@ -638,7 +638,7 @@ describe('primary failure foreground isolation', () => {
       await flushAsync()
       expect(isActivePrimary()).toBe(true)
       expect($desktopBoot.get().error).toContain(error)
-      expect(overlay.getByRole('heading', { name: /sign-in required/i })).toBeTruthy()
+      expect(overlay.getByRole('heading', { name: /sign in again to Jarvis/i })).toBeTruthy()
       expect(overlay.getByRole('button', { name: /sign in/i })).toBeTruthy()
 
       // A now-latched foreground error must release boot readiness when leaving,
