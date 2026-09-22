@@ -2171,7 +2171,7 @@ export const ja = defineLocale({
     scheduleRequired: 'スケジュールは必須です。',
     scriptOnlyEditHint: 'スクリプトのみのジョブ（AI プロンプトなし）。ジョブ ID:',
     saveChanges: '変更を保存',
-    createAction: 'Cron を作成',
+    createAction: '自動化を作成',
     tabs: {
       jobs: 'ジョブ',
       blueprints: 'ブレーンプリント'
@@ -3333,7 +3333,7 @@ export const ja = defineLocale({
     thread: {
       loadingSession: 'セッションを読み込み中',
       showEarlier: '以前のメッセージを表示',
-      loadingResponse: 'Hermes が応答を読み込み中',
+      loadingResponse: 'Jarvis が作業中',
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'バックグラウンドタスクの完了後に再開します'

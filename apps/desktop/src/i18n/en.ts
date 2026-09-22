@@ -362,7 +362,7 @@ export const en: Translations = {
     unreadSessions: count => (count === 1 ? '1 unread session' : `${count} unread sessions`),
     muteHaptics: 'Mute haptics',
     unmuteHaptics: 'Unmute haptics',
-    openSettings: 'Open connections',
+    openSettings: 'Open settings',
     openStarmap: 'Open memory graph',
     enterHud: 'HUD mode',
     exitHud: 'Exit HUD mode',
@@ -2933,7 +2933,7 @@ export const en: Translations = {
     placeholderReconnecting: 'Reconnecting to Jarvis…',
     placeholderFollowUp: 'Send follow-up',
     newSessionPlaceholders: [
-      'What are we building?',
+      'How can I help?',
       'Give Jarvis a task',
       "What's on your mind?",
       'Describe what you need',
@@ -4003,7 +4003,7 @@ export const en: Translations = {
     thread: {
       loadingSession: 'Loading session',
       showEarlier: 'Show earlier messages',
-      loadingResponse: 'Hermes is loading a response',
+      loadingResponse: 'Jarvis is working',
       loadingLocalModel: model => `Loading ${model} into memory`,
       processingPrompt: 'Processing prompt',
       resumeWhenBackgroundDone: count =>

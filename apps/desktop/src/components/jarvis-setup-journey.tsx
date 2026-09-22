@@ -3,12 +3,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
 import type { JarvisOnboardingPermissionSnapshot } from '@/global'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { Check, ChevronLeft, FileText, Lock, Mail, MessageCircle, Mic, NotebookTabs, ShieldLock } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
 type Step = 'connect' | 'files' | 'apps' | 'microphone' | 'ready'
 type AppId = keyof JarvisOnboardingPermissionSnapshot['apps']
-type AppAccess = 'Off' | 'Read only' | 'Read and interact'
 
 interface JarvisSetupJourneyProps {
   bootstrapComplete: boolean
@@ -28,17 +28,11 @@ const APPS: { id: AppId; label: string; icon: typeof Mail }[] = [
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle }
 ]
 
-const ACCESS_LEVELS: AppAccess[] = ['Off', 'Read only', 'Read and interact']
-
 const EMPTY_PERMISSIONS: JarvisOnboardingPermissionSnapshot = {
-  apps: { mail: true, messages: true, notes: true, whatsapp: false },
+  apps: { mail: false, messages: false, notes: false, whatsapp: false },
   fullDiskAccess: 'unknown',
   microphone: 'not-determined',
   platform: 'darwin'
-}
-
-function nextAccess(current: AppAccess): AppAccess {
-  return ACCESS_LEVELS[(ACCESS_LEVELS.indexOf(current) + 1) % ACCESS_LEVELS.length]
 }
 
 function StepDots({ step }: { step: Step }) {
@@ -118,19 +112,13 @@ export function JarvisSetupJourney({
   onFinish,
   onShowInstallDetails
 }: JarvisSetupJourneyProps) {
+  const s = useJarvisCopy()
   const [step, setStep] = useState<Step>('connect')
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [signingIn, setSigningIn] = useState(false)
   const [signInError, setSignInError] = useState<string | null>(null)
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS)
-
-  const [access, setAccess] = useState<Record<AppId, AppAccess>>({
-    mail: 'Read only',
-    messages: 'Read only',
-    notes: 'Read only',
-    whatsapp: 'Off'
-  })
 
   const stepIndex = STEPS.indexOf(step)
   const back = stepIndex > 0 ? () => setStep(STEPS[stepIndex - 1]) : undefined
@@ -147,7 +135,6 @@ export function JarvisSetupJourney({
 
       if (!disposed && snapshot) {
         setPermissions(snapshot)
-        setAccess(current => ({ ...current, whatsapp: snapshot.apps.whatsapp ? current.whatsapp : 'Off' }))
       }
     }
 
@@ -260,9 +247,9 @@ export function JarvisSetupJourney({
         <div className="mx-auto max-w-2xl">
           <div className="text-center">
             <ShieldLock className="mx-auto size-14 text-(--ui-accent)" strokeWidth={1.5} />
-            <h1 className="mt-5 text-3xl font-semibold tracking-[-0.035em]">Choose app access</h1>
+            <h1 className="mt-5 text-3xl font-semibold tracking-[-0.035em]">{s.appInventory}</h1>
             <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-(--ui-text-secondary)">
-              Start read-only, then expand access only when a workflow needs it.
+              {s.appInventoryDetail}
             </p>
           </div>
 
@@ -285,22 +272,10 @@ export function JarvisSetupJourney({
                       {isInstalled ? 'Detected on this Mac' : 'Not installed'}
                     </div>
                   </div>
-                  <Button
-                    disabled={!isInstalled}
-                    onClick={() => setAccess(current => ({ ...current, [id]: nextAccess(current[id]) }))}
-                    size="sm"
-                    variant="secondary"
-                  >
-                    {isInstalled ? access[id] : 'Unavailable'}
-                  </Button>
+                  <span className="text-sm text-(--ui-text-tertiary)">{isInstalled ? s.appPending : 'Unavailable'}</span>
                 </div>
               )
             })}
-          </div>
-
-          <div className="mt-6 rounded-xl border border-(--ui-stroke-tertiary) px-4 py-3 text-xs leading-5 text-(--ui-text-tertiary)">
-            Preview control: these choices are not enforced by the agent engine yet. This build validates the setup
-            experience before the policy layer lands.
           </div>
 
           <div className="mt-7 flex justify-center">

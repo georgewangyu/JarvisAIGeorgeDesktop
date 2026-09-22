@@ -129,7 +129,7 @@ import { markSessionUnread } from '@/store/session-unread-remote'
 import { $archivedSessions, loadArchivedSessions } from '@/store/sidebar-archive'
 import { $sidebarSessionRankIds } from '@/store/sidebar-sort'
 
-import { type AppView, CONNECTIONS_ROUTE, CRON_ROUTE } from '../../routes'
+import { type AppView, CONNECTIONS_ROUTE, CRON_ROUTE, PREFERENCES_ROUTE } from '../../routes'
 import { isJarvisMainChat } from '../../session/jarvis-main-chat'
 import type { SidebarNavItem } from '../../types'
 import type { NewSessionSplitHandler } from '../new-session-drag'
@@ -204,6 +204,12 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     label: 'Connections',
     icon: props => <Codicon name="plug" {...props} />,
     route: CONNECTIONS_ROUTE
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: props => <Codicon name="settings-gear" {...props} />,
+    route: PREFERENCES_ROUTE
   }
 ]
 
@@ -1446,6 +1452,7 @@ export function ChatSidebar({
                   (item.id === 'artifacts' && currentView === 'artifacts') ||
                   (item.id === 'cron' && currentView === 'cron') ||
                   (item.id === 'connections' && currentView === 'connections') ||
+                  (item.id === 'settings' && currentView === 'preferences') ||
                   // Contributed rows light up at their own route.
                   (currentView === 'extension' && Boolean(item.route) && pathname === item.route)
 

@@ -115,9 +115,9 @@ import { resetProjectTreeState } from '../right-sidebar/files/use-project-tree'
 import { PersistentTerminal } from '../right-sidebar/terminal/persistent'
 import { closeAllTerminals } from '../right-sidebar/terminal/terminals'
 import {
-  CONNECTIONS_ROUTE,
   CRON_ROUTE,
   navigateToWorkspacePage,
+  PREFERENCES_ROUTE,
   routeSessionId,
   sessionRoute,
   SETTINGS_ROUTE,
@@ -1315,7 +1315,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
         {!isHudWindow() && !isBrowserWindow() && (
           <TitlebarControls
             leftTools={leftTitlebarTools}
-            onOpenSettings={() => navigate(CONNECTIONS_ROUTE)}
+            onOpenSettings={() => navigate(PREFERENCES_ROUTE)}
             tools={rightTitlebarTools}
           />
         )}

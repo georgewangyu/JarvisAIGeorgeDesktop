@@ -220,11 +220,11 @@ describe('titlebar app-action cluster', () => {
     const left = screen.getByLabelText('Window controls')
     const right = screen.getByLabelText('App controls')
 
-    expect(within(right).getByLabelText('Open connections')).toBeTruthy()
+    expect(within(right).getByLabelText('Open settings')).toBeTruthy()
     expect(screen.queryByLabelText('Layout editor')).toBeNull()
     expect(screen.queryByLabelText('HUD mode')).toBeNull()
 
-    expect(within(left).queryByLabelText('Open connections')).toBeNull()
+    expect(within(left).queryByLabelText('Open settings')).toBeNull()
     expect(within(left).getByLabelText(/Hide sidebar|Show sidebar/)).toBeTruthy()
   })
 
@@ -235,9 +235,9 @@ describe('titlebar app-action cluster', () => {
     const left = screen.getByLabelText('Window controls')
     const right = screen.getByLabelText('App controls')
 
-    expect(within(left).getByLabelText('Open connections')).toBeTruthy()
+    expect(within(left).getByLabelText('Open settings')).toBeTruthy()
     expect(screen.queryByLabelText('Layout editor')).toBeNull()
     expect(screen.queryByLabelText('HUD mode')).toBeNull()
-    expect(within(right).queryByLabelText('Open connections')).toBeNull()
+    expect(within(right).queryByLabelText('Open settings')).toBeNull()
   })
 })

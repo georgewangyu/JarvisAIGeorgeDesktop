@@ -84,6 +84,7 @@ import {
   validateCronEditor
 } from './cron-job-model'
 import { jobState, jobTitle, nextRunOverdueMs, STATE_DOT } from './job-state'
+import { AutomationRunResult } from './run-result'
 
 const DEFAULT_DELIVER = 'local'
 
@@ -879,13 +880,14 @@ const RUNS_BACKSTOP_INTERVAL_MS = 60_000
 function CronJobRuns({
   c,
   jobId,
-  onOpenSession
+  onOpenSession: _onOpenSession
 }: {
   c: Translations['cron']
   jobId: string
   onOpenSession?: (sessionId: string) => void
 }) {
   const [runs, setRuns] = useState<null | SessionInfo[]>(null)
+  const [selectedRun, setSelectedRun] = useState<SessionInfo | null>(null)
   const changeEventsAvailable = useStore($changeEventsAvailable)
   const cronChangeTick = useStore($cronChangeTick)
 
@@ -947,17 +949,22 @@ function CronJobRuns({
       ) : (
         <div className="flex flex-col gap-px">
           {runs.map(run => (
-            <button
-              className="row-hover flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              key={run.id}
-              onClick={() => onOpenSession?.(run.id)}
-              type="button"
-            >
-              <span className="truncate text-foreground/85">{run.title?.trim() || run.preview?.trim() || run.id}</span>
-              <span className="shrink-0 text-[0.62rem] text-muted-foreground/55 tabular-nums">
-                {formatRunTime(run.last_active || run.started_at)}
-              </span>
-            </button>
+            <div key={run.id}>
+              <button
+                aria-expanded={selectedRun?.id === run.id}
+                className="row-hover flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                onClick={() => setSelectedRun(current => (current?.id === run.id ? null : run))}
+                type="button"
+              >
+                <span className="truncate text-foreground/85">
+                  {run.title?.trim() || run.preview?.trim() || run.id}
+                </span>
+                <span className="shrink-0 text-[0.62rem] text-muted-foreground/55 tabular-nums">
+                  {formatRunTime(run.last_active || run.started_at)}
+                </span>
+              </button>
+              {selectedRun?.id === run.id && <AutomationRunResult key={run.id} run={run} />}
+            </div>
           ))}
         </div>
       )}

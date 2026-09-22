@@ -18,6 +18,7 @@ export const WEBHOOKS_ROUTE = '/webhooks'
 export const ARTIFACTS_ROUTE = '/artifacts'
 export const CRON_ROUTE = '/cron'
 export const CONNECTIONS_ROUTE = '/connections'
+export const PREFERENCES_ROUTE = '/preferences'
 export const PROFILES_ROUTE = '/profiles'
 export const AGENTS_ROUTE = '/agents'
 export const STARMAP_ROUTE = '/starmap'
@@ -30,6 +31,7 @@ export type AppView =
   | 'chat'
   | 'command-center'
   | 'connections'
+  | 'preferences'
   | 'cron'
   // A contributed (plugin) full page at its own route — NOT chat. Without this
   // distinction contributed paths fell through appViewForPath's 'chat' default,
@@ -43,6 +45,7 @@ export type AppView =
   | 'webhooks'
 
 export type AppRouteId =
+  | 'preferences'
   | 'session-import'
   | 'agents'
   | 'artifacts'
@@ -69,6 +72,7 @@ export const APP_ROUTES = [
   { id: 'settings', path: SETTINGS_ROUTE, view: 'settings' },
   { id: 'command-center', path: COMMAND_CENTER_ROUTE, view: 'command-center' },
   { id: 'connections', path: CONNECTIONS_ROUTE, view: 'connections' },
+  { id: 'preferences', path: PREFERENCES_ROUTE, view: 'preferences' },
   { id: 'capabilities', path: CAPABILITIES_ROUTE, view: 'capabilities' },
   { id: 'messaging', path: MESSAGING_ROUTE, view: 'messaging' },
   { id: 'webhooks', path: WEBHOOKS_ROUTE, view: 'webhooks' },

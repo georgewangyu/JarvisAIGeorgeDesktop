@@ -94,7 +94,17 @@ export function registerJarvisOnboardingPermissions({
 
   ipcMain.handle('jarvis:onboarding-permissions:request-microphone', async () => {
     if (process.platform !== 'darwin' || typeof systemPreferences.askForMediaAccess !== 'function') {
-      return true
+      return false
+    }
+
+    // macOS will not show the prompt again after denial. Give the user a
+    // recovery path instead of repeatedly invoking a prompt that cannot open.
+    const status = systemPreferences.getMediaAccessStatus('microphone')
+
+    if (status === 'denied' || status === 'restricted') {
+      await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone')
+
+      return false
     }
 
     return systemPreferences.askForMediaAccess('microphone')

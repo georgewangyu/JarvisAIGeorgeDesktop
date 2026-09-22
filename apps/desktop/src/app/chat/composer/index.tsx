@@ -383,13 +383,20 @@ export function ChatBar({
     return onCancel()
   }, [activeQueueSessionKeyRef, onCancel])
 
-  const { compactPill, foldVoice, minimal, stacked } = useComposerMetrics({
+  const {
+    compactPill,
+    foldVoice,
+    minimal,
+    stacked: adaptiveStacked
+  } = useComposerMetrics({
     composerDockRef,
     composerRef,
     composerSurfaceRef,
     editorRef,
     poppedOut
   })
+
+  const stacked = adaptiveStacked || (themeName === 'jarvis' && !hudMode && !poppedOut)
 
   const hasComposerPayload = hasText || attachments.length > 0
   const canSubmit = busy || hasComposerPayload
@@ -1149,6 +1156,7 @@ export function ChatBar({
           // guard forever (#44135). Clear unconditionally: by the time blur
           // runs there is nothing left composing in this editor.
           composingRef.current = false
+
           if (blurCloseTimer.current !== null) {
             window.clearTimeout(blurCloseTimer.current)
           }

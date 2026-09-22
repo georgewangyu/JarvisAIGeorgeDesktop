@@ -1,0 +1,76 @@
+/* Consumer geometry belongs to the Jarvis skin. Other engine skins retain
+   their compact layout, and native HUD windows retain their own sizing. */
+:root[data-hermes-theme='jarvis'] {
+  --radius-scalar: 1;
+  --composer-width: 48rem;
+  --conversation-text-font-size: 1rem;
+  --conversation-line-height: 1.65rem;
+  --conversation-turn-gap: 1.25rem;
+  --composer-input-min-height: 3rem;
+  --composer-surface-pad-x: 0.875rem;
+  --composer-surface-pad-y: 0.75rem;
+  --composer-shell-pad-block-end: 1.25rem;
+  --composer-control-size: 1.875rem;
+  --composer-control-primary-size: 2rem;
+  --composer-row-gap: 0.625rem;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='sidebar-menu-button'] {
+  min-height: 2.5rem;
+  font-size: 0.9375rem;
+  border-radius: 0.75rem;
+}
+
+:root[data-hermes-theme='jarvis']
+  [data-slot='button']:not([data-size^='icon']):not([data-variant='text']):not([data-variant='textStrong']):not(
+    [data-size='inline']
+  ):not([data-size='micro']) {
+  border-radius: 0.625rem;
+  min-height: 2.125rem;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='button'][data-size='lg'] {
+  min-height: 3rem;
+  border-radius: 999px;
+  font-size: 1rem;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='composer-surface'] {
+  border-radius: 1.25rem;
+}
+
+:root[data-hermes-theme='jarvis'] .desktop-input-chrome {
+  border-radius: 0.625rem;
+  font-size: 0.875rem;
+  line-height: 1.4rem;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='composer-rich-input'] {
+  font-size: 1rem;
+  line-height: 1.65rem;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='aui_thread-content'] {
+  padding-top: 1.5rem;
+}
+
+:root[data-hermes-theme='jarvis'] .consumer-page {
+  animation: jarvis-enter 180ms ease-out;
+}
+
+@keyframes jarvis-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-hermes-theme='jarvis'] .consumer-page {
+    animation: none;
+  }
+}

@@ -5,6 +5,7 @@ import { listOAuthProviders } from '@/api/config'
 import { getGlobalModelInfo, setGlobalModel } from '@/api/models'
 import { Button } from '@/components/ui/button'
 import type { JarvisOnboardingPermissionSnapshot, JarvisPermissionStatus } from '@/global'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import {
   Check,
   ChevronRight,
@@ -22,7 +23,7 @@ import { cn } from '@/lib/utils'
 import { $currentModel, $currentProvider } from '@/store/session'
 
 const EMPTY_PERMISSIONS: JarvisOnboardingPermissionSnapshot = {
-  apps: { mail: true, messages: true, notes: true, whatsapp: false },
+  apps: { mail: false, messages: false, notes: false, whatsapp: false },
   fullDiskAccess: 'unknown',
   microphone: 'not-determined',
   platform: 'darwin'
@@ -89,6 +90,7 @@ function ConnectionRow({
 }
 
 export function ConnectionsView() {
+  const s = useJarvisCopy()
   const currentModel = useStore($currentModel)
   const currentProvider = useStore($currentProvider)
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS)
@@ -134,7 +136,7 @@ export function ConnectionsView() {
 
   return (
     <div className="h-full overflow-y-auto bg-(--ui-chat-surface-background) text-foreground">
-      <main className="mx-auto w-full max-w-3xl px-6 pb-20 pt-[calc(var(--titlebar-height)+3rem)] sm:px-10">
+      <main className="consumer-page mx-auto w-full max-w-3xl px-6 pb-20 pt-[calc(var(--titlebar-height)+3rem)] sm:px-10">
         <div className="flex items-start justify-between gap-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Jarvis settings</p>
@@ -253,7 +255,7 @@ export function ConnectionsView() {
         <section className="mt-9">
           <h2 className="text-sm font-semibold">Apps</h2>
           <p className="mt-1 text-sm text-(--ui-text-tertiary)">
-            Detected locally and available when access is allowed.
+            {s.appInventoryDetail}
           </p>
           <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
             <ConnectionRow
