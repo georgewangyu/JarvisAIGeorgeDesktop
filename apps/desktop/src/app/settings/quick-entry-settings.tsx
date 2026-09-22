@@ -2,7 +2,9 @@ import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
+import { triggerHaptic } from '@/lib/haptics'
 import { isSubmitEnter } from '@/lib/ime'
 import {
   $quickEntry,
@@ -22,7 +24,7 @@ import { ListRow, ToggleRow } from './primitives'
  * never swallow: a chord another app already owns comes back `registered: false`
  * with `error: 'taken'` and says so, right under the field.
  */
-export function QuickEntrySettings() {
+export function QuickEntrySettings({ consumer = false }: { consumer?: boolean }) {
   const { t } = useI18n()
   const q = t.settings.quickEntry
   const state = useStore($quickEntry)
@@ -58,6 +60,56 @@ export function QuickEntrySettings() {
             ? q.active
             : null
 
+  const shortcutInput = (
+    <Input
+      aria-label={q.shortcutTitle}
+      disabled={!state.enabled}
+      onBlur={commit}
+      onChange={event => setDraft(event.target.value)}
+      onKeyDown={event => {
+        if (isSubmitEnter(event)) {
+          event.preventDefault()
+          commit()
+        }
+      }}
+      placeholder={QUICK_ENTRY_DEFAULT_SHORTCUT}
+      value={draft ?? state.shortcut}
+    />
+  )
+
+  if (consumer) {
+    return (
+      <div className="mt-4 space-y-5">
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <p className="font-medium">{q.enabledTitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{q.enabledDesc}</p>
+          </div>
+          <Switch
+            aria-label={q.enabledTitle}
+            checked={state.enabled}
+            onCheckedChange={enabled => {
+              triggerHaptic('selection')
+              void saveQuickEntrySettings({ enabled })
+            }}
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+          <div className="min-w-0">
+            <p className="font-medium">{q.shortcutTitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{q.shortcutDesc}</p>
+            {status && (
+              <p className={state.error ? 'mt-1 text-sm text-amber-500/90' : 'mt-1 text-sm text-muted-foreground'}>
+                {status}
+              </p>
+            )}
+          </div>
+          <div className="w-full shrink-0 sm:w-56">{shortcutInput}</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <>
       <ToggleRow
@@ -67,22 +119,7 @@ export function QuickEntrySettings() {
         onChange={enabled => void saveQuickEntrySettings({ enabled })}
       />
       <ListRow
-        action={
-          <Input
-            aria-label={q.shortcutTitle}
-            disabled={!state.enabled}
-            onBlur={commit}
-            onChange={event => setDraft(event.target.value)}
-            onKeyDown={event => {
-              if (isSubmitEnter(event)) {
-                event.preventDefault()
-                commit()
-              }
-            }}
-            placeholder={QUICK_ENTRY_DEFAULT_SHORTCUT}
-            value={draft ?? state.shortcut}
-          />
-        }
+        action={shortcutInput}
         below={
           status && (
             <div
