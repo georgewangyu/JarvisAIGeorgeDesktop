@@ -1,5 +1,6 @@
+import type { SessionGoalsListResult } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { Button } from '@/components/ui/button'
@@ -7,7 +8,9 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs, setCronFocusJobId } from '@/store/cron'
+import { $gateway } from '@/store/gateway'
 import { $goalsBySession, type GoalStatus } from '@/store/goals'
+import { $activeGatewayProfile } from '@/store/profile'
 import { $sessions } from '@/store/session'
 import type { CronJob } from '@/types/hermes'
 
@@ -233,12 +236,76 @@ const GOAL_TONE: Record<GoalStatus, string> = {
   waiting: 'bg-sky-500'
 }
 
+type SavedGoalRow = SessionGoalsListResult['goals'][number]
+
 export function ConsumerGoalsView() {
   const navigate = useNavigate()
   const goals = useStore($goalsBySession)
   const sessions = useStore($sessions)
+  const gateway = useStore($gateway)
+  const profile = useStore($activeGatewayProfile)
+
+  const [savedGoalsSnapshot, setSavedGoalsSnapshot] = useState<{
+    gateway: typeof gateway
+    goals: SavedGoalRow[]
+    profile: string
+  } | null>(null)
+
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [refreshIndex, setRefreshIndex] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+
+    setSavedGoalsSnapshot(null)
+    setLoading(Boolean(gateway))
+    setLoadError(false)
+
+    if (gateway) {
+      void gateway.request<SessionGoalsListResult>('session.goals.list', { profile }).then(
+        result => {
+          if (!cancelled) {
+            setSavedGoalsSnapshot({ gateway, goals: result.goals, profile })
+            setLoading(false)
+          }
+        },
+        () => {
+          if (!cancelled) {
+            setLoadError(true)
+            setLoading(false)
+          }
+        }
+      )
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [gateway, profile, refreshIndex])
+
   const sessionById = new Map(sessions.map(session => [session.id, session]))
-  const items = Object.entries(goals).sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
+
+  const savedGoals = savedGoalsSnapshot?.gateway === gateway && savedGoalsSnapshot.profile === profile
+    ? savedGoalsSnapshot.goals
+    : []
+
+  const itemsById = new Map<string, { detail?: string; status: string; title: string; updatedAt: number }>(
+    savedGoals.map(row => [row.session_id, {
+      detail: row.session_title,
+      status: row.goal.status,
+      title: row.goal.title,
+      updatedAt: row.goal.updated_at ?? 0
+    }])
+  )
+
+  for (const [sessionId, goal] of Object.entries(goals)) {
+    if (sessionById.has(sessionId)) {
+      itemsById.set(sessionId, goal)
+    }
+  }
+
+  const items = [...itemsById.entries()].sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
 
   const startGoal = () => {
     startConsumerDraft('Help me set a goal and turn it into a realistic plan: ', navigate)
@@ -246,11 +313,24 @@ export function ConsumerGoalsView() {
 
   return (
     <ConsumerPage
-      description="Goals Jarvis is actively helping you move forward, without exposing worker agents."
+      description="Saved goals from your recent conversations, without exposing worker agents."
       title="Goals"
     >
-      {items.length === 0 ? (
-        <EmptyState icon="pass" title="No active goals">
+      {!gateway ? (
+        <EmptyState icon="debug-disconnect" title="Connect to see goals">
+          Your saved goals will appear when Jarvis reconnects.
+        </EmptyState>
+      ) : loadError ? (
+        <EmptyState icon="warning" title="Goals couldn't load">
+          Your saved goals are still in Jarvis. Check the connection and try again.
+          <Button className="mt-5" onClick={() => setRefreshIndex(index => index + 1)}>Try again</Button>
+        </EmptyState>
+      ) : loading && items.length === 0 ? (
+        <EmptyState icon="loading" title="Loading goals">
+          Reading saved goals…
+        </EmptyState>
+      ) : items.length === 0 ? (
+        <EmptyState icon="pass" title="No saved goals">
           <p>Start with an outcome you care about. Jarvis can turn it into a plan and keep the work moving.</p>
           <Button className="mt-5" onClick={startGoal}>
             Start a goal
@@ -268,7 +348,9 @@ export function ConsumerGoalsView() {
                 onClick={() => navigate(sessionRoute(sessionId))}
                 type="button"
               >
-                <span className={cn('mt-2 size-2.5 shrink-0 rounded-full', GOAL_TONE[goal.status])} />
+                <span
+                  className={cn('mt-2 size-2.5 shrink-0 rounded-full', GOAL_TONE[goal.status as GoalStatus] ?? 'bg-sky-500')}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold">{goal.title}</span>
                   <span className="mt-1 block text-sm text-(--ui-text-tertiary)">

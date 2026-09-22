@@ -404,6 +404,24 @@ class GoalSnapshot(Result):
     wait_barrier: WaitBarrierUntil | WaitBarrierTarget | None = Field(default=None, discriminator="type")
 
 
+class SessionGoalsListParams(ProfileParams):
+    pass
+
+
+class SessionGoalListRow(Result):
+    session_id: str
+    session_title: str
+    goal: GoalSnapshot
+
+
+class SessionGoalsListResult(Result):
+    goals: list[SessionGoalListRow]
+
+
+method("session.goals.list", params=SessionGoalsListParams, result=SessionGoalsListResult,
+       doc="List persisted goals for visible conversations without resuming agent sessions.")
+
+
 class LoopSnapshot(Result):
     """``_safe_loop_snapshot`` — persisted LoopState fields, never its route."""
 

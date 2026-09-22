@@ -203,6 +203,43 @@ def _load_heartbeat_state(session_key):
     return load_heartbeat(session_key)
 
 
+@method("session.goals.list")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    """Read persisted goals without creating a runtime or spending model tokens."""
+    from hermes_cli.goals import GoalState
+    from hermes_state_sessions import INTERNAL_LISTING_SOURCES
+
+    with _profile_db(params) as db:
+        if db is None:
+            return _err(rid, 5031, "session store unavailable")
+        try:
+            goals = []
+            # This is the same visible-conversation boundary as session.list.
+            # A bounded recent window prevents a large history from blocking the UI.
+            rows = db.list_sessions_rich(source=None, limit=500, order_by_last_active=True, compact_rows=True)
+            denied = frozenset(INTERNAL_LISTING_SOURCES)
+            for row in rows:
+                if (row.get("source") or "").strip().lower() in denied:
+                    continue
+                session_id = row["id"]
+                tip = db.get_compression_tip(session_id) or session_id
+                raw = db.get_meta(f"goal:{tip}")
+                if not raw:
+                    continue
+                try:
+                    snapshot = _safe_goal_snapshot(GoalState.from_json(raw))
+                except Exception:
+                    logger.warning("Invalid persisted goal for session %s", session_id, exc_info=True)
+                    continue
+                if snapshot is not None:
+                    goals.append({"session_id": session_id, "session_title": row.get("title") or "", "goal": snapshot})
+            return _ok(rid, {"goals": goals})
+        except Exception as exc:
+            logger.debug("session.goals.list failed: %s", exc, exc_info=True)
+            return _err(rid, 5031, "could not read persisted goals")
+
+
 def _goal_blocks_loop_tick(session_key: str) -> bool:
     from hermes_cli.loops import goal_blocks_loop_tick
 

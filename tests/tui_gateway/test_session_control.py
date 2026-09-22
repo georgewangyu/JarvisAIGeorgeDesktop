@@ -121,6 +121,26 @@ def _save_goal(key, **overrides):
     return state
 
 
+def test_goals_list_reads_saved_visible_sessions_without_resuming_them(server):
+    from hermes_cli.goals import GoalState
+
+    db = server._get_db()
+    db.create_session("goal-visible", "cli")
+    db.create_session("goal-hidden", "cli")
+    db.set_session_hidden("goal-hidden", True)
+    db.create_session("goal-internal", "tool")
+    db.set_meta("goal:goal-visible", GoalState(goal="Find a new place", status="paused").to_json())
+    db.set_meta("goal:goal-hidden", GoalState(goal="Private hidden goal").to_json())
+    db.set_meta("goal:goal-internal", GoalState(goal="Internal worker goal").to_json())
+
+    response = _call(server, "session.goals.list")
+
+    assert "error" not in response
+    assert [(row["session_id"], row["goal"]["title"], row["goal"]["status"])
+            for row in response["result"]["goals"]] == [("goal-visible", "Find a new place", "paused")]
+    assert not server._sessions
+
+
 def _save_loop(key, **overrides):
     from hermes_cli.loops import LoopState, save_loop
 

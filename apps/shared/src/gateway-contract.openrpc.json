@@ -2923,6 +2923,24 @@
       }
     },
     {
+      "name": "session.goals.list",
+      "summary": "List persisted goals for visible conversations without resuming agent sessions.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SessionGoalsListParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SessionGoalsListResult"
+        }
+      }
+    },
+    {
       "name": "session.history",
       "summary": "The durable display transcript (ancestors included, row ids attached).",
       "params": [
@@ -25823,6 +25841,65 @@
           }
         },
         "title": "SessionForeignPreviewResult",
+        "type": "object"
+      },
+      "SessionGoalListRow": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "session_title": {
+            "title": "Session Title",
+            "type": "string"
+          },
+          "goal": {
+            "$ref": "#/components/schemas/GoalSnapshot"
+          }
+        },
+        "required": [
+          "session_id",
+          "session_title",
+          "goal"
+        ],
+        "title": "SessionGoalListRow",
+        "type": "object"
+      },
+      "SessionGoalsListParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          }
+        },
+        "title": "SessionGoalsListParams",
+        "type": "object"
+      },
+      "SessionGoalsListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "goals": {
+            "items": {
+              "$ref": "#/components/schemas/SessionGoalListRow"
+            },
+            "title": "Goals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "goals"
+        ],
+        "title": "SessionGoalsListResult",
         "type": "object"
       },
       "SessionHistoryParams": {

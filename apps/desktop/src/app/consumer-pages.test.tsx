@@ -1,10 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
 import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronFocusJobId, $cronJobs, setCronFocusJobId } from '@/store/cron'
+import { $gateway } from '@/store/gateway'
 import { $goalsBySession } from '@/store/goals'
+import { $activeGatewayProfile } from '@/store/profile'
 import { $sessions } from '@/store/session'
 import { makeSessionInfo } from '@/test/session-info'
 
@@ -16,6 +18,8 @@ afterEach(() => {
   $cronJobs.set([])
   setCronFocusJobId(null)
   $goalsBySession.set({})
+  $gateway.set(null as never)
+  $activeGatewayProfile.set('default')
   $sessions.set([])
 })
 
@@ -82,8 +86,9 @@ it('turns an Idea into an editable chat draft without sending it', () => {
   expect(takeSessionDraft(null).text).toBe('Help me plan today around my calendar, priorities, and energy.')
 })
 
-it('preserves an existing unsent draft when starting a goal', () => {
+it('preserves an existing unsent draft when starting a goal', async () => {
   stashSessionDraft(null, 'Existing thought', [])
+  $gateway.set({ request: async () => ({ goals: [] }) } as never)
 
   render(
     <MemoryRouter>
@@ -91,11 +96,12 @@ it('preserves an existing unsent draft when starting a goal', () => {
     </MemoryRouter>
   )
 
-  fireEvent.click(screen.getByRole('button', { name: 'Start a goal' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Start a goal' }))
   expect(takeSessionDraft(null).text).toBe('Existing thought\n\nHelp me set a goal and turn it into a realistic plan: ')
 })
 
 it('shows live goal state and opens its owning conversation', () => {
+  $gateway.set({ request: async () => ({ goals: [] }) } as never)
   $sessions.set([makeSessionInfo({ id: 'goal-chat', last_active: 1, title: 'Launch plan' })])
   $goalsBySession.set({
     'goal-chat': { status: 'active', title: 'Ship the prototype', updatedAt: Date.now() }
@@ -112,4 +118,43 @@ it('shows live goal state and opens its owning conversation', () => {
 
   fireEvent.click(screen.getByRole('button', { name: /Ship the prototype/ }))
   expect(screen.getByText('Opened goal chat')).toBeTruthy()
+})
+
+it('lists persisted goals without opening a session or spending a model turn', async () => {
+  const request = vi.fn(async () => ({ goals: [{
+    session_id: 'saved-chat',
+    session_title: 'Move plans',
+    goal: { status: 'paused', title: 'Find a new place', updated_at: 100 }
+  }] }))
+
+  $gateway.set({ request } as never)
+
+  render(
+    <MemoryRouter initialEntries={['/goals']}>
+      <Routes>
+        <Route element={<ConsumerGoalsView />} path="/goals" />
+        <Route element={<p>Opened saved chat</p>} path="/:sessionId" />
+      </Routes>
+    </MemoryRouter>
+  )
+
+  const goal = await screen.findByRole('button', { name: /Find a new place/ })
+  expect(request).toHaveBeenCalledWith('session.goals.list', { profile: 'default' })
+  expect(request).toHaveBeenCalledTimes(1)
+  fireEvent.click(goal)
+  expect(screen.getByText('Opened saved chat')).toBeTruthy()
+})
+
+it('shows a retry instead of an empty state when persisted goals fail to load', async () => {
+  const request = vi.fn()
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce({ goals: [] })
+
+  $gateway.set({ request } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+  await waitFor(() => expect(screen.getByText('No saved goals')).toBeTruthy())
+  expect(request).toHaveBeenCalledTimes(2)
 })

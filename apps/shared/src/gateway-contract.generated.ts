@@ -801,20 +801,16 @@ export interface ImageGenerateResult {
   image_data?: string | null
   error?: string | null
 }
-export interface SessionControlReadParams {
+export interface SessionGoalsListParams {
   profile?: string | null
+}
+export interface SessionGoalsListResult {
+  goals: SessionGoalListRow[]
+}
+export interface SessionGoalListRow {
   session_id: string
-}
-export interface SessionControlReadResult {
-  control: SessionControlSnapshot
-}
-/** ``_snapshot_control`` — ``revision`` is a hash of the visible state (``""`` when empty); ``updated_at`` is the newest persisted timestamp (``0`` when none). */
-export interface SessionControlSnapshot {
-  goal: GoalSnapshot | null
-  loop: LoopSnapshot | null
-  heartbeat: HeartbeatSnapshot | null
-  revision: string
-  updated_at: number
+  session_title: string
+  goal: GoalSnapshot
 }
 /** ``methods_session_control.py::_safe_goal_snapshot`` — the frontend-safe GoalState subset. */
 export interface GoalSnapshot {
@@ -856,6 +852,21 @@ export interface WaitBarrierTarget {
   type: 'session' | 'pid'
   target: string | number
   reason?: string
+}
+export interface SessionControlReadParams {
+  profile?: string | null
+  session_id: string
+}
+export interface SessionControlReadResult {
+  control: SessionControlSnapshot
+}
+/** ``_snapshot_control`` — ``revision`` is a hash of the visible state (``""`` when empty); ``updated_at`` is the newest persisted timestamp (``0`` when none). */
+export interface SessionControlSnapshot {
+  goal: GoalSnapshot | null
+  loop: LoopSnapshot | null
+  heartbeat: HeartbeatSnapshot | null
+  revision: string
+  updated_at: number
 }
 /** ``_safe_loop_snapshot`` — persisted LoopState fields, never its route. */
 export interface LoopSnapshot {
@@ -4516,6 +4527,8 @@ export interface RpcMethods {
   'session.foreign.list': { params: SessionForeignListParams; result: SessionForeignListResult }
   /** Preview a foreign session's tail before importing it. */
   'session.foreign.preview': { params: SessionForeignIdParams; result: SessionForeignPreviewResult }
+  /** List persisted goals for visible conversations without resuming agent sessions. */
+  'session.goals.list': { params: SessionGoalsListParams; result: SessionGoalsListResult }
   /** The durable display transcript (ancestors included, row ids attached). */
   'session.history': { params: SessionHistoryParams; result: SessionHistoryResult }
   /** Stop the running turn (and streaming TTS); retires the crash-recovery marker. */
@@ -4793,6 +4806,7 @@ export const RPC_METHODS = [
   'session.foreign.import',
   'session.foreign.list',
   'session.foreign.preview',
+  'session.goals.list',
   'session.history',
   'session.interrupt',
   'session.list',
