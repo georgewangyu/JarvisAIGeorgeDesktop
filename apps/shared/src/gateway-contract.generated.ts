@@ -853,6 +853,14 @@ export interface WaitBarrierTarget {
   target: string | number
   reason?: string
 }
+export interface SessionGoalSetCompletedParams {
+  profile?: string | null
+  session_id: string
+  completed: boolean
+}
+export interface SessionGoalSetCompletedResult {
+  goal: SessionGoalListRow
+}
 export interface SessionControlReadParams {
   profile?: string | null
   session_id: string
@@ -4529,6 +4537,8 @@ export interface RpcMethods {
   'session.foreign.preview': { params: SessionForeignIdParams; result: SessionForeignPreviewResult }
   /** List persisted goals for visible conversations without resuming agent sessions. */
   'session.goals.list': { params: SessionGoalsListParams; result: SessionGoalsListResult }
+  /** Mark a visible conversation's persisted goal complete or reopen it without a model turn. */
+  'session.goals.set_completed': { params: SessionGoalSetCompletedParams; result: SessionGoalSetCompletedResult }
   /** The durable display transcript (ancestors included, row ids attached). */
   'session.history': { params: SessionHistoryParams; result: SessionHistoryResult }
   /** Stop the running turn (and streaming TTS); retires the crash-recovery marker. */
@@ -4807,6 +4817,7 @@ export const RPC_METHODS = [
   'session.foreign.list',
   'session.foreign.preview',
   'session.goals.list',
+  'session.goals.set_completed',
   'session.history',
   'session.interrupt',
   'session.list',

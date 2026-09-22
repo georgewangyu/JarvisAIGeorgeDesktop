@@ -1,4 +1,4 @@
-import type { SessionGoalsListResult } from '@hermes/shared'
+import type { SessionGoalSetCompletedResult, SessionGoalsListResult } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
-import { $goalsBySession, type GoalStatus } from '@/store/goals'
+import { $goalsBySession, setSessionGoal } from '@/store/goals'
 import { $activeGatewayProfile } from '@/store/profile'
 import { $sessions } from '@/store/session'
 import type { CronJob } from '@/types/hermes'
@@ -229,13 +229,6 @@ export function ConsumerIdeasView() {
   )
 }
 
-const GOAL_TONE: Record<GoalStatus, string> = {
-  active: 'bg-emerald-500',
-  done: 'bg-(--ui-accent)',
-  paused: 'bg-amber-500',
-  waiting: 'bg-sky-500'
-}
-
 type SavedGoalRow = SessionGoalsListResult['goals'][number]
 
 export function ConsumerGoalsView() {
@@ -254,6 +247,8 @@ export function ConsumerGoalsView() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [refreshIndex, setRefreshIndex] = useState(0)
+  const [pendingGoalId, setPendingGoalId] = useState<string | null>(null)
+  const [goalUpdateError, setGoalUpdateError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -311,6 +306,45 @@ export function ConsumerGoalsView() {
     startConsumerDraft('Help me set a goal and turn it into a realistic plan: ', navigate)
   }
 
+  const toggleGoalCompletion = async (sessionId: string, completed: boolean) => {
+    if (!gateway || pendingGoalId) {
+      return
+    }
+
+    setPendingGoalId(sessionId)
+    setGoalUpdateError(false)
+
+    try {
+      const result = await gateway.request<SessionGoalSetCompletedResult>('session.goals.set_completed', {
+        completed: !completed,
+        profile,
+        session_id: sessionId
+      })
+
+      if ($gateway.get() !== gateway || $activeGatewayProfile.get() !== profile) {
+        return
+      }
+
+      setSavedGoalsSnapshot(current => current?.gateway === gateway && current.profile === profile
+        ? {
+            ...current,
+            goals: [result.goal, ...current.goals.filter(row => row.session_id !== sessionId)]
+          }
+        : current)
+      setSessionGoal(sessionId, {
+        status: completed ? 'active' : 'done',
+        title: result.goal.goal.title,
+        updatedAt: Date.now()
+      })
+    } catch {
+      if ($gateway.get() === gateway && $activeGatewayProfile.get() === profile) {
+        setGoalUpdateError(true)
+      }
+    } finally {
+      setPendingGoalId(null)
+    }
+  }
+
   return (
     <ConsumerPage
       description="Saved goals from your recent conversations, without exposing worker agents."
@@ -338,29 +372,48 @@ export function ConsumerGoalsView() {
         </EmptyState>
       ) : (
         <div className="space-y-3">
+          {goalUpdateError ? (
+            <p className="text-sm text-(--ui-text-danger)" role="alert">
+              The goal could not be updated. Try again.
+            </p>
+          ) : null}
           {items.map(([sessionId, goal]) => {
             const session = sessionById.get(sessionId)
+            const completed = goal.status === 'done'
 
             return (
-              <button
+              <div
                 className="flex w-full items-start gap-4 rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5 text-left transition-colors hover:bg-(--ui-control-hover-background)"
                 key={sessionId}
-                onClick={() => navigate(sessionRoute(sessionId))}
-                type="button"
               >
-                <span
-                  className={cn('mt-2 size-2.5 shrink-0 rounded-full', GOAL_TONE[goal.status as GoalStatus] ?? 'bg-sky-500')}
-                />
-                <span className="min-w-0 flex-1">
+                <button
+                  aria-checked={completed}
+                  aria-label={`${completed ? 'Reopen' : 'Complete'} ${goal.title}`}
+                  className={cn(
+                    'mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border-2 transition-colors',
+                    completed ? 'border-(--ui-accent) bg-(--ui-accent) text-white' : 'border-(--ui-text-tertiary)'
+                  )}
+                  disabled={Boolean(pendingGoalId)}
+                  onClick={() => void toggleGoalCompletion(sessionId, completed)}
+                  role="checkbox"
+                  type="button"
+                >
+                  {completed ? <Codicon name="check" size="0.75rem" /> : null}
+                </button>
+                <button
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => navigate(sessionRoute(sessionId))}
+                  type="button"
+                >
                   <span className="block font-semibold">{goal.title}</span>
                   <span className="mt-1 block text-sm text-(--ui-text-tertiary)">
                     {goal.detail || session?.title || 'Open the conversation'}
                   </span>
-                </span>
+                </button>
                 <span className="rounded-full bg-(--ui-bg-tertiary) px-2.5 py-1 text-xs capitalize text-(--ui-text-secondary)">
                   {goal.status}
                 </span>
-              </button>
+              </div>
             )
           })}
           <Button className="mt-3" onClick={startGoal} variant="secondary">

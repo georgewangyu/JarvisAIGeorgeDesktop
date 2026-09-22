@@ -422,6 +422,19 @@ method("session.goals.list", params=SessionGoalsListParams, result=SessionGoalsL
        doc="List persisted goals for visible conversations without resuming agent sessions.")
 
 
+class SessionGoalSetCompletedParams(ProfileParams):
+    session_id: str
+    completed: bool
+
+
+class SessionGoalSetCompletedResult(Result):
+    goal: SessionGoalListRow
+
+
+method("session.goals.set_completed", params=SessionGoalSetCompletedParams, result=SessionGoalSetCompletedResult,
+       doc="Mark a visible conversation's persisted goal complete or reopen it without a model turn.")
+
+
 class LoopSnapshot(Result):
     """``_safe_loop_snapshot`` — persisted LoopState fields, never its route."""
 

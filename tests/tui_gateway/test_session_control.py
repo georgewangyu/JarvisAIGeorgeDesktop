@@ -141,6 +141,40 @@ def test_goals_list_reads_saved_visible_sessions_without_resuming_them(server):
     assert not server._sessions
 
 
+def test_goals_completion_toggle_persists_without_resuming_agent(server):
+    from hermes_cli.goals import GoalState
+
+    db = server._get_db()
+    db.create_session("goal-toggle", "cli")
+    db.set_meta("goal:goal-toggle", GoalState(goal="Finish the plan", status="active", turns_used=4).to_json())
+
+    done = _call(server, "session.goals.set_completed", session_id="goal-toggle", completed=True)
+
+    assert done["result"]["goal"]["goal"]["status"] == "done"
+    assert GoalState.from_json(db.get_meta("goal:goal-toggle")).status == "done"
+
+    reopened = _call(server, "session.goals.set_completed", session_id="goal-toggle", completed=False)
+
+    assert reopened["result"]["goal"]["goal"]["status"] == "active"
+    assert GoalState.from_json(db.get_meta("goal:goal-toggle")).turns_used == 0
+    assert not server._sessions
+
+
+def test_goals_completion_rejects_hidden_sessions(server):
+    from hermes_cli.goals import GoalState
+
+    db = server._get_db()
+    db.create_session("goal-hidden-toggle", "cli")
+    db.set_session_hidden("goal-hidden-toggle", True)
+    original = GoalState(goal="Hidden goal").to_json()
+    db.set_meta("goal:goal-hidden-toggle", original)
+
+    response = _call(server, "session.goals.set_completed", session_id="goal-hidden-toggle", completed=True)
+
+    assert response["error"]["code"] == 4004
+    assert db.get_meta("goal:goal-hidden-toggle") == original
+
+
 def _save_loop(key, **overrides):
     from hermes_cli.loops import LoopState, save_loop
 

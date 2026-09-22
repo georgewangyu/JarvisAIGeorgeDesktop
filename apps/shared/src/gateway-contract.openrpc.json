@@ -2941,6 +2941,24 @@
       }
     },
     {
+      "name": "session.goals.set_completed",
+      "summary": "Mark a visible conversation's persisted goal complete or reopen it without a model turn.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SessionGoalSetCompletedParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SessionGoalSetCompletedResult"
+        }
+      }
+    },
+    {
       "name": "session.history",
       "summary": "The durable display transcript (ancestors included, row ids attached).",
       "params": [
@@ -25864,6 +25882,50 @@
           "goal"
         ],
         "title": "SessionGoalListRow",
+        "type": "object"
+      },
+      "SessionGoalSetCompletedParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "completed"
+        ],
+        "title": "SessionGoalSetCompletedParams",
+        "type": "object"
+      },
+      "SessionGoalSetCompletedResult": {
+        "additionalProperties": false,
+        "properties": {
+          "goal": {
+            "$ref": "#/components/schemas/SessionGoalListRow"
+          }
+        },
+        "required": [
+          "goal"
+        ],
+        "title": "SessionGoalSetCompletedResult",
         "type": "object"
       },
       "SessionGoalsListParams": {

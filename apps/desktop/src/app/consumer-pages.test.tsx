@@ -158,3 +158,47 @@ it('shows a retry instead of an empty state when persisted goals fail to load', 
   await waitFor(() => expect(screen.getByText('No saved goals')).toBeTruthy())
   expect(request).toHaveBeenCalledTimes(2)
 })
+
+it('persists completion and reopening from the goal checkbox without opening a chat', async () => {
+  const goal = { session_id: 'saved-chat', session_title: 'Move plans', goal: { status: 'active', title: 'Find a new place' } }
+
+  const request = vi.fn(async (method: string, params: { completed?: boolean }) => method === 'session.goals.list'
+    ? { goals: [goal] }
+    : { goal: { ...goal, goal: { ...goal.goal, status: params.completed ? 'done' : 'active' } } })
+
+  $gateway.set({ request } as never)
+  $sessions.set([makeSessionInfo({ id: 'saved-chat', title: 'Move plans' })])
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Complete Find a new place' }))
+  expect((await screen.findByRole('checkbox', { name: 'Reopen Find a new place' })).getAttribute('aria-checked')).toBe('true')
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Reopen Find a new place' }))
+  expect((await screen.findByRole('checkbox', { name: 'Complete Find a new place' })).getAttribute('aria-checked')).toBe('false')
+  expect(request).toHaveBeenCalledWith('session.goals.set_completed', {
+    completed: true, profile: 'default', session_id: 'saved-chat'
+  })
+  expect(request).toHaveBeenCalledWith('session.goals.set_completed', {
+    completed: false, profile: 'default', session_id: 'saved-chat'
+  })
+})
+
+it('keeps the goal unchecked and reports a failed completion write', async () => {
+  const goal = { session_id: 'saved-chat', session_title: 'Move plans', goal: { status: 'active', title: 'Find a new place' } }
+
+  const request = vi.fn(async (method: string) => {
+    if (method === 'session.goals.list') {
+      return { goals: [goal] }
+    }
+
+    throw new Error('write failed')
+  })
+
+  $gateway.set({ request } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Complete Find a new place' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('could not be updated')
+  expect(screen.getByRole('checkbox', { name: 'Complete Find a new place' }).getAttribute('aria-checked')).toBe('false')
+})

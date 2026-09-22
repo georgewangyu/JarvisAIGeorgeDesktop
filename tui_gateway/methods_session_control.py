@@ -240,6 +240,55 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 5031, "could not read persisted goals")
 
 
+@method("session.goals.set_completed")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    """Persist a user-requested completion toggle without waking the agent."""
+    from hermes_cli.goals import GoalState
+    from hermes_state_sessions import INTERNAL_LISTING_SOURCES
+
+    session_id = str(params.get("session_id") or "")
+    completed = params.get("completed")
+    if not session_id or not isinstance(completed, bool):
+        return _err(rid, 4004, "session_id and completed are required")
+
+    with _profile_db(params, writer=True) as db:
+        if db is None:
+            return _err(rid, 5031, "session store unavailable")
+        try:
+            row = db.get_session(session_id)
+            if (not row or row.get("hidden") or row.get("archived") or
+                    (row.get("source") or "").strip().lower() in INTERNAL_LISTING_SOURCES):
+                return _err(rid, 4004, "goal is not available")
+            tip = db.get_compression_tip(session_id) or session_id
+            meta_key = f"goal:{tip}"
+            raw = db.get_meta(meta_key)
+            if not raw:
+                return _err(rid, 4004, "goal is not available")
+            state = GoalState.from_json(raw)
+            if state.status == "cleared":
+                return _err(rid, 4004, "goal is not available")
+            if completed and state.status != "done":
+                state.status = "done"
+                state.last_verdict = "done"
+                state.last_reason = "Marked complete by user"
+                state.clear_wait()
+                db.set_meta(meta_key, state.to_json())
+            elif not completed and state.status == "done":
+                state.status = "active"
+                state.last_verdict = None
+                state.last_reason = "Reopened by user"
+                state.turns_used = 0
+                state.clear_wait()
+                db.set_meta(meta_key, state.to_json())
+            return _ok(rid, {"goal": {"session_id": session_id,
+                                        "session_title": row.get("title") or "",
+                                        "goal": _safe_goal_snapshot(state)}})
+        except Exception as exc:
+            logger.debug("session.goals.set_completed failed: %s", exc, exc_info=True)
+            return _err(rid, 5031, "could not update persisted goal")
+
+
 def _goal_blocks_loop_tick(session_key: str) -> bool:
     from hermes_cli.loops import goal_blocks_loop_tick
 
