@@ -1312,7 +1312,7 @@ function CronEditorDialog({
 
             <Field htmlFor="cron-prompt" label={c.promptLabel} optional={scriptOnlyJob} optionalLabel={c.optional}>
               <Textarea
-                className="min-h-24 font-mono"
+                className="min-h-24"
                 id="cron-prompt"
                 onChange={event => setPrompt(event.target.value)}
                 placeholder={c.promptPlaceholder}
@@ -1320,7 +1320,7 @@ function CronEditorDialog({
               />
             </Field>
 
-            <div className="grid items-start gap-4 sm:grid-cols-2">
+            <div>
               <Field htmlFor="cron-frequency" label={c.frequencyLabel}>
                 <Select onValueChange={handleSchedulePresetChange} value={schedulePreset}>
                   <SelectTrigger className="h-9 rounded-md" id="cron-frequency">
@@ -1335,49 +1335,59 @@ function CronEditorDialog({
                   </SelectContent>
                 </Select>
               </Field>
-
-              <Field htmlFor="cron-deliver" label={c.deliverLabel}>
-                <DeliverCheckboxes
-                  c={c}
-                  id="cron-deliver"
-                  onChange={setDeliver}
-                  targets={deliveryTargets.data ?? []}
-                  value={deliver}
-                />
-              </Field>
             </div>
 
-            {!scriptOnlyJob && (
-              <Field htmlFor="cron-model" label={c.modelLabel} optional optionalLabel={c.optional}>
-                <Select onValueChange={setModelChoice} value={modelChoice}>
-                  <SelectTrigger className="h-9 rounded-md" id="cron-model">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={MODEL_DEFAULT_VALUE}>{c.modelDefault}</SelectItem>
-                    {!modelChoiceKnown && (
-                      <SelectItem className="font-mono" value={modelChoice}>
-                        {modelChoice.slice(modelChoice.indexOf(':') + 1)}
-                      </SelectItem>
-                    )}
-                    {modelProviders.map(provider => (
-                      <SelectGroup key={provider.slug}>
-                        <SelectLabel>{provider.name}</SelectLabel>
-                        {(provider.models ?? []).map(model => (
-                          <SelectItem
-                            className="font-mono"
-                            key={`${provider.slug}:${model}`}
-                            value={`${provider.slug}:${model}`}
-                          >
-                            {model}
+            <details
+              className="grid gap-4"
+              open={isEdit && (deliver !== DEFAULT_DELIVER || modelChoice !== MODEL_DEFAULT_VALUE)}
+            >
+              <summary className="cursor-pointer text-sm text-(--ui-text-secondary)">
+                {t.settings.sections.advanced}
+              </summary>
+              <div className="grid gap-4 pt-4">
+                <Field htmlFor="cron-deliver" label={c.deliverLabel}>
+                  <DeliverCheckboxes
+                    c={c}
+                    id="cron-deliver"
+                    onChange={setDeliver}
+                    targets={deliveryTargets.data ?? []}
+                    value={deliver}
+                  />
+                </Field>
+
+                {!scriptOnlyJob && (
+                  <Field htmlFor="cron-model" label={c.modelLabel} optional optionalLabel={c.optional}>
+                    <Select onValueChange={setModelChoice} value={modelChoice}>
+                      <SelectTrigger className="h-9 rounded-md" id="cron-model">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={MODEL_DEFAULT_VALUE}>{c.modelDefault}</SelectItem>
+                        {!modelChoiceKnown && (
+                          <SelectItem className="font-mono" value={modelChoice}>
+                            {modelChoice.slice(modelChoice.indexOf(':') + 1)}
                           </SelectItem>
+                        )}
+                        {modelProviders.map(provider => (
+                          <SelectGroup key={provider.slug}>
+                            <SelectLabel>{provider.name}</SelectLabel>
+                            {(provider.models ?? []).map(model => (
+                              <SelectItem
+                                className="font-mono"
+                                key={`${provider.slug}:${model}`}
+                                value={`${provider.slug}:${model}`}
+                              >
+                                {model}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                )}
+              </div>
+            </details>
 
             {schedulePreset === 'custom' ? (
               <Field htmlFor="cron-schedule" label={c.customScheduleLabel}>
@@ -1394,7 +1404,6 @@ function CronEditorDialog({
               <div className="rounded-md bg-(--ui-bg-quinary) px-3 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="font-medium text-foreground">{scheduleHint}</span>
-                  <span className="font-mono text-muted-foreground">{schedule}</span>
                 </div>
               </div>
             )}
