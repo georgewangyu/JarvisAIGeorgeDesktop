@@ -179,9 +179,11 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     fireEvent.click(await screen.findByText('More ways to connect'))
 
-    expect(await screen.findByText('Gateway URL')).toBeTruthy()
+    expect(await screen.findByText('Service address')).toBeTruthy()
+    expect(screen.getByText('Connect another Jarvis setup')).toBeTruthy()
+    expect(screen.queryByText(/Hermes|gateway/i)).toBeNull()
     expect(screen.getByText('Test connection')).toBeTruthy()
-    expect(screen.getByText('Apply and reconnect')).toBeTruthy()
+    expect(screen.getByText('Connect')).toBeTruthy()
   })
 
   it('returns from the remote connection form to the first-run choice', async () => {
@@ -194,7 +196,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     render(<DesktopInstallOverlay />)
 
     fireEvent.click(await screen.findByText('More ways to connect'))
-    expect(await screen.findByText('Gateway URL')).toBeTruthy()
+    expect(await screen.findByText('Service address')).toBeTruthy()
 
     fireEvent.click(screen.getByText('Back'))
 
@@ -231,11 +233,11 @@ describe('DesktopInstallOverlay first-run setup', () => {
     render(<DesktopInstallOverlay />)
 
     fireEvent.click(await screen.findByText('More ways to connect'))
-    fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
+    fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
 
-    const apply = screen.getByText('Apply and reconnect').closest('button') as HTMLButtonElement
+    const apply = screen.getByText('Connect').closest('button') as HTMLButtonElement
     expect(apply.disabled).toBe(true)
 
     await act(async () => {
@@ -259,7 +261,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     await screen.findByText('Connected to https://gateway.example.com/hermes (0.17.0).')
     expect(apply.disabled).toBe(false)
 
-    fireEvent.click(screen.getByText('Apply and reconnect'))
+    fireEvent.click(screen.getByText('Connect'))
 
     await waitFor(() => {
       expect(desktop.applyConnectionConfig).toHaveBeenCalledWith({
@@ -269,7 +271,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
         remoteUrl: 'https://gateway.example.com/hermes'
       })
     })
-    await waitFor(() => expect(screen.queryByText('Gateway URL')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Service address')).toBeNull())
   })
 
   it('ignores a completed probe after the gateway URL becomes invalid', async () => {
@@ -290,7 +292,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     render(<DesktopInstallOverlay />)
 
     fireEvent.click(await screen.findByText('More ways to connect'))
-    const urlInput = await screen.findByPlaceholderText('https://gateway.example.com/hermes')
+    const urlInput = await screen.findByPlaceholderText('https://assistant.example.com')
     fireEvent.change(urlInput, { target: { value: 'https://gateway.example.com/hermes' } })
 
     await act(async () => {
@@ -313,7 +315,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     expect(screen.queryByPlaceholderText('Paste session token')).toBeNull()
     expect((screen.getByText('Test connection').closest('button') as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByText('Apply and reconnect').closest('button') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByText('Connect').closest('button') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('does not enable Apply when credentials change during a connection test', async () => {
@@ -343,7 +345,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     render(<DesktopInstallOverlay />)
 
     fireEvent.click(await screen.findByText('More ways to connect'))
-    fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
+    fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
 
@@ -352,7 +354,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     })
 
     const tokenInput = await screen.findByPlaceholderText('Paste session token')
-    const apply = screen.getByText('Apply and reconnect').closest('button') as HTMLButtonElement
+    const apply = screen.getByText('Connect').closest('button') as HTMLButtonElement
 
     fireEvent.change(tokenInput, { target: { value: 'token-a' } })
     fireEvent.click(screen.getByText('Test connection'))
@@ -394,7 +396,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     render(<DesktopInstallOverlay />)
 
     fireEvent.click(await screen.findByText('More ways to connect'))
-    fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
+    fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
 
@@ -408,12 +410,12 @@ describe('DesktopInstallOverlay first-run setup', () => {
     fireEvent.click(screen.getByText('Test connection'))
     await screen.findByText('Connected to https://gateway.example.com/hermes (0.17.0).')
 
-    const apply = screen.getByText('Apply and reconnect').closest('button') as HTMLButtonElement
+    const apply = screen.getByText('Connect').closest('button') as HTMLButtonElement
     fireEvent.click(apply)
 
     expect(await screen.findByText('remote apply failed')).toBeTruthy()
     expect(apply.disabled).toBe(false)
-    expect(screen.getByText('Gateway URL')).toBeTruthy()
+    expect(screen.getByText('Service address')).toBeTruthy()
   })
 
   it('signs in, tests, and applies a password-style remote gateway', async () => {
@@ -446,7 +448,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     render(<DesktopInstallOverlay />)
 
     fireEvent.click(await screen.findByText('More ways to connect'))
-    fireEvent.change(await screen.findByPlaceholderText('https://gateway.example.com/hermes'), {
+    fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
 
@@ -473,7 +475,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     })
 
     await screen.findByText('Connected to https://gateway.example.com/hermes.')
-    const apply = screen.getByText('Apply and reconnect').closest('button') as HTMLButtonElement
+    const apply = screen.getByText('Connect').closest('button') as HTMLButtonElement
     expect(apply.disabled).toBe(false)
     fireEvent.click(apply)
 
@@ -503,9 +505,9 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     expect(await screen.findByText('Hermes needs a one-time install')).toBeTruthy()
 
-    fireEvent.click(screen.getByText('Connect existing'))
+    fireEvent.click(screen.getByText('Connect existing setup'))
 
-    expect(await screen.findByText('Gateway URL')).toBeTruthy()
+    expect(await screen.findByText('Service address')).toBeTruthy()
 
     desktop.probeConnectionConfig.mockResolvedValue({
       authMode: 'token',
@@ -526,7 +528,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
       return { mode: 'remote' }
     })
 
-    fireEvent.change(screen.getByPlaceholderText('https://gateway.example.com/hermes'), {
+    fireEvent.change(screen.getByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
 
@@ -539,9 +541,9 @@ describe('DesktopInstallOverlay first-run setup', () => {
     })
     fireEvent.click(screen.getByText('Test connection'))
     await screen.findByText('Connected to https://gateway.example.com/hermes (0.17.0).')
-    fireEvent.click(screen.getByText('Apply and reconnect'))
+    fireEvent.click(screen.getByText('Connect'))
 
-    await waitFor(() => expect(screen.queryByText('Gateway URL')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Service address')).toBeNull())
     expect(screen.queryByText('Hermes needs a one-time install')).toBeNull()
   })
 })
