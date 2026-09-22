@@ -17,12 +17,14 @@ import { $showAllProfiles, setShowAllProfiles } from './profile'
 import type { PullRequestBucket } from './pull-requests'
 import type { SessionStatusBucket } from './session-dot-state'
 
-export const SIDEBAR_DEFAULT_WIDTH = 237
-export const SIDEBAR_MAX_WIDTH = 360
+// Jarvis uses a Muse-like consumer rail. Conversation history opens as a
+// drawer, so the persistent pane only needs room for one calm column of icons.
+export const SIDEBAR_DEFAULT_WIDTH = 72
+export const SIDEBAR_MAX_WIDTH = 72
 // Open at the same width as the sessions sidebar so the two rails match, but
 // allow shrinking well below that (~30% under the old 14rem floor) for users who
 // want a narrow tree.
-export const FILE_BROWSER_DEFAULT_WIDTH = `${SIDEBAR_DEFAULT_WIDTH}px`
+export const FILE_BROWSER_DEFAULT_WIDTH = '237px'
 export const FILE_BROWSER_MIN_WIDTH = '10rem'
 export const FILE_BROWSER_MAX_WIDTH = '20rem'
 

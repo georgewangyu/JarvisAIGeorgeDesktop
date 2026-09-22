@@ -2,14 +2,17 @@
    their compact layout, and native HUD windows retain their own sizing. */
 :root[data-hermes-theme='jarvis'] {
   --radius-scalar: 1;
-  --composer-width: 48rem;
+  /* Muse keeps the conversation deliberately narrow even in a wide window.
+     The assistant should feel like one continuous correspondence, not an IDE
+     canvas that happens to contain messages. */
+  --composer-width: 38rem;
   --conversation-text-font-size: 1rem;
-  --conversation-line-height: 1.65rem;
-  --conversation-turn-gap: 1.25rem;
-  --composer-input-min-height: 3rem;
-  --composer-surface-pad-x: 0.875rem;
-  --composer-surface-pad-y: 0.75rem;
-  --composer-shell-pad-block-end: 1.25rem;
+  --conversation-line-height: 1.55rem;
+  --conversation-turn-gap: 1.75rem;
+  --composer-input-min-height: 2.875rem;
+  --composer-surface-pad-x: 0.75rem;
+  --composer-surface-pad-y: 0.625rem;
+  --composer-shell-pad-block-end: 1.5rem;
   --composer-control-size: 1.875rem;
   --composer-control-primary-size: 2rem;
   --composer-row-gap: 0.625rem;
@@ -36,7 +39,11 @@
 }
 
 :root[data-hermes-theme='jarvis'] [data-slot='composer-surface'] {
-  border-radius: 1.25rem;
+  border-radius: 999px;
+  border-color: color-mix(in srgb, var(--ui-base) 9%, transparent);
+  box-shadow:
+    0 12px 36px color-mix(in srgb, var(--ui-base) 10%, transparent),
+    0 1px 3px color-mix(in srgb, var(--ui-base) 8%, transparent);
 }
 
 :root[data-hermes-theme='jarvis'] .desktop-input-chrome {
@@ -51,7 +58,88 @@
 }
 
 :root[data-hermes-theme='jarvis'] [data-slot='aui_thread-content'] {
-  padding-top: 1.5rem;
+  padding-top: 6.25rem;
+  padding-inline: 0.875rem;
+}
+
+/* One quiet assistant identity replaces the developer-style thread header.
+   This is intentionally our own SnackVoice-lavender monogram rather than a
+   copy of Muse's character asset. */
+:root[data-hermes-theme='jarvis'] [data-slot='aui_thread-viewport'] {
+  position: relative;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='aui_thread-viewport']::before {
+  content: 'J';
+  position: absolute;
+  z-index: 2;
+  top: 1.35rem;
+  left: 50%;
+  display: grid;
+  width: 2.875rem;
+  height: 2.875rem;
+  translate: -50% 0;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ui-accent) 24%, transparent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 28%, color-mix(in srgb, white 74%, transparent), transparent 33%),
+    linear-gradient(145deg, color-mix(in srgb, var(--ui-accent) 48%, white), var(--ui-accent));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--ui-accent) 20%, transparent);
+  color: color-mix(in srgb, var(--ui-accent) 38%, black);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+:root.dark[data-hermes-theme='jarvis'] [data-slot='aui_thread-viewport']::before {
+  color: color-mix(in srgb, var(--ui-accent) 22%, white);
+}
+
+/* Muse reads as a sequence of calm, self-contained notes. Jarvis keeps the
+   richer message/tool model underneath, but ordinary prose gets the same
+   softly separated rhythm instead of spanning an IDE-width transcript. */
+:root[data-hermes-theme='jarvis'] [data-slot='aui_assistant-message-root'] {
+  align-items: flex-start;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='aui_assistant-message-content'] {
+  width: fit-content;
+  max-width: 94%;
+  padding: 0.8rem 1rem;
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--ui-base) 8%, var(--dt-card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-base) 4%, transparent);
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='aui_user-message-root'] > .composer-human-message {
+  width: fit-content;
+  max-width: 88%;
+  align-self: flex-end;
+  border-color: transparent;
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--ui-accent) 11%, var(--dt-card));
+  box-shadow: none;
+}
+
+/* Model/version/debug chrome belongs in Advanced. The consumer shell should
+   end with the composer, as Muse does, instead of an IDE status bar. */
+:root[data-hermes-theme='jarvis'] [data-slot='statusbar'] {
+  display: none;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='sidebar'] {
+  background: color-mix(in srgb, var(--ui-bg-sidebar) 96%, transparent);
+}
+
+:root[data-hermes-theme='jarvis'] .jarvis-chat-drawer {
+  background: var(--dt-background);
+  box-shadow: 1rem 0 3rem color-mix(in srgb, var(--ui-base) 10%, transparent);
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='sidebar-menu-button'] svg {
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 :root[data-hermes-theme='jarvis'] .consumer-page {
