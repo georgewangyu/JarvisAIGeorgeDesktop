@@ -186,7 +186,7 @@ export const en: Translations = {
       details: 'Details',
       remoteTitle: 'Sign in again to Jarvis',
       remoteDescription:
-        'Your saved connection has expired. Sign in again to reconnect. Nothing here deletes your chats or settings.',
+        'Your saved Jarvis connection has expired. Sign in again to reconnect. Nothing here deletes your chats or settings.',
       retry: 'Try again',
       repairInstall: 'Repair Jarvis',
       useLocalGateway: 'Use this Mac',
@@ -195,12 +195,12 @@ export const en: Translations = {
       openLogs: 'Open logs',
       repairHint: 'Repair re-runs the installer and can take a few minutes on a fresh machine.',
       remoteSignInHint: signInLabel =>
-        `Signs out of the saved remote browser session, then opens ${signInLabel}. Use local gateway to switch to the bundled backend instead.`,
+        `Signs out of the saved browser session, then opens ${signInLabel}. Choose Use this Mac to continue with Jarvis on this computer instead.`,
       signOutAndSignIn: 'Sign out & sign in',
       remoteFailureHint: 'Check the service address and sign-in under Connection settings, or use Jarvis from this Mac.',
       cloudDownTitle: 'Nous Cloud agent is down',
       cloudDownDescription:
-        'The Nous-managed cloud agent this gateway connects to is returning a server error. It cannot be restarted from here — check its status, switch to the local gateway, or get support.',
+        'The online Jarvis service is returning a server error. It cannot be restarted from here — check its status, use this Mac, or get support.',
       cloudDownHint:
         'The buttons below open the Nous Portal (instance status and controls) and our Discord for support.',
       cloudDownCheckPortal: 'Check Portal status',
@@ -208,11 +208,11 @@ export const en: Translations = {
       hideRecentLogs: 'Hide recent logs',
       showRecentLogs: 'Show recent logs',
       signedInTitle: 'Signed in',
-      signedInMessage: 'Reconnecting to the remote gateway…',
+      signedInMessage: 'Reconnecting to Jarvis…',
       signInIncompleteTitle: 'Sign-in incomplete',
       signInIncompleteMessage: 'The login window closed before authentication finished.',
       signInFailed: 'Sign-in failed',
-      signInToRemoteGateway: 'Sign in to remote gateway',
+      signInToRemoteGateway: 'Sign in to Jarvis',
       signInWithProvider: provider => `Sign in with ${provider}`,
       identityProvider: 'your identity provider'
     }

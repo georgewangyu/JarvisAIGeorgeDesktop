@@ -129,27 +129,27 @@ export const ja = defineLocale({
       ipcBridgeUnavailable: 'デスクトップ IPC ブリッジが利用できません。'
     },
     failure: {
-      title: 'Hermes を起動できませんでした',
+      title: 'Jarvis の起動に少し時間がかかっています',
       description:
-        'バックグラウンドゲートウェイが起動しませんでした。以下の回復手順をお試しください。チャットや設定は削除されません。',
-      remoteTitle: 'リモートゲートウェイへのサインインが必要です',
+        'Jarvis のアシスタントサービスを起動できませんでした。以下の回復手順をお試しください。チャットや設定は削除されません。',
+      remoteTitle: 'Jarvis にもう一度サインインしてください',
       remoteDescription:
-        'リモートゲートウェイのセッションが期限切れです。再接続するにはもう一度サインインしてください。チャットや設定は削除されません。',
+        '保存済みの Jarvis 接続の有効期限が切れました。再接続するにはもう一度サインインしてください。チャットや設定は削除されません。',
       retry: '再試行',
-      repairInstall: 'インストールを修復',
-      useLocalGateway: 'ローカルゲートウェイを使用',
-      gatewaySettings: 'ゲートウェイ設定',
+      repairInstall: 'Jarvis を修復',
+      useLocalGateway: 'この Mac を使用',
+      gatewaySettings: '接続設定',
       back: '戻る',
       openLogs: 'ログを開く',
       repairHint: '修復はインストーラーを再実行します。新しいマシンでは数分かかる場合があります。',
       remoteSignInHint: signInLabel =>
-        `保存済みのリモートブラウザセッションからサインアウトし、${signInLabel}を開きます。代わりにバンドルされたバックエンドに切り替えるには「ローカルゲートウェイを使用」を選択してください。`,
+        `保存済みのブラウザセッションからサインアウトし、${signInLabel}を開きます。このコンピュータの Jarvis を使うには「この Mac を使用」を選択してください。`,
       signOutAndSignIn: 'サインアウトして再サインイン',
       remoteFailureHint:
-        '「ゲートウェイ設定」でゲートウェイの URL とサインインを確認するか、ローカルゲートウェイに切り替えてください。',
-      cloudDownTitle: 'Nous Cloud エージェントが停止しています',
+        '「接続設定」でサービスアドレスとサインインを確認するか、この Mac の Jarvis を使用してください。',
+      cloudDownTitle: 'Nous Cloud サービスが停止しています',
       cloudDownDescription:
-        'このゲートウェイが接続している Nous 管理のクラウドエージェントがサーバーエラーを返しています。ここから再起動することはできません。ステータスを確認するか、ローカルゲートウェイに切り替えるか、サポートに連絡してください。',
+        'オンラインの Jarvis サービスがサーバーエラーを返しています。ここから再起動することはできません。ステータスを確認するか、この Mac を使用するか、サポートに連絡してください。',
       cloudDownHint:
         '下のボタンから Nous Portal（インスタンスの状態と操作）を開くか、Discord でサポートを受けられます。',
       cloudDownCheckPortal: 'Portal のステータスを確認',
@@ -157,11 +157,11 @@ export const ja = defineLocale({
       hideRecentLogs: '最近のログを非表示',
       showRecentLogs: '最近のログを表示',
       signedInTitle: 'サインインしました',
-      signedInMessage: 'リモートゲートウェイに再接続中…',
+      signedInMessage: 'Jarvis に再接続中…',
       signInIncompleteTitle: 'サインインが完了していません',
       signInIncompleteMessage: '認証が完了する前にログインウィンドウが閉じられました。',
       signInFailed: 'サインインに失敗しました',
-      signInToRemoteGateway: 'リモートゲートウェイにサインイン',
+      signInToRemoteGateway: 'Jarvis にサインイン',
       signInWithProvider: provider => `${provider} でサインイン`,
       identityProvider: 'ID プロバイダー'
     }
