@@ -1435,10 +1435,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
 
       {cronOpen && (
         <Suspense fallback={null}>
-          <CronView
-            onClose={closeOverlayToPreviousRoute}
-            onOpenSession={sessionId => openSession(sessionId, navigate)}
-          />
+          <CronView onClose={closeOverlayToPreviousRoute} />
         </Suspense>
       )}
 

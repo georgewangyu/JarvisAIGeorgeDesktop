@@ -1,0 +1,62 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, expect, it, vi } from 'vitest'
+
+import { getCronJobRuns } from '@/hermes'
+import { I18nProvider } from '@/i18n'
+import { en } from '@/i18n/en'
+import type { SessionInfo } from '@/types/hermes'
+
+import { CronJobRuns } from './run-history'
+
+vi.mock('@/hermes', () => ({ getCronJobRuns: vi.fn() }))
+vi.mock('./run-result', () => ({ AutomationRunResult: () => null }))
+
+afterEach(() => {
+  cleanup()
+  vi.clearAllMocks()
+})
+
+function renderRuns(jobId: string) {
+  return render(
+    <I18nProvider configClient={null} initialLocale="en">
+      <CronJobRuns c={en.cron} jobId={jobId} />
+    </I18nProvider>
+  )
+}
+
+it('distinguishes a failed history read from an empty history and retries the same job', async () => {
+  vi.mocked(getCronJobRuns).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([])
+
+  renderRuns('job-one')
+
+  await screen.findByText('Failed to load automations')
+  expect(screen.queryByText('No runs yet')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  await screen.findByText('No runs yet')
+  expect(getCronJobRuns).toHaveBeenNthCalledWith(1, 'job-one')
+  expect(getCronJobRuns).toHaveBeenNthCalledWith(2, 'job-one')
+})
+
+it('does not let an older job response overwrite the newly selected job', async () => {
+  let resolveOld: (runs: SessionInfo[]) => void = () => undefined
+
+  const oldRequest = new Promise<SessionInfo[]>(resolve => {
+    resolveOld = resolve
+  })
+
+  vi.mocked(getCronJobRuns)
+    .mockReturnValueOnce(oldRequest)
+    .mockResolvedValueOnce([{ id: 'new-run', title: 'New job result' } as SessionInfo])
+
+  const { rerender } = renderRuns('old-job')
+
+  rerender(
+    <I18nProvider configClient={null} initialLocale="en">
+      <CronJobRuns c={en.cron} jobId="new-job" />
+    </I18nProvider>
+  )
+  await screen.findByText('New job result')
+  resolveOld([{ id: 'old-run', title: 'Stale old result' } as SessionInfo])
+  await Promise.resolve()
+  expect(screen.queryByText('Stale old result')).toBeNull()
+})

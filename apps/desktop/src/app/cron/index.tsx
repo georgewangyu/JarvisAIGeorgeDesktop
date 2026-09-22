@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Codicon } from '@/components/ui/codicon'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   Dialog,
@@ -37,11 +36,9 @@ import {
   deleteCronJob,
   getAutomationBlueprints,
   getCronDeliveryTargets,
-  getCronJobRuns,
   instantiateAutomationBlueprint,
   pauseCronJob,
   resumeCronJob,
-  type SessionInfo,
   updateCronJob
 } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
@@ -49,7 +46,6 @@ import { AlertTriangle } from '@/lib/icons'
 import { requestModelOptions } from '@/lib/model-options'
 import { asText } from '@/lib/text'
 import { $cronFocusJobId, $cronJobs, invalidateCronJobsRequests, setCronFocusJobId } from '@/store/cron'
-import { $changeEventsAvailable, $cronChangeTick } from '@/store/live-sync'
 import { notify, notifyError } from '@/store/notifications'
 import { $profileScope, ALL_PROFILES } from '@/store/profile'
 
@@ -85,7 +81,7 @@ import {
 } from './cron-job-model'
 import { JobActions } from './job-actions'
 import { jobState, jobTitle, nextRunOverdueMs, STATE_DOT } from './job-state'
-import { AutomationRunResult } from './run-result'
+import { CronJobRuns } from './run-history'
 
 const DEFAULT_DELIVER = 'local'
 
@@ -294,11 +290,10 @@ function matchesQuery(job: CronJob, q: string): boolean {
 
 interface CronViewProps extends React.ComponentProps<'section'> {
   onClose: () => void
-  onOpenSession?: (sessionId: string) => void
   setStatusbarItemGroup?: SetStatusbarItemGroup
 }
 
-export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setStatusbarItemGroup }: CronViewProps) {
+export function CronView({ onClose, setStatusbarItemGroup: _setStatusbarItemGroup }: CronViewProps) {
   const { t } = useI18n()
   const c = t.cron
   // Source of truth is the shared atom (also fed by the controller poll), so the
@@ -705,7 +700,6 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
               c={c}
               job={selectedJob}
               onEdit={() => setEditor({ mode: 'edit', job: selectedJob })}
-              onOpenSession={onOpenSession}
               onPauseResume={() => void handlePauseResume(selectedJob)}
               onTrigger={() => void handleTrigger(selectedJob)}
             />
@@ -786,12 +780,11 @@ interface CronJobDetailProps {
   c: Translations['cron']
   job: CronJob
   onEdit: () => void
-  onOpenSession?: (sessionId: string) => void
   onPauseResume: () => void
   onTrigger: () => void
 }
 
-function CronJobDetail({ busy, c, job, onEdit, onOpenSession, onPauseResume, onTrigger }: CronJobDetailProps) {
+function CronJobDetail({ busy, c, job, onEdit, onPauseResume, onTrigger }: CronJobDetailProps) {
   const state = jobState(job)
   const deliver = jobDeliver(job)
   const prompt = jobPrompt(job)
@@ -848,120 +841,8 @@ function CronJobDetail({ busy, c, job, onEdit, onOpenSession, onPauseResume, onT
         </section>
       ) : null}
 
-      <CronJobRuns c={c} jobId={job.id} onOpenSession={onOpenSession} />
+      <CronJobRuns c={c} jobId={job.id} key={job.id} />
     </PanelDetail>
-  )
-}
-
-function formatRunTime(seconds?: null | number): string {
-  if (!seconds) {
-    return '—'
-  }
-
-  const date = new Date(seconds * 1000)
-
-  return Number.isNaN(date.valueOf()) ? '—' : date.toLocaleString()
-}
-
-// Runs are produced by the background scheduler tick. cron.changed /
-// sessions.changed broadcasts re-load immediately on event-capable backends
-// (the tick dep below), so the poll drops to a slow backstop there; older
-// backends keep the legacy cadence.
-const RUNS_POLL_INTERVAL_MS = 8000
-const RUNS_BACKSTOP_INTERVAL_MS = 60_000
-
-function CronJobRuns({
-  c,
-  jobId,
-  onOpenSession: _onOpenSession
-}: {
-  c: Translations['cron']
-  jobId: string
-  onOpenSession?: (sessionId: string) => void
-}) {
-  const [runs, setRuns] = useState<null | SessionInfo[]>(null)
-  const [selectedRun, setSelectedRun] = useState<SessionInfo | null>(null)
-  const changeEventsAvailable = useStore($changeEventsAvailable)
-  const cronChangeTick = useStore($cronChangeTick)
-
-  useEffect(() => {
-    let cancelled = false
-
-    const load = () =>
-      getCronJobRuns(jobId)
-        .then(result => {
-          if (!cancelled) {
-            setRuns(result)
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setRuns(prev => prev ?? [])
-          }
-        })
-
-    void load()
-
-    const intervalId = window.setInterval(
-      () => {
-        if (document.visibilityState === 'visible') {
-          void load()
-        }
-      },
-      changeEventsAvailable ? RUNS_BACKSTOP_INTERVAL_MS : RUNS_POLL_INTERVAL_MS
-    )
-
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void load()
-      }
-    }
-
-    document.addEventListener('visibilitychange', onVisible)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-    // cronChangeTick: a fired run moves jobs.json bookkeeping → reload now.
-  }, [changeEventsAvailable, cronChangeTick, jobId])
-
-  return (
-    <div>
-      <PanelSectionLabel className="mb-1.5">
-        {c.runHistory}
-        {runs && runs.length > 0 ? ` · ${runs.length}` : ''}
-      </PanelSectionLabel>
-      {runs === null ? (
-        <div className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
-          <Codicon name="loading" size="0.75rem" spinning />
-        </div>
-      ) : runs.length === 0 ? (
-        <div className="py-1 text-xs text-muted-foreground">{c.noRuns}</div>
-      ) : (
-        <div className="flex flex-col gap-px">
-          {runs.map(run => (
-            <div key={run.id}>
-              <button
-                aria-expanded={selectedRun?.id === run.id}
-                className="row-hover flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                onClick={() => setSelectedRun(current => (current?.id === run.id ? null : run))}
-                type="button"
-              >
-                <span className="truncate text-foreground/85">
-                  {run.title?.trim() || run.preview?.trim() || run.id}
-                </span>
-                <span className="shrink-0 text-[0.62rem] text-muted-foreground/55 tabular-nums">
-                  {formatRunTime(run.last_active || run.started_at)}
-                </span>
-              </button>
-              {selectedRun?.id === run.id && <AutomationRunResult key={run.id} run={run} />}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }
 
