@@ -176,6 +176,11 @@
   box-shadow: var(--shadow-nous);
 }
 
+:root[data-hermes-theme='jarvis'] [data-slot='sheet-overlay']:has(+ .jarvis-chat-drawer[data-search-mode='true']) {
+  background: color-mix(in srgb, var(--ui-base) 5%, transparent);
+  backdrop-filter: none;
+}
+
 :root[data-hermes-theme='jarvis'] .jarvis-chat-drawer[data-search-mode='true'] [data-slot='sheet-header'] {
   padding: 0;
   border: 0;

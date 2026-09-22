@@ -1723,7 +1723,7 @@ export function ChatSidebar({
                     />
                   )}
 
-                  {!trimmedQuery && pinnedSessions.length > 0 && (
+                  {!trimmedQuery && drawerMode === 'chats' && pinnedSessions.length > 0 && (
                     <SidebarSessionsSection
                       activeSessionId={activeSidebarSessionId}
                       contentClassName="flex flex-col gap-px rounded-lg pb-2 pt-1"
@@ -1747,7 +1747,9 @@ export function ChatSidebar({
                     />
                   )}
 
-                  {!trimmedQuery && inProject && projectLoadFailed && <SidebarLoadErrorState onRetry={retryProject} />}
+                  {!trimmedQuery && drawerMode === 'chats' && inProject && projectLoadFailed && (
+                    <SidebarLoadErrorState onRetry={retryProject} />
+                  )}
                   {!trimmedQuery && (
                     <SidebarSessionsSection
                       activeProjectId={activeProjectId}
@@ -1808,7 +1810,7 @@ export function ChatSidebar({
                       // Otherwise project lanes stay chronological whatever the flat
                       // list does — only the flat list can swap its dividers for
                       // WORKING / DONE.
-                      grouping={showArchived || rankedGlobally ? 'none' : grouping === 'status' ? 'status' : 'date'}
+                      grouping={drawerMode === 'search' || showArchived || rankedGlobally ? 'none' : grouping === 'status' ? 'status' : 'date'}
                       groups={displayAgentGroups}
                       headerAction={
                         drawerMode === 'search' ? undefined : (
@@ -1903,7 +1905,7 @@ export function ChatSidebar({
                           </div>
                         )
                       }
-                      label={sessionsLabel}
+                      label={drawerMode === 'search' ? 'Recents' : sessionsLabel}
                       labelMeta={
                         worktreeGroupingActive ? (
                           reposScanning && !projectsSkeletonVisible ? (
@@ -1923,7 +1925,7 @@ export function ChatSidebar({
                       onNewSessionInWorkspace={onNewSessionInWorkspace}
                       onNewSessionSplit={onNewSessionSplit}
                       onReorderProjects={showAllProfiles ? undefined : reorderProjects}
-                      onReorderSessions={showAllProfiles ? undefined : reorderSessions}
+                      onReorderSessions={drawerMode === 'search' || showAllProfiles ? undefined : reorderSessions}
                       onResumeSession={resumeFromDrawer}
                       onToggle={() => setSidebarRecentsOpen(!agentsOpen)}
                       onTogglePin={pinSession}
@@ -1944,12 +1946,13 @@ export function ChatSidebar({
                         'min-h-32 flex-1 overflow-hidden p-0',
                         !recentsVirtualizes && 'compact:min-h-0 compact:flex-none compact:overflow-visible'
                       )}
-                      sessions={displayAgentSessions}
-                      sortable={!showAllProfiles && agentSessions.length > 1}
+                      sessions={drawerMode === 'search' ? sortedSessions.slice(0, 5) : displayAgentSessions}
+                      sortable={drawerMode !== 'search' && !showAllProfiles && agentSessions.length > 1}
                     />
                   )}
 
                   {!trimmedQuery &&
+                    drawerMode === 'chats' &&
                     !worktreeGroupingActive &&
                     messagingGroups.map(group => {
                       const visible = messagingVisible[group.sourceId] ?? NON_SESSION_INITIAL_ROWS
