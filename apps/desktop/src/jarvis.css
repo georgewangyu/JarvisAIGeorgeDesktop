@@ -160,6 +160,41 @@
   box-shadow: 1rem 0 3rem color-mix(in srgb, var(--ui-base) 10%, transparent);
 }
 
+/* Search is a short task over the current conversation. Keep Chats as the
+   persistent side drawer, while Search floats where the person is reading. */
+:root[data-hermes-theme='jarvis'] .jarvis-chat-drawer[data-search-mode='true'] {
+  inset: auto;
+  top: clamp(6rem, 20vh, 12rem);
+  left: 50%;
+  width: min(32rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: min(32rem, 70vh);
+  transform: translateX(-50%);
+  border: 1px solid var(--stroke-nous);
+  border-radius: 1.25rem;
+  background: var(--dt-card);
+  box-shadow: var(--shadow-nous);
+}
+
+:root[data-hermes-theme='jarvis'] .jarvis-chat-drawer[data-search-mode='true'] [data-slot='sheet-header'] {
+  padding: 0;
+  border: 0;
+}
+
+:root[data-hermes-theme='jarvis'] .jarvis-chat-drawer[data-search-mode='true'] [data-slot='sheet-title'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:root[data-hermes-theme='jarvis'] .jarvis-chat-drawer[data-search-mode='true'] [data-slot='sheet-close'] {
+  top: 0.85rem;
+  right: 0.85rem;
+}
+
 :root[data-hermes-theme='jarvis'] [data-slot='sidebar-menu-button'] svg {
   width: 1.2rem;
   height: 1.2rem;

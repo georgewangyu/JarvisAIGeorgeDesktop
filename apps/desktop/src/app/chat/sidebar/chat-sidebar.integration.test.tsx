@@ -91,7 +91,7 @@ describe('consumer chat navigation', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chats' })).toBeNull())
   })
 
-  it('opens a dedicated Search drawer and focuses its query field', async () => {
+  it('opens focused Search over the chat and starts each search fresh', async () => {
     renderSidebar()
 
     act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
@@ -101,5 +101,12 @@ describe('consumer chat navigation', () => {
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'Search chats' }) === window.document.activeElement).toBe(true)
     )
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats' }), { target: { value: 'side' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull())
+
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+    expect(await screen.findByRole('textbox', { name: 'Search chats' })).toHaveProperty('value', '')
   })
 })

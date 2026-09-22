@@ -469,6 +469,7 @@ export function ChatSidebar({
 
   useEffect(() => {
     const onOpenSearch = () => {
+      setSearchQuery('')
       setDrawerMode('search')
       setChatsOpen(true)
       window.setTimeout(() => searchInputRef.current?.focus({ preventScroll: true }), 0)
@@ -1566,6 +1567,7 @@ export function ChatSidebar({
                       }
 
                       if (isSearch) {
+                        setSearchQuery('')
                         setDrawerMode('search')
                         setChatsOpen(true)
                         window.setTimeout(() => searchInputRef.current?.focus({ preventScroll: true }), 0)
@@ -1630,7 +1632,7 @@ export function ChatSidebar({
         </SidebarGroup>
 
         <Sheet
-          modal={false}
+          modal={drawerMode === 'search'}
           onOpenChange={open => {
             setChatsOpen(open)
 
@@ -1642,8 +1644,9 @@ export function ChatSidebar({
         >
           <SheetContent
             className="jarvis-chat-drawer w-[20rem] max-w-[calc(100vw-4.5rem)] gap-0 p-0 sm:max-w-[20rem]"
-            showOverlay={false}
-            side={panesFlipped ? 'right' : 'left'}
+            data-search-mode={drawerMode === 'search' ? 'true' : undefined}
+            showOverlay={drawerMode === 'search'}
+            side={drawerMode === 'search' ? 'top' : panesFlipped ? 'right' : 'left'}
           >
             <SheetHeader className="border-b border-(--ui-stroke-secondary) px-4 pb-3 pt-12">
               <SheetTitle className="text-lg tracking-tight">{drawerMode === 'search' ? 'Search' : 'Chats'}</SheetTitle>
