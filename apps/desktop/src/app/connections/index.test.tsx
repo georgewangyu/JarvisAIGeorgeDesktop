@@ -167,3 +167,28 @@ it('shows detected local apps without claiming their access is connected', async
   expect(screen.getByText('Browser research is set up when a task needs it.')).toBeTruthy()
   expect(screen.getByText('On demand')).toBeTruthy()
 })
+
+it('filters only real connection and permission rows without inventing available connectors', async () => {
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
+
+  const search = screen.getByRole('textbox', { name: 'Search connections' })
+  await screen.findByText('ChatGPT / Codex')
+  fireEvent.change(search, { target: { value: 'notes' } })
+  expect(screen.getByText('Notes')).toBeTruthy()
+  expect(screen.getByText('App detection only. Notes access is not connected yet.')).toBeTruthy()
+  expect(screen.queryByText('ChatGPT / Codex')).toBeNull()
+  expect(screen.queryByText('Files on this Mac')).toBeNull()
+  expect(screen.queryByText('Mail')).toBeNull()
+
+  fireEvent.change(search, { target: { value: 'calendar' } })
+  expect(screen.getByText('No matching connections.')).toBeTruthy()
+  expect(screen.queryByText('Connect')).toBeNull()
+
+  fireEvent.change(search, { target: { value: '' } })
+  expect(screen.getByText('ChatGPT / Codex')).toBeTruthy()
+  expect(screen.getByText('Files on this Mac')).toBeTruthy()
+})

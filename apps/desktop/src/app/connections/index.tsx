@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { listOAuthProviders } from '@/api/config'
 import { getGlobalModelInfo, setGlobalModel } from '@/api/models'
 import { Button } from '@/components/ui/button'
+import { SearchField } from '@/components/ui/search-field'
 import type { JarvisOnboardingPermissionSnapshot, JarvisPermissionStatus } from '@/global'
 import { useJarvisCopy } from '@/i18n/jarvis'
 import {
@@ -99,6 +100,7 @@ export function ConnectionsView() {
   const [refreshing, setRefreshing] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const [accountState, setAccountState] = useState<'checking' | 'connected' | 'disconnected' | 'unavailable'>(
     'checking'
@@ -153,6 +155,19 @@ export function ConnectionsView() {
 
   const fullDiskAllowed = permissions.fullDiskAccess === 'granted'
   const microphoneAllowed = permissions.microphone === 'granted'
+  const search = query.trim().toLocaleLowerCase()
+  const matches = (label: string) => label.toLocaleLowerCase().includes(search)
+  const accountMatches = matches('ChatGPT / Codex')
+  const filesMatch = matches('Files on this Mac')
+  const microphoneMatch = matches('Microphone')
+  const computerUseMatch = matches('Computer use')
+  const macMatches = filesMatch || microphoneMatch || computerUseMatch
+  const mailMatch = matches('Mail')
+  const messagesMatch = matches('Messages')
+  const notesMatch = matches('Notes')
+  const whatsAppMatch = matches('WhatsApp')
+  const browserMatch = matches('Browser')
+  const appsMatch = mailMatch || messagesMatch || notesMatch || whatsAppMatch || browserMatch
 
   return (
     <ConsumerSettingsLayout section="connections">
@@ -171,163 +186,186 @@ export function ConnectionsView() {
 
       {error ? <p className="mt-5 text-sm text-destructive">{error}</p> : null}
 
-      <section className="mt-10">
-        <h2 className="text-sm font-semibold">AI account</h2>
-        <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
-          <ConnectionRow
-            action={
-              accountState === 'disconnected' ? (
-                <Button
-                  disabled={signingIn}
-                  loading={signingIn}
-                  onClick={async () => {
-                    setSigningIn(true)
-                    setError(null)
+      <SearchField
+        aria-label="Search connections"
+        containerClassName="mt-8 flex w-full rounded-xl bg-(--ui-bg-secondary) px-4 py-2 opacity-100"
+        inputClassName="w-full [field-sizing:fixed]"
+        onChange={setQuery}
+        placeholder="Search connections"
+        value={query}
+      />
 
-                    try {
-                      const result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
+      {!accountMatches && !macMatches && !appsMatch ? (
+        <p className="mt-10 text-sm text-(--ui-text-tertiary)">No matching connections.</p>
+      ) : null}
 
-                      if (!result?.ok) {
-                        throw new Error(result?.message || 'ChatGPT sign-in did not finish.')
+      {accountMatches ? (
+        <section className="mt-10">
+          <h2 className="text-sm font-semibold">AI account</h2>
+          <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
+            <ConnectionRow
+              action={
+                accountState === 'disconnected' ? (
+                  <Button
+                    disabled={signingIn}
+                    loading={signingIn}
+                    onClick={async () => {
+                      setSigningIn(true)
+                      setError(null)
+
+                      try {
+                        const result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
+
+                        if (!result?.ok) {
+                          throw new Error(result?.message || 'ChatGPT sign-in did not finish.')
+                        }
+
+                        await setGlobalModel('openai-codex', 'gpt-5.6-sol')
+                        const model = await getGlobalModelInfo()
+
+                        $currentProvider.set(model.provider)
+                        $currentModel.set(model.model)
+                        await refresh()
+                      } catch (cause) {
+                        setError(cause instanceof Error ? cause.message : 'ChatGPT sign-in did not finish.')
+                      } finally {
+                        setSigningIn(false)
                       }
+                    }}
+                    size="sm"
+                  >
+                    Connect
+                  </Button>
+                ) : null
+              }
+              detail={
+                accountState === 'connected' && currentProvider === 'openai-codex'
+                  ? currentModel
+                  : 'Use your ChatGPT or Codex subscription. No API key required.'
+              }
+              icon={KeyRound}
+              label="ChatGPT / Codex"
+              status={
+                <Status active={accountState === 'connected'}>
+                  {accountState === 'connected'
+                    ? 'Connected'
+                    : accountState === 'disconnected'
+                      ? 'Not connected'
+                      : accountState === 'checking'
+                        ? 'Checking'
+                        : 'Unavailable'}
+                </Status>
+              }
+            />
+          </div>
+        </section>
+      ) : null}
 
-                      await setGlobalModel('openai-codex', 'gpt-5.6-sol')
-                      const model = await getGlobalModelInfo()
+      {macMatches ? (
+        <section className="mt-9">
+          <h2 className="text-sm font-semibold">This Mac</h2>
+          <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
+            {filesMatch ? (
+              <ConnectionRow
+                action={
+                  fullDiskAllowed ? null : (
+                    <Button
+                      onClick={() => void window.hermesDesktop?.jarvisOnboarding?.openFullDiskAccess?.()}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Allow <ChevronRight className="size-4" />
+                    </Button>
+                  )
+                }
+                detail="Read files on this Mac when you ask. App access is separate."
+                icon={FileText}
+                label="Files on this Mac"
+                status={<Status active={fullDiskAllowed}>{statusLabel(permissions.fullDiskAccess)}</Status>}
+              />
+            ) : null}
+            {microphoneMatch ? (
+              <ConnectionRow
+                action={
+                  microphoneAllowed ? null : (
+                    <Button
+                      onClick={async () => {
+                        await window.hermesDesktop?.jarvisOnboarding?.requestMicrophone?.()
+                        await refresh()
+                      }}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Allow <ChevronRight className="size-4" />
+                    </Button>
+                  )
+                }
+                detail="Speak naturally to Jarvis when you choose voice input."
+                icon={Mic}
+                label="Microphone"
+                status={<Status active={microphoneAllowed}>{statusLabel(permissions.microphone)}</Status>}
+              />
+            ) : null}
+            {computerUseMatch ? (
+              <ConnectionRow
+                detail="Requested only when a task needs to see or interact with another app."
+                icon={ShieldLock}
+                label="Computer use"
+                status={<Status>Set up when needed</Status>}
+              />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
-                      $currentProvider.set(model.provider)
-                      $currentModel.set(model.model)
-                      await refresh()
-                    } catch (cause) {
-                      setError(cause instanceof Error ? cause.message : 'ChatGPT sign-in did not finish.')
-                    } finally {
-                      setSigningIn(false)
-                    }
-                  }}
-                  size="sm"
-                >
-                  Connect
-                </Button>
-              ) : null
-            }
-            detail={
-              accountState === 'connected' && currentProvider === 'openai-codex'
-                ? currentModel
-                : 'Use your ChatGPT or Codex subscription. No API key required.'
-            }
-            icon={KeyRound}
-            label="ChatGPT / Codex"
-            status={
-              <Status active={accountState === 'connected'}>
-                {accountState === 'connected'
-                  ? 'Connected'
-                  : accountState === 'disconnected'
-                    ? 'Not connected'
-                    : accountState === 'checking'
-                      ? 'Checking'
-                      : 'Unavailable'}
-              </Status>
-            }
-          />
-        </div>
-      </section>
-
-      <section className="mt-9">
-        <h2 className="text-sm font-semibold">This Mac</h2>
-        <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
-          <ConnectionRow
-            action={
-              fullDiskAllowed ? null : (
-                <Button
-                  onClick={() => void window.hermesDesktop?.jarvisOnboarding?.openFullDiskAccess?.()}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Allow <ChevronRight className="size-4" />
-                </Button>
-              )
-            }
-            detail="Read files on this Mac when you ask. App access is separate."
-            icon={FileText}
-            label="Files on this Mac"
-            status={<Status active={fullDiskAllowed}>{statusLabel(permissions.fullDiskAccess)}</Status>}
-          />
-          <ConnectionRow
-            action={
-              microphoneAllowed ? null : (
-                <Button
-                  onClick={async () => {
-                    await window.hermesDesktop?.jarvisOnboarding?.requestMicrophone?.()
-                    await refresh()
-                  }}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Allow <ChevronRight className="size-4" />
-                </Button>
-              )
-            }
-            detail="Speak naturally to Jarvis when you choose voice input."
-            icon={Mic}
-            label="Microphone"
-            status={<Status active={microphoneAllowed}>{statusLabel(permissions.microphone)}</Status>}
-          />
-          <ConnectionRow
-            detail="Requested only when a task needs to see or interact with another app."
-            icon={ShieldLock}
-            label="Computer use"
-            status={<Status>Set up when needed</Status>}
-          />
-        </div>
-      </section>
-
-      <section className="mt-9">
-        <h2 className="text-sm font-semibold">Apps</h2>
-        <p className="mt-1 text-sm text-(--ui-text-tertiary)">{s.appInventoryDetail}</p>
-        <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
-          <ConnectionRow
-            detail="App detection only. Mail access is not connected yet."
-            icon={Mail}
-            label="Mail"
-            status={
-              <Status>{permissions.apps.mail ? 'Detected' : 'Not installed'}</Status>
-            }
-          />
-          <ConnectionRow
-            detail="App detection only. Message access is not connected yet."
-            icon={MessageCircle}
-            label="Messages"
-            status={
-              <Status>
-                {permissions.apps.messages ? 'Detected' : 'Not installed'}
-              </Status>
-            }
-          />
-          <ConnectionRow
-            detail="App detection only. Notes access is not connected yet."
-            icon={NotebookTabs}
-            label="Notes"
-            status={
-              <Status>{permissions.apps.notes ? 'Detected' : 'Not installed'}</Status>
-            }
-          />
-          <ConnectionRow
-            detail="App detection only. WhatsApp access is not connected yet."
-            icon={MessageCircle}
-            label="WhatsApp"
-            status={
-              <Status>
-                {permissions.apps.whatsapp ? 'Detected' : 'Not installed'}
-              </Status>
-            }
-          />
-          <ConnectionRow
-            detail="Browser research is set up when a task needs it."
-            icon={Globe}
-            label="Browser"
-            status={<Status>On demand</Status>}
-          />
-        </div>
-      </section>
+      {appsMatch ? (
+        <section className="mt-9">
+          <h2 className="text-sm font-semibold">Apps</h2>
+          <p className="mt-1 text-sm text-(--ui-text-tertiary)">{s.appInventoryDetail}</p>
+          <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
+            {mailMatch ? (
+              <ConnectionRow
+                detail="App detection only. Mail access is not connected yet."
+                icon={Mail}
+                label="Mail"
+                status={<Status>{permissions.apps.mail ? 'Detected' : 'Not installed'}</Status>}
+              />
+            ) : null}
+            {messagesMatch ? (
+              <ConnectionRow
+                detail="App detection only. Message access is not connected yet."
+                icon={MessageCircle}
+                label="Messages"
+                status={<Status>{permissions.apps.messages ? 'Detected' : 'Not installed'}</Status>}
+              />
+            ) : null}
+            {notesMatch ? (
+              <ConnectionRow
+                detail="App detection only. Notes access is not connected yet."
+                icon={NotebookTabs}
+                label="Notes"
+                status={<Status>{permissions.apps.notes ? 'Detected' : 'Not installed'}</Status>}
+              />
+            ) : null}
+            {whatsAppMatch ? (
+              <ConnectionRow
+                detail="App detection only. WhatsApp access is not connected yet."
+                icon={MessageCircle}
+                label="WhatsApp"
+                status={<Status>{permissions.apps.whatsapp ? 'Detected' : 'Not installed'}</Status>}
+              />
+            ) : null}
+            {browserMatch ? (
+              <ConnectionRow
+                detail="Browser research is set up when a task needs it."
+                icon={Globe}
+                label="Browser"
+                status={<Status>On demand</Status>}
+              />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <p className="mt-8 text-xs leading-5 text-(--ui-text-tertiary)">
         Jarvis asks before consequential actions such as sending, publishing, purchasing, or deleting important data.
