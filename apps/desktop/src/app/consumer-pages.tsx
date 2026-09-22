@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
-import { setComposerDraft } from '@/store/composer'
+import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
 import { $goalsBySession, type GoalStatus } from '@/store/goals'
 import { $sessions } from '@/store/session'
@@ -187,12 +187,18 @@ const IDEAS = [
   ['Build a routine', 'Help me create a realistic recurring routine and decide what Jarvis should automate.']
 ] as const
 
+function startConsumerDraft(prompt: string, navigate: ReturnType<typeof useNavigate>): void {
+  const current = takeSessionDraft(null)
+  const text = current.text.trim() ? `${current.text.trimEnd()}\n\n${prompt}` : prompt
+  stashSessionDraft(null, text, current.attachments)
+  navigate(NEW_CHAT_ROUTE)
+}
+
 export function ConsumerIdeasView() {
   const navigate = useNavigate()
 
   const startIdea = (prompt: string) => {
-    setComposerDraft(prompt)
-    navigate(NEW_CHAT_ROUTE)
+    startConsumerDraft(prompt, navigate)
   }
 
   return (
@@ -232,8 +238,7 @@ export function ConsumerGoalsView() {
   const items = Object.entries(goals).sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
 
   const startGoal = () => {
-    setComposerDraft('Help me set a goal and turn it into a realistic plan: ')
-    navigate(NEW_CHAT_ROUTE)
+    startConsumerDraft('Help me set a goal and turn it into a realistic plan: ', navigate)
   }
 
   return (

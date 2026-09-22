@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it } from 'vitest'
 
-import { $composerDraft } from '@/store/composer'
+import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
 import { $goalsBySession } from '@/store/goals'
 import { $sessions } from '@/store/session'
@@ -12,7 +12,7 @@ import { ConsumerFeedView, ConsumerGoalsView, ConsumerIdeasView } from './consum
 
 afterEach(() => {
   cleanup()
-  $composerDraft.set('')
+  clearSessionDraft(null)
   $cronJobs.set([])
   $goalsBySession.set({})
   $sessions.set([])
@@ -57,7 +57,20 @@ it('turns an Idea into an editable chat draft without sending it', () => {
   )
 
   fireEvent.click(screen.getByRole('button', { name: /Plan my day/ }))
-  expect($composerDraft.get()).toBe('Help me plan today around my calendar, priorities, and energy.')
+  expect(takeSessionDraft(null).text).toBe('Help me plan today around my calendar, priorities, and energy.')
+})
+
+it('preserves an existing unsent draft when starting a goal', () => {
+  stashSessionDraft(null, 'Existing thought', [])
+
+  render(
+    <MemoryRouter>
+      <ConsumerGoalsView />
+    </MemoryRouter>
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Start a goal' }))
+  expect(takeSessionDraft(null).text).toBe('Existing thought\n\nHelp me set a goal and turn it into a realistic plan: ')
 })
 
 it('shows live goal state and opens its owning conversation', () => {
