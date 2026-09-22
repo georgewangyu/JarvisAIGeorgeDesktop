@@ -267,17 +267,15 @@ export function ConnectionsView() {
           <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
             {filesMatch ? (
               <ConnectionRow
-                action={
-                  fullDiskAllowed ? null : (
+                  action={
                     <Button
                       onClick={() => void window.hermesDesktop?.jarvisOnboarding?.openFullDiskAccess?.()}
                       size="sm"
                       variant="secondary"
                     >
-                      Allow <ChevronRight className="size-4" />
+                      {fullDiskAllowed ? 'Manage' : 'Allow'} <ChevronRight className="size-4" />
                     </Button>
-                  )
-                }
+                  }
                 detail="Read files on this Mac when you ask. App access is separate."
                 icon={FileText}
                 label="Files on this Mac"

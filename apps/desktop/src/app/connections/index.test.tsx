@@ -38,11 +38,13 @@ it('does not treat a selected model as proof of an authenticated account', async
 })
 
 it('keeps Mac permission results when the AI account check fails', async () => {
+  const openFullDiskAccess = vi.fn().mockResolvedValue(undefined)
   vi.mocked(listOAuthProviders).mockRejectedValue(new Error('Account request failed'))
   Object.defineProperty(window, 'hermesDesktop', {
     configurable: true,
     value: {
       jarvisOnboarding: {
+        openFullDiskAccess,
         getPermissions: vi.fn().mockResolvedValue({
           apps: { mail: true, messages: false, notes: false, whatsapp: false },
           fullDiskAccess: 'granted',
@@ -61,6 +63,8 @@ it('keeps Mac permission results when the AI account check fails', async () => {
 
   await screen.findByText('Unavailable')
   expect(screen.getByText('Allowed')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
+  expect(openFullDiskAccess).toHaveBeenCalledOnce()
   expect(screen.getByText('Could not check your AI account.')).toBeTruthy()
   expect(screen.queryByText('Not connected')).toBeNull()
   expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
