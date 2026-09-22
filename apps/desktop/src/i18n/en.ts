@@ -3443,8 +3443,8 @@ export const en: Translations = {
   onboarding: {
     headerTitle: 'Connect your AI to Jarvis',
     headerDesc: 'Sign in with ChatGPT or Codex to start. You can add other providers later.',
-    preparingInstall: 'Hermes is finishing install. This usually takes under a minute on first run.',
-    starting: 'Starting Hermes…',
+    preparingInstall: 'Preparing Jarvis on this Mac. This usually takes under a minute.',
+    starting: 'Getting Jarvis ready…',
     lookingUpProviders: 'Looking up providers...',
     collapse: 'Collapse',
     otherProviders: 'Other providers',

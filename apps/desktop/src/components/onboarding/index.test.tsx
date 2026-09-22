@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import type { DesktopBootState } from '@/store/boot'
 import { $desktopOnboarding, type DesktopOnboardingState, type OnboardingContext } from '@/store/onboarding'
 import { makeOAuthProvider } from '@/test/oauth-provider'
 import type { OAuthProvider } from '@/types/hermes'
 
-import { Picker } from '.'
+import { Picker, Preparing } from '.'
 
 function setProviders(providers: OAuthProvider[]) {
   $desktopOnboarding.set({
@@ -48,6 +49,24 @@ afterEach(() => {
 })
 
 describe('onboarding Picker', () => {
+  it('keeps raw engine progress behind the consumer setup boundary', () => {
+    const boot: DesktopBootState = {
+      error: null,
+      fakeMode: false,
+      message: 'Connecting to remote Hermes backend at http://127.0.0.1:9191',
+      phase: 'backend.remote',
+      progress: 24,
+      running: true,
+      timestamp: Date.now(),
+      visible: true
+    }
+
+    render(<Preparing boot={boot} />)
+
+    expect(screen.getAllByText('Getting Jarvis ready…')).toHaveLength(2)
+    expect(screen.queryByText(/Hermes|gateway|127\.0\.0\.1/i)).toBeNull()
+  })
+
   it('features ChatGPT or Codex and hides other providers behind a disclosure', () => {
     setProviders([
       makeOAuthProvider('anthropic', 'Anthropic Claude'),

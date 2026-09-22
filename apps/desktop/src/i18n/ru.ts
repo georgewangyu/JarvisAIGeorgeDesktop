@@ -3179,8 +3179,8 @@ export const ru = defineLocale({
   onboarding: {
     headerTitle: 'Настроим для вас Hermes Agent',
     headerDesc: 'Подключите провайдера модели, чтобы начать общение. Большинство вариантов — в один клик.',
-    preparingInstall: 'Hermes завершает установку. Обычно это занимает меньше минуты при первом запуске.',
-    starting: 'Запускаем Hermes…',
+    preparingInstall: 'Подготовка Jarvis на этом Mac. Обычно это занимает меньше минуты.',
+    starting: 'Подготовка Jarvis…',
     lookingUpProviders: 'Ищем провайдеров...',
     collapse: 'Свернуть',
     otherProviders: 'Другие провайдеры',

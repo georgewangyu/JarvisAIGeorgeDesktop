@@ -2455,8 +2455,8 @@ export const ar = defineLocale({
   onboarding: {
     headerTitle: 'لنُعِدّ لك Hermes Agent',
     headerDesc: 'اربط مزوّد نماذج لبدء المحادثة. معظم الخيارات تتطلب نقرة واحدة.',
-    preparingInstall: 'يُكمل Hermes التثبيت. عادة ما يستغرق ذلك أقل من دقيقة في أول تشغيل.',
-    starting: 'جار بدء Hermes...',
+    preparingInstall: 'جارٍ إعداد Jarvis على هذا الـ Mac. يستغرق ذلك عادةً أقل من دقيقة.',
+    starting: 'جارٍ إعداد Jarvis…',
     lookingUpProviders: 'جار البحث عن المزوّدين...',
     collapse: 'طي',
     otherProviders: 'مزودون آخرون',
