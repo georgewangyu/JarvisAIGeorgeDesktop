@@ -36,6 +36,19 @@ it('opens a real recent conversation from Feed', () => {
   expect(screen.getByText('Opened recent chat')).toBeTruthy()
 })
 
+it('shows completed automation state instead of its expired one-time schedule', () => {
+  $cronJobs.set([{ id: 'finished', name: 'Morning briefing', enabled: true, state: 'completed', schedule_display: 'once in 1 minute' }])
+
+  render(
+    <MemoryRouter>
+      <ConsumerFeedView />
+    </MemoryRouter>
+  )
+
+  expect(screen.getByRole('button', { name: /Morning briefing Completed/ })).toBeTruthy()
+  expect(screen.queryByText('once in 1 minute')).toBeNull()
+})
+
 it('turns an Idea into an editable chat draft without sending it', () => {
   render(
     <MemoryRouter>

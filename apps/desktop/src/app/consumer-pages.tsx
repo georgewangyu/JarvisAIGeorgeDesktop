@@ -9,7 +9,9 @@ import { setComposerDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
 import { $goalsBySession, type GoalStatus } from '@/store/goals'
 import { $sessions } from '@/store/session'
+import type { CronJob } from '@/types/hermes'
 
+import { jobState, nextRunOverdueMs, STATE_DOT } from './cron/job-state'
 import { CRON_ROUTE, NEW_CHAT_ROUTE, sessionRoute } from './routes'
 
 export function ConsumerPage({
@@ -69,6 +71,28 @@ function formatRelativeTime(seconds: number): string {
   return `${days}d ago`
 }
 
+function feedJobDescription(job: CronJob): string {
+  const state = jobState(job)
+
+  if (state === 'completed') {
+    return 'Completed'
+  }
+
+  if (state === 'running') {
+    return 'Running now'
+  }
+
+  if (state === 'paused' || state === 'disabled') {
+    return 'Paused'
+  }
+
+  if (state === 'error' || nextRunOverdueMs(job) !== null) {
+    return 'Needs attention'
+  }
+
+  return job.schedule_display || job.schedule?.display || 'Scheduled'
+}
+
 export function ConsumerFeedView() {
   const navigate = useNavigate()
   const sessions = useStore($sessions)
@@ -122,7 +146,7 @@ export function ConsumerFeedView() {
             <section>
               <div className="flex items-center justify-between gap-4">
                 <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
-                  Scheduled
+                  Automations
                 </h2>
                 <Button onClick={() => navigate(CRON_ROUTE)} size="sm" variant="text">
                   View automations
@@ -138,10 +162,10 @@ export function ConsumerFeedView() {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-medium">{job.name || 'Scheduled task'}</span>
-                      <span className={cn('size-2 rounded-full', job.enabled ? 'bg-emerald-500' : 'bg-zinc-400')} />
+                      <span className={cn('size-2 rounded-full', STATE_DOT[jobState(job)] ?? STATE_DOT.disabled)} />
                     </div>
                     <p className="mt-2 text-sm text-(--ui-text-tertiary)">
-                      {job.schedule_display || job.schedule?.display || (job.enabled ? 'Scheduled' : 'Paused')}
+                      {feedJobDescription(job)}
                     </p>
                   </button>
                 ))}
