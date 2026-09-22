@@ -2158,6 +2158,7 @@ export const ja = defineLocale({
     promptLabel: 'プロンプト',
     promptPlaceholder: '実行ごとにエージェントが行う内容は？',
     frequencyLabel: '頻度',
+    completedOneTimeFrequency: '1回のみ',
     deliverLabel: '配信先',
     deliverNeedsHomeChannel: '先にホームチャンネルを設定してください',
     modelLabel: 'モデル',

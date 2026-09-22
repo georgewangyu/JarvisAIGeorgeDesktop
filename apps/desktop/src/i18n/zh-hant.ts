@@ -2147,6 +2147,7 @@ export const zhHant = defineLocale({
     promptLabel: '提示詞',
     promptPlaceholder: '代理每次執行時應做什麼？',
     frequencyLabel: '頻率',
+    completedOneTimeFrequency: '僅一次',
     deliverLabel: '傳遞至',
     deliverNeedsHomeChannel: '請先設定主頻道',
     modelLabel: '模型',

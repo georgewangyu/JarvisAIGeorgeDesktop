@@ -2653,6 +2653,7 @@ export const en: Translations = {
     promptLabel: 'Prompt',
     promptPlaceholder: 'Summarize my unread Slack threads and email me the top 5...',
     frequencyLabel: 'Frequency',
+    completedOneTimeFrequency: 'One time',
     deliverLabel: 'Deliver to',
     deliverNeedsHomeChannel: 'set a home channel first',
     modelLabel: 'Model',

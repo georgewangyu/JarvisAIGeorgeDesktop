@@ -1842,6 +1842,7 @@ export const ar = defineLocale({
     promptLabel: 'الرسالة',
     promptPlaceholder: 'ماذا تريد من Hermes أن يفعل؟',
     frequencyLabel: 'التكرار',
+    completedOneTimeFrequency: 'مرة واحدة',
     deliverLabel: 'التسليم',
     customScheduleLabel: 'جدول مخصص',
     customPlaceholder: 'تعبير cron',

@@ -28,6 +28,17 @@ export function jobTitle(job: CronJob): string {
   return pick(job.name) || clip(pick(job.prompt)) || clip(pick(job.script)) || job.id || 'Cron job'
 }
 
+/** A completed one-shot has no upcoming relative time to describe. Keep the
+ * original schedule string for editing and search, but show its completed
+ * frequency honestly in the detail panel. */
+export function jobFrequencyDisplay(job: CronJob, completedOneTimeLabel: string): string {
+  if (jobState(job) === 'completed' && job.schedule?.kind === 'once') {
+    return completedOneTimeLabel
+  }
+
+  return job.schedule_display || job.schedule?.display || job.schedule?.expr || '—'
+}
+
 // Mirrors hermes_cli/cron.py `_OVERDUE_GRACE_SECONDS`: a busy tick can dispatch a few minutes late.
 export const NEXT_RUN_OVERDUE_GRACE_MS = 15 * 60 * 1000
 

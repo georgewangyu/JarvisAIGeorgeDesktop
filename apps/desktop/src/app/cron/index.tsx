@@ -80,7 +80,7 @@ import {
   validateCronEditor
 } from './cron-job-model'
 import { JobActions } from './job-actions'
-import { jobState, jobTitle, nextRunOverdueMs, STATE_DOT } from './job-state'
+import { jobFrequencyDisplay, jobState, jobTitle, nextRunOverdueMs, STATE_DOT } from './job-state'
 import { CronJobRuns } from './run-history'
 
 const DEFAULT_DELIVER = 'local'
@@ -803,7 +803,7 @@ function CronJobDetail({ busy, c, job, onEdit, onPauseResume, onTrigger }: CronJ
 
         <PanelMeta
           rows={[
-            { label: c.frequencyLabel, value: jobScheduleDisplay(job) },
+            { label: c.frequencyLabel, value: jobFrequencyDisplay(job, c.completedOneTimeFrequency) },
             { label: c.last.replace(/:$/, ''), value: formatTime(job.last_run_at) },
             {
               label: (nextRunOverdueMs(job) === null ? c.next : c.overdueSince).replace(/:$/, ''),

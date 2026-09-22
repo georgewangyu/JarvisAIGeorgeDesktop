@@ -2417,6 +2417,7 @@ export const ru = defineLocale({
     promptLabel: 'Промпт',
     promptPlaceholder: 'Суммируй мои непрочитанные треды Slack и пришли топ-5 на почту...',
     frequencyLabel: 'Частота',
+    completedOneTimeFrequency: 'Один раз',
     deliverLabel: 'Доставить в',
     deliverNeedsHomeChannel: 'сначала задайте домашний канал',
     modelLabel: 'Модель',
