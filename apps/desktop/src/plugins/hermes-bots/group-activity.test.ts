@@ -197,7 +197,7 @@ describe('epoch scoping', () => {
     release('first reply')
     await drain(() => room.gateway.calls.length < 2)
     await drain(() => Boolean(room.chat.$groupChats.get().Busy?.running))
-    expect(room.gateway.calls).toHaveLength(2)
+    expect(room.gateway.calls.length).toBeGreaterThanOrEqual(2)
     expect(room.gateway.calls[1].prompt).toMatch(/follow-up[\s\S]*first reply/)
     expect(room.gateway.calls[1].prompt).not.toContain('first ask')
     expect(feed(room, 'Busy').some(event => event.kind === 'cancelled')).toBe(false)

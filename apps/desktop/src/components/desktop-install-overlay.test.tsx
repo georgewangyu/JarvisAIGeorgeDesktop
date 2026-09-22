@@ -100,8 +100,8 @@ describe('DesktopInstallOverlay first-run setup', () => {
     render(<DesktopInstallOverlay />)
 
     expect(await screen.findByText('Set up Jarvis')).toBeTruthy()
-    expect(screen.getByText('More ways to connect')).toBeTruthy()
-    expect(screen.getByText('Continue with ChatGPT / Codex')).toBeTruthy()
+    expect(screen.getByText('Other AI providers')).toBeTruthy()
+    expect(screen.getByText('Get started')).toBeTruthy()
     expect(screen.queryByText(/steps complete/i)).toBeNull()
     expect(screen.queryByText(/Fetching installer manifest/i)).toBeNull()
   })
@@ -115,7 +115,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('Continue with ChatGPT / Codex'))
+    fireEvent.click(await screen.findByText('Get started'))
 
     await waitFor(() => expect(desktop.continueBootstrapLocal).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('Let Jarvis work with your files?')).toBeTruthy()
@@ -138,7 +138,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     desktop.continueBootstrapLocal = undefined as never
     render(<DesktopInstallOverlay />)
 
-    const install = (await screen.findByText('Continue with ChatGPT / Codex')).closest('button') as HTMLButtonElement
+    const install = (await screen.findByText('Get started')).closest('button') as HTMLButtonElement
     fireEvent.click(install)
 
     expect(await screen.findByText('Setup could not start. Restart JarvisAIGeorge and try again.')).toBeTruthy()
@@ -158,7 +158,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     // Click the instant the choice paints, before React drains the passive
     // effect that reacts to the first snapshot. A loaded runner hits this
     // window by accident; observing the DOM directly hits it every time.
-    const install = (await whenPresent('Continue with ChatGPT / Codex')).closest('button') as HTMLButtonElement
+    const install = (await whenPresent('Get started')).closest('button') as HTMLButtonElement
     fireEvent.click(install)
 
     await act(async () => {
@@ -177,7 +177,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('More ways to connect'))
+    fireEvent.click(await screen.findByText('Other AI providers'))
 
     expect(await screen.findByText('Service address')).toBeTruthy()
     expect(screen.getByText('Connect another Jarvis setup')).toBeTruthy()
@@ -195,13 +195,13 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('More ways to connect'))
+    fireEvent.click(await screen.findByText('Other AI providers'))
     expect(await screen.findByText('Service address')).toBeTruthy()
 
     fireEvent.click(screen.getByText('Back'))
 
     expect(await screen.findByText('Set up Jarvis')).toBeTruthy()
-    expect(screen.getByText('Continue with ChatGPT / Codex')).toBeTruthy()
+    expect(screen.getByText('Get started')).toBeTruthy()
   })
 
   it('requires a successful token connection test before applying remote config', async () => {
@@ -232,7 +232,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('More ways to connect'))
+    fireEvent.click(await screen.findByText('Other AI providers'))
     fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
@@ -291,7 +291,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('More ways to connect'))
+    fireEvent.click(await screen.findByText('Other AI providers'))
     const urlInput = await screen.findByPlaceholderText('https://assistant.example.com')
     fireEvent.change(urlInput, { target: { value: 'https://gateway.example.com/hermes' } })
 
@@ -344,7 +344,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('More ways to connect'))
+    fireEvent.click(await screen.findByText('Other AI providers'))
     fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
@@ -395,7 +395,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('More ways to connect'))
+    fireEvent.click(await screen.findByText('Other AI providers'))
     fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
@@ -447,7 +447,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('More ways to connect'))
+    fireEvent.click(await screen.findByText('Other AI providers'))
     fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
