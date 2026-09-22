@@ -83,6 +83,19 @@ it('preserves an existing unsent draft when starting a goal', async () => {
   expect(takeSessionDraft(null).text).toBe('Existing thought\n\nHelp me set a goal and turn it into a realistic plan: ')
 })
 
+it('offers goal categories as editable fresh-chat drafts without claiming a saved goal', async () => {
+  $gateway.set({ request: async () => ({ goals: [] }) } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+
+  fireEvent.click(await screen.findByRole('button', { name: /A routine/ }))
+  expect(takeSessionDraft(null).text).toBe(
+    'Help me turn a routine I want to build into a sustainable goal. The routine is: '
+  )
+  expect($freshSessionRequest.get()).toBe(1)
+  expect(screen.getByRole('heading', { name: 'Start with an outcome' })).toBeTruthy()
+})
+
 it('shows live goal state and opens its owning conversation', () => {
   $gateway.set({ request: async () => ({ goals: [] }) } as never)
   $sessions.set([makeSessionInfo({ id: 'goal-chat', last_active: 1, title: 'Launch plan' })])
@@ -138,7 +151,7 @@ it('shows a retry instead of an empty state when persisted goals fail to load', 
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
   fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
-  await waitFor(() => expect(screen.getByText('No saved goals')).toBeTruthy())
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Start with an outcome' })).toBeTruthy())
   expect(request).toHaveBeenCalledTimes(2)
 })
 

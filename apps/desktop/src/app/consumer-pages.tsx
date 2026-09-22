@@ -194,6 +194,12 @@ export function ConsumerIdeasView() {
 
 type SavedGoalRow = SessionGoalsListResult['goals'][number]
 
+const GOAL_STARTERS = [
+  ['Personal', 'Help me define a personal goal and make a realistic plan. The outcome I want is: '],
+  ['Work', 'Help me define a work goal with a clear finish line and next steps. The outcome I want is: '],
+  ['A routine', 'Help me turn a routine I want to build into a sustainable goal. The routine is: ']
+] as const
+
 export function ConsumerGoalsView() {
   const navigate = useNavigate()
   const goals = useStore($goalsBySession)
@@ -327,12 +333,26 @@ export function ConsumerGoalsView() {
           Reading saved goals…
         </EmptyState>
       ) : items.length === 0 ? (
-        <EmptyState icon="pass" title="No saved goals">
-          <p>Start with an outcome you care about. Jarvis can turn it into a plan and keep the work moving.</p>
-          <Button className="mt-5" onClick={startGoal}>
-            Start a goal
-          </Button>
-        </EmptyState>
+        <section className="max-w-2xl">
+          <h2 className="text-xl font-semibold tracking-tight">Start with an outcome</h2>
+          <p className="mt-2 text-sm leading-6 text-(--ui-text-secondary)">
+            Talk it through with Jarvis. Goals saved in a conversation will appear here.
+          </p>
+          <div className="mt-6 space-y-1">
+            {GOAL_STARTERS.map(([title, prompt]) => (
+              <button
+                className="block w-full rounded-2xl px-4 py-3 text-left transition-colors hover:bg-(--ui-control-hover-background)"
+                key={title}
+                onClick={() => startConsumerDraft(prompt, navigate)}
+                type="button"
+              >
+                <span className="block font-medium">{title}</span>
+                <span className="mt-1 block text-sm text-(--ui-text-tertiary)">Open an editable chat draft</span>
+              </button>
+            ))}
+          </div>
+          <Button className="mt-5" onClick={startGoal} variant="secondary">Start a goal</Button>
+        </section>
       ) : (
         <div className="space-y-3">
           {goalUpdateError ? (
