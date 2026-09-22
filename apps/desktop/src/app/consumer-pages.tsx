@@ -10,7 +10,7 @@ import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
 import { $goalsBySession, setSessionGoal } from '@/store/goals'
-import { $activeGatewayProfile } from '@/store/profile'
+import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $sessions } from '@/store/session'
 import type { CronJob } from '@/types/hermes'
 
@@ -212,6 +212,7 @@ function startConsumerDraft(prompt: string, navigate: ReturnType<typeof useNavig
   const current = takeSessionDraft(null)
   const text = current.text.trim() ? `${current.text.trimEnd()}\n\n${prompt}` : prompt
   stashSessionDraft(null, text, current.attachments)
+  requestFreshSession()
   navigate(NEW_CHAT_ROUTE)
 }
 

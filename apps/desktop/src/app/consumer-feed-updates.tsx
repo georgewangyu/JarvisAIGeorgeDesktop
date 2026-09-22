@@ -6,14 +6,15 @@ import { getCronJobRuns } from '@/api/cron'
 import { getSessionMessages } from '@/api/sessions'
 import { MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { Button } from '@/components/ui/button'
+import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $cronChangeTick } from '@/store/live-sync'
-import { $activeGatewayProfile } from '@/store/profile'
+import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $connection } from '@/store/session'
 import type { CronJob } from '@/types/hermes'
 
 import { automationAnswer } from './cron/run-result'
-import { CRON_ROUTE } from './routes'
+import { CRON_ROUTE, NEW_CHAT_ROUTE } from './routes'
 
 interface FeedUpdate {
   answer: string
@@ -38,6 +39,17 @@ export function ConsumerFeedUpdates() {
   const [retry, setRetry] = useState(0)
   const [state, setState] = useState<FeedUpdateState>({ kind: 'loading' })
   const jobIds = jobs.slice(0, FEED_JOB_LIMIT).map(job => job.id).join('\u0000')
+
+  const discuss = (item: FeedUpdate) => {
+    const current = takeSessionDraft(null)
+    const context = item.answer.slice(0, 4000)
+    const prompt = `Help me think through this update from ${item.job.name || 'an automation'}:\n\n${context}`
+    const text = current.text.trim() ? `${current.text.trimEnd()}\n\n${prompt}` : prompt
+
+    stashSessionDraft(null, text, current.attachments)
+    requestFreshSession()
+    navigate(NEW_CHAT_ROUTE)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -122,17 +134,19 @@ export function ConsumerFeedUpdates() {
               <div className="mt-3 max-h-52 overflow-hidden text-sm leading-6">
                 <MarkdownTextContent isRunning={false} previewOnly text={item.answer} />
               </div>
-              <Button
-                className="mt-3"
-                onClick={() => {
-                  setCronFocusJobId(item.job.id)
-                  navigate(CRON_ROUTE)
-                }}
-                size="sm"
-                variant="text"
-              >
-                Open automation
-              </Button>
+              <div className="mt-3 flex items-center gap-5">
+                <Button onClick={() => discuss(item)} size="sm" variant="textStrong">Discuss</Button>
+                <Button
+                  onClick={() => {
+                    setCronFocusJobId(item.job.id)
+                    navigate(CRON_ROUTE)
+                  }}
+                  size="sm"
+                  variant="text"
+                >
+                  Open automation
+                </Button>
+              </div>
             </article>
           ))}
         </div>

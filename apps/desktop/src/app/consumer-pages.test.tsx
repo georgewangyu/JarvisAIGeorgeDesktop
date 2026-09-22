@@ -6,7 +6,7 @@ import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/
 import { $cronFocusJobId, $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
 import { $goalsBySession } from '@/store/goals'
-import { $activeGatewayProfile } from '@/store/profile'
+import { $activeGatewayProfile, $freshSessionRequest } from '@/store/profile'
 import { $sessions } from '@/store/session'
 import { makeSessionInfo } from '@/test/session-info'
 
@@ -20,6 +20,7 @@ afterEach(() => {
   $goalsBySession.set({})
   $gateway.set(null as never)
   $activeGatewayProfile.set('default')
+  $freshSessionRequest.set(0)
   $sessions.set([])
 })
 
@@ -84,6 +85,7 @@ it('turns an Idea into an editable chat draft without sending it', () => {
 
   fireEvent.click(screen.getByRole('button', { name: /Plan my day/ }))
   expect(takeSessionDraft(null).text).toBe('Help me plan today around my calendar, priorities, and energy.')
+  expect($freshSessionRequest.get()).toBe(1)
   expect(screen.getByRole('heading', { name: 'For today' })).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Make progress' })).toBeTruthy()
 })
