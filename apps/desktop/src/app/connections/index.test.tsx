@@ -150,6 +150,9 @@ it('shows detected local apps without claiming their access is connected', async
   )
 
   await screen.findByText('App detection only. Mail access is not connected yet.')
+  expect(screen.getByText('Files on this Mac')).toBeTruthy()
+  expect(screen.getByText('Read files on this Mac when you ask. App access is separate.')).toBeTruthy()
+  expect(screen.queryByText('Files and local apps')).toBeNull()
   expect(screen.getByText('App detection only. Message access is not connected yet.')).toBeTruthy()
   expect(screen.getByText('App detection only. Notes access is not connected yet.')).toBeTruthy()
   expect(screen.getByText('WhatsApp')).toBeTruthy()

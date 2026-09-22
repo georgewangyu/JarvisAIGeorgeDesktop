@@ -246,9 +246,9 @@ export function ConnectionsView() {
                 </Button>
               )
             }
-            detail="Find information in files and supported Mac apps when you ask."
+            detail="Read files on this Mac when you ask. App access is separate."
             icon={FileText}
-            label="Files and local apps"
+            label="Files on this Mac"
             status={<Status active={fullDiskAllowed}>{statusLabel(permissions.fullDiskAccess)}</Status>}
           />
           <ConnectionRow
