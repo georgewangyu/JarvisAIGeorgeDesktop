@@ -38,6 +38,7 @@ import type { SidebarActions, WiringActions } from './types'
 const ArtifactsView = lazy(async () => ({ default: (await import('../artifacts')).ArtifactsView }))
 const MessagingView = lazy(async () => ({ default: (await import('../messaging')).MessagingView }))
 const CapabilitiesView = lazy(async () => ({ default: (await import('../capabilities')).CapabilitiesView }))
+const ConnectionsView = lazy(async () => ({ default: (await import('../connections')).ConnectionsView }))
 
 export function LegacySessionRedirect() {
   const { sessionId } = useParams()
@@ -104,7 +105,13 @@ export const StatusbarSurface = memo(function StatusbarSurface({
     toggleCommandCenter: actions.toggleCommandCenter
   })
 
-  return <StatusbarControls items={statusbarItems} leftItems={leftStatusbarItems} />
+  const consumerLeftItems = leftStatusbarItems.filter(item => item.id === 'free-tier' || item.id === 'cron')
+
+  const consumerRightItems = statusbarItems.filter(
+    item => item.id === 'approval-mode' || item.id === 'running-timer' || item.id === 'version-client'
+  )
+
+  return <StatusbarControls items={consumerRightItems} leftItems={consumerLeftItems} />
 })
 
 /** The workspace pane: the real route table (chat + full-page views + plugin
@@ -186,6 +193,7 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
       <Route element={page(<CapabilitiesView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="capabilities" />
       <Route element={page(<MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="messaging" />
       <Route element={page(<ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="artifacts" />
+      <Route element={page(<ConnectionsView />)} path="connections" />
       <Route element={null} path="agents" />
       <Route element={null} path="command-center" />
       <Route element={null} path="cron" />

@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
-import { KbdGroup } from '@/components/ui/kbd'
 import { SearchField } from '@/components/ui/search-field'
 import {
   Sidebar,
@@ -22,16 +21,13 @@ import {
   SidebarMenuItem
 } from '@/components/ui/sidebar'
 import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
-import { useContributions } from '@/contrib/react/use-contributions'
 import { searchSessions, type SessionInfo, type SessionSearchResult } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { comboTokens } from '@/lib/keybinds/combo'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
 import { $activeConnectionId } from '@/store/connections'
 import { $cronJobs } from '@/store/cron'
-import { $bindings } from '@/store/keybinds'
 import {
   $dismissedAutoProjectIds,
   $panesFlipped,
@@ -82,7 +78,6 @@ import {
   normalizeProfileKey,
   sidebarProfileForScope
 } from '@/store/profile'
-import { $profileRailVisible } from '@/store/profile-rail-prefs'
 import {
   $activeProjectId,
   $newProjectDropPlacement,
@@ -134,17 +129,10 @@ import { markSessionUnread } from '@/store/session-unread-remote'
 import { $archivedSessions, loadArchivedSessions } from '@/store/sidebar-archive'
 import { $sidebarSessionRankIds } from '@/store/sidebar-sort'
 
-import {
-  type AppView,
-  ARTIFACTS_ROUTE,
-  CAPABILITIES_ROUTE,
-  CRON_ROUTE,
-  MESSAGING_ROUTE,
-  SIDEBAR_NAV_AREA,
-  type SidebarNavContribution
-} from '../../routes'
+import { type AppView, CONNECTIONS_ROUTE, CRON_ROUTE } from '../../routes'
+import { isJarvisMainChat } from '../../session/jarvis-main-chat'
 import type { SidebarNavItem } from '../../types'
-import { type NewSessionSplitHandler, startNewSessionDrag } from '../new-session-drag'
+import type { NewSessionSplitHandler } from '../new-session-drag'
 
 import { SidebarSectionAddButton } from './chrome'
 import { SidebarCronJobsSection } from './cron-jobs-section'
@@ -153,7 +141,6 @@ import { useGatewaySessionGroups } from './gateway-group-model'
 import { SidebarLoadMoreRow } from './load-more-row'
 import { orderByIds, reconcileOrderIds, resolveManualSessionOrderIds, sameIds } from './order'
 import { filterSessionsByProfileScope } from './profile-scope'
-import { ProfileRail } from './profile-switcher'
 import { ProjectDialog } from './project-dialog'
 import { resolveLiveProjectFilter } from './project-filter'
 import {
@@ -201,38 +188,22 @@ const PROJECT_TREE_WARM_MS = 2_000
 const SIDEBAR_NAV: SidebarNavItem[] = [
   {
     id: 'new-session',
-    label: '',
-    icon: props => <Codicon name="robot" {...props} />,
-    action: 'new-session',
-    keybindActionId: 'session.new'
-  },
-  {
-    id: 'capabilities',
-    label: '',
-    icon: props => <Codicon name="symbol-misc" {...props} />,
-    route: CAPABILITIES_ROUTE,
-    keybindActionId: 'nav.capabilities'
-  },
-  {
-    id: 'messaging',
-    label: '',
-    icon: props => <Codicon name="comment" {...props} />,
-    route: MESSAGING_ROUTE,
-    keybindActionId: 'nav.messaging'
-  },
-  {
-    id: 'artifacts',
-    label: '',
-    icon: props => <Codicon name="files" {...props} />,
-    route: ARTIFACTS_ROUTE,
-    keybindActionId: 'nav.artifacts'
+    label: 'Jarvis',
+    icon: props => <Codicon name="sparkle" {...props} />,
+    action: 'new-session'
   },
   {
     id: 'cron',
-    label: '',
+    label: 'Automations',
     icon: props => <Codicon name="watch" {...props} />,
     route: CRON_ROUTE,
     keybindActionId: 'nav.cron'
+  },
+  {
+    id: 'connections',
+    label: 'Connections',
+    icon: props => <Codicon name="plug" {...props} />,
+    route: CONNECTIONS_ROUTE
   }
 ]
 
@@ -341,33 +312,6 @@ export function ChatSidebar({
   const { t } = useI18n()
   const s = t.sidebar
   const { pathname } = useLocation()
-  // Contributed nav rows (plugins pairing a page with a sidebar entry) render
-  // below the built-ins with the same chrome; active = at their route.
-  const navContributions = useContributions(SIDEBAR_NAV_AREA)
-
-  const contributedNav = useMemo<SidebarNavItem[]>(
-    () =>
-      navContributions.flatMap(c => {
-        const data = c.data as Partial<SidebarNavContribution> | undefined
-
-        if (!data?.path?.startsWith('/') || !data.label) {
-          return []
-        }
-
-        const codicon = data.codicon || 'plug'
-
-        return [
-          {
-            id: c.id,
-            label: data.label,
-            icon: (props: { className?: string }) => <Codicon name={codicon} {...props} />,
-            route: data.path
-          }
-        ]
-      }),
-    [navContributions]
-  )
-
   const panesFlipped = useStore($panesFlipped)
   const grouping = useStore($sidebarGrouping)
   const ordering = useStore($sidebarOrdering)
@@ -458,12 +402,9 @@ export function ChatSidebar({
   const currentCwd = useStore($currentCwd)
   const gatewayState = useStore($gatewayState)
   const dismissedAutoProjects = useStore($dismissedAutoProjectIds)
-  const newSessionCombo = useStore($bindings)['session.new']?.[0]
-  const newSessionKbd = newSessionCombo ? comboTokens(newSessionCombo) : []
   const [searchQuery, setSearchQuery] = useState('')
   const [serverMatches, setServerMatches] = useState<SessionSearchResult[]>([])
   const [searchPending, setSearchPending] = useState(false)
-  const [newSessionKbdFlash, setNewSessionKbdFlash] = useState(false)
   const [messagingLoadMorePending, setMessagingLoadMorePending] = useState<Record<string, boolean>>({})
   const [recentsLoadMorePending, setRecentsLoadMorePending] = useState(false)
   const messagingOpenIds = useStore($sidebarMessagingOpenIds)
@@ -481,27 +422,7 @@ export function ChatSidebar({
     return () => window.removeEventListener(SESSION_SEARCH_FOCUS_EVENT, onFocus)
   }, [])
 
-  // Flash the ⌘N hint full-opacity (no transition) for the press, so hitting
-  // the shortcut visibly pings its affordance in the sidebar.
-  useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout> | undefined
-
-    const onShortcut = () => {
-      setNewSessionKbdFlash(true)
-      clearTimeout(timeout)
-      timeout = setTimeout(() => setNewSessionKbdFlash(false), 140)
-    }
-
-    window.addEventListener('hermes:new-session-shortcut', onShortcut)
-
-    return () => {
-      window.removeEventListener('hermes:new-session-shortcut', onShortcut)
-      clearTimeout(timeout)
-    }
-  }, [])
-
   const activeSidebarSessionId = currentView === 'chat' ? selectedSessionId : null
-  const profileRailVisible = useStore($profileRailVisible)
 
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -521,7 +442,10 @@ export function ChatSidebar({
   const scopedSessions = useMemo(() => {
     const pool = showArchived ? archivedSessions : sessions
 
-    return filterSessionsByProfileScope(pool, profileScope)
+    // Jarvis is the permanent primary conversation represented by the fixed
+    // top-level row. Keep it out of the side-chat list so it never appears
+    // twice in the consumer UI.
+    return filterSessionsByProfileScope(pool, profileScope).filter(session => !isJarvisMainChat(session))
   }, [sessions, archivedSessions, showArchived, profileScope])
 
   // One predicate for the status/project filters, so the flat list and the
@@ -1513,7 +1437,7 @@ export function ChatSidebar({
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
           <SidebarGroupContent>
             <SidebarMenu className="gap-px">
-              {[...SIDEBAR_NAV, ...contributedNav].map(item => {
+              {SIDEBAR_NAV.map(item => {
                 const isInteractive = Boolean(item.action) || Boolean(item.route)
 
                 const active =
@@ -1521,6 +1445,7 @@ export function ChatSidebar({
                   (item.id === 'messaging' && currentView === 'messaging') ||
                   (item.id === 'artifacts' && currentView === 'artifacts') ||
                   (item.id === 'cron' && currentView === 'cron') ||
+                  (item.id === 'connections' && currentView === 'connections') ||
                   // Contributed rows light up at their own route.
                   (currentView === 'extension' && Boolean(item.route) && pathname === item.route)
 
@@ -1557,25 +1482,6 @@ export function ChatSidebar({
 
                       onNavigate(item)
                     }}
-                    onPointerDown={event => {
-                      // The "New session" row is a drag source too: drag it onto
-                      // a chat zone's tab strip / edge / center to create the
-                      // session exactly there (stack / split). The pointer drag
-                      // session owns the gesture — a sub-threshold release falls
-                      // through to the onClick above (ordinary new session), and
-                      // an engaged drag suppresses that click so it never
-                      // double-creates. The create callback sets $newChatProfile
-                      // itself (the suppressed click can't), so a dragged new
-                      // session lands in the same profile a click would.
-                      if (!isNewSession) {
-                        return
-                      }
-
-                      startNewSessionDrag(placement => {
-                        $newChatProfile.set(null)
-                        onNewSessionSplit(placement.dir, { anchor: placement.anchor, before: placement.before })
-                      }, event)
-                    }}
                     tooltip={
                       item.keybindActionId
                         ? {
@@ -1600,13 +1506,6 @@ export function ChatSidebar({
                     <span className="min-w-0 truncate" data-tip-arrow-only="" data-tour={`sidebar-nav-${item.id}`}>
                       {s.nav[item.id] ?? item.label}
                     </span>
-                    {isNewSession && (
-                      <KbdGroup
-                        className={cn('ml-auto opacity-55', newSessionKbdFlash && 'opacity-100!')}
-                        keys={newSessionKbd}
-                        size="sm"
-                      />
-                    )}
                   </SidebarMenuButton>
                 )
 
@@ -1614,7 +1513,7 @@ export function ChatSidebar({
                 // right-click for the directional "Open in split" submenu.
                 return (
                   <SidebarMenuItem key={item.id}>
-                    {isNewSession || item.route ? (
+                    {item.route ? (
                       <ContextMenu>
                         <ContextMenuTrigger asChild>{button}</ContextMenuTrigger>
                         <ContextMenuContent aria-label={s.nav[item.id] ?? item.label}>
@@ -1622,9 +1521,7 @@ export function ChatSidebar({
                             kit={CONTEXT_SPLIT_KIT}
                             label={s.row.openInSplit}
                             onSplit={dir => {
-                              if (isNewSession) {
-                                onNewSessionSplit(dir)
-                              } else if (item.route) {
+                              if (item.route) {
                                 openRouteTile(item.route, dir)
                               }
                             }}
@@ -1968,15 +1865,7 @@ export function ChatSidebar({
           </div>
         )}
 
-        {!showSessionSections && <SidebarBlankState onNewProject={openProjectCreate} />}
-
-        {/* Off, the statusbar's profile dropdown (beside the gateway switcher)
-            takes over — the rail is a duplicate door for bot-only setups. */}
-        {profileRailVisible && (
-          <div className="shrink-0 px-0.5 pb-1 pt-0.5">
-            <ProfileRail />
-          </div>
-        )}
+        {!showSessionSections && <SidebarBlankState onNewChat={() => onNewSessionInWorkspace(null)} />}
       </SidebarContent>
       <ProjectDialog />
       {/* One mount for the whole app. The header of WorktreeDialog tells why. */}

@@ -97,7 +97,7 @@ describe('the pane follows the roster hydrating after mount', () => {
 
     await waitFor(() => expect(screen.queryByText('This bot has to appear in the roster first.')).toBeNull())
     expect(await screen.findByText('Report')).toBeTruthy()
-    expect(screen.getByText('Scheduled jobs')).toBeTruthy()
+    expect(screen.getByText('Automations')).toBeTruthy()
   })
 
   it('offers a create affordance once the owner resolves', async () => {
@@ -108,10 +108,10 @@ describe('the pane follows the roster hydrating after mount', () => {
 
     // The reported "create silently no-ops" symptom starts here: while the
     // owner is stuck unresolved the pane never offers any create control.
-    expect(await screen.findByText('No scheduled jobs yet')).toBeTruthy()
+    expect(await screen.findByText('No automations yet')).toBeTruthy()
 
     // Both doors: the header action and the empty state's own call to action.
-    const create = screen.getAllByRole('button', { name: 'New cron' })
+    const create = screen.getAllByRole('button', { name: 'New automation' })
 
     expect(create).toHaveLength(2)
 

@@ -620,7 +620,8 @@ export const zhHant = defineLocale({
     },
     fieldLabels: defineFieldCopy({
       model: '預設模型',
-      modelContextLength: '僅覆寫主聊天模型偵測到的上下文視窗（以 token 計）。保留 0 會使用所選模型偵測到的值。不影響輔助模型/MoA 模型。',
+      modelContextLength:
+        '僅覆寫主聊天模型偵測到的上下文視窗（以 token 計）。保留 0 會使用所選模型偵測到的值。不影響輔助模型/MoA 模型。',
       fallbackProviders: '備用模型',
       toolsets: '已啟用工具集',
       timezone: '時區',
@@ -1467,8 +1468,10 @@ export const zhHant = defineLocale({
         failedSelect: backend => `選擇 ${backend} 失敗`,
         needsSetupHint: '此後端已選取但尚未完成設定——在設定完成前命令將會失敗。',
         needsSetupConfirmTitle: backend => `仍要選擇 ${backend} 嗎？`,
-        needsSetupConfirmDescription: detail => `${detail} 此變更生效後啟動的工作階段在設定完成前將沒有終端或檔案工具。`,
-        needsSetupConfirmDescriptionGeneric: '此後端尚未完成設定。此變更生效後啟動的工作階段在設定完成前將沒有終端或檔案工具。',
+        needsSetupConfirmDescription: detail =>
+          `${detail} 此變更生效後啟動的工作階段在設定完成前將沒有終端或檔案工具。`,
+        needsSetupConfirmDescriptionGeneric:
+          '此後端尚未完成設定。此變更生效後啟動的工作階段在設定完成前將沒有終端或檔案工具。',
         needsSetupConfirmAction: '仍然選擇'
       },
       browserRealProfile: {
@@ -2272,6 +2275,7 @@ export const zhHant = defineLocale({
     projectEmpty: '尚無工作階段',
     projectLoadFailed: '會話載入失敗',
     noSessions: '尚無工作階段',
+    newSideChat: '新增側邊聊天',
     noFilterMatches: '沒有工作階段符合這些篩選條件',
     projects: {
       showAllSessions: '顯示所有工作階段',
@@ -2790,7 +2794,8 @@ export const zhHant = defineLocale({
     installTo: '將安裝至',
     retryAfterRun: '我已執行 -- 重試',
     setupChoiceTitle: '歡迎使用 JarvisAIGeorge',
-    setupChoiceDesc: '先在這台電腦上設定 Jarvis，然後使用支援的服務登入，包括 ChatGPT 或 Codex 訂閱。使用此選項無需 API 金鑰。',
+    setupChoiceDesc:
+      '先在這台電腦上設定 Jarvis，然後使用支援的服務登入，包括 ChatGPT 或 Codex 訂閱。使用此選項無需 API 金鑰。',
     connectExistingTitle: '連線現有閘道',
     connectExistingShort: '連線現有環境',
     connectExistingDesc: '使用工作階段權杖或瀏覽器登入連線遠端後端。不會啟動本機安裝。',

@@ -135,6 +135,40 @@ afterEach(() => {
 })
 
 describe('generic new session default routing', () => {
+  it('creates the first fixed Jarvis row as the permanent main chat', async () => {
+    const { result } = mountActions()
+
+    act(() => result.current.selectSidebarItem({ action: 'new-session' } as never))
+    await act(() => result.current.createBackendSessionForSend('hello'))
+
+    expect(requestGatewayForAgent).toHaveBeenCalledWith(
+      'previous',
+      'other',
+      'session.create',
+      expect.objectContaining({ title: 'Jarvis' }),
+      ...FOREGROUND_CREATE_DIAL
+    )
+  })
+
+  it('reopens the permanent Jarvis chat instead of minting another draft', () => {
+    setSessions([{ id: 'jarvis-main', title: 'Jarvis' } as never])
+    const { navigate, result } = mountActions()
+
+    act(() => result.current.selectSidebarItem({ action: 'new-session' } as never))
+
+    expect(navigate).toHaveBeenCalledWith('/jarvis-main')
+  })
+
+  it('keeps an explicitly requested fresh chat separate from Jarvis', async () => {
+    const { result } = mountActions()
+
+    act(() => result.current.startFreshSessionDraft())
+    await act(() => result.current.createBackendSessionForSend('side task'))
+
+    const create = vi.mocked(requestGatewayForAgent).mock.calls.find(call => call[2] === 'session.create')
+    expect(create?.[3]).not.toHaveProperty('title')
+  })
+
   it.each(
     [
       { name: 'primary window control', query: '/' },

@@ -966,7 +966,7 @@ const BOOT_FAKE_STEP_MS = (() => {
   return Math.max(120, raw)
 })()
 
-const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Hermes'
+const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'JarvisAIGeorge'
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
@@ -1367,7 +1367,7 @@ app.setName(APP_NAME)
 // need this, so gate it on Windows. (Fixes: desktop approval/turn notifications
 // never firing on Windows.)
 if (IS_WINDOWS) {
-  app.setAppUserModelId('com.nousresearch.hermes')
+  app.setAppUserModelId('com.georgewangyu.jarvisaigeorge')
 }
 
 // Seed the native About panel with the live Hermes version. This is refreshed
@@ -13471,7 +13471,7 @@ function spawnSecondaryWindow({
     height: SESSION_WINDOW_MIN_HEIGHT,
     minWidth: SESSION_WINDOW_MIN_WIDTH,
     minHeight: SESSION_WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'JarvisAIGeorge',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -13564,7 +13564,7 @@ function spawnBrowserWindow(tabId) {
     height: BROWSER_WINDOW_HEIGHT,
     minWidth: BROWSER_WINDOW_MIN_WIDTH,
     minHeight: BROWSER_WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'JarvisAIGeorge',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -13663,7 +13663,7 @@ function createInstanceWindow(
     ...nextInstanceBounds(source),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'JarvisAIGeorge',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -14646,7 +14646,7 @@ function createWindow() {
     ...computeWindowOptions(savedWindowState, screen.getAllDisplays()),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: 'JarvisAIGeorge',
     // Frameless title bar on every platform so the renderer can paint the
     // "hide sidebar" button (and other left-side titlebar tools) flush with
     // the top edge — matching the macOS layout where the traffic lights sit
@@ -16293,10 +16293,35 @@ ipcMain.on('hermes:previewShortcutActive', (_event, active) => {
 
 registerJarvisOnboardingPermissions({ ipcMain, shell, systemPreferences })
 registerJarvisCodexOAuth({
-  agentRoot: ACTIVE_HERMES_ROOT,
-  hermesHome: HERMES_HOME,
   ipcMain,
-  resolvePython: () => findPythonForRoot(ACTIVE_HERMES_ROOT)
+  resolveCommand: async () => {
+    const backend = await ensureRuntime(
+      await resolveHermesBackend([
+        'auth',
+        'add',
+        'openai-codex',
+        '--type',
+        'oauth',
+        '--browser',
+        '--timeout',
+        '300'
+      ]),
+      () => undefined
+    )
+
+    return {
+      args: backend.args,
+      command: backend.command,
+      cwd: resolveHermesCwd(),
+      env: {
+        ...process.env,
+        HERMES_HOME,
+        ...backend.env,
+        PYTHONUTF8: '1'
+      },
+      shell: backend.shell
+    }
+  }
 })
 
 ipcMain.handle('hermes:requestMicrophoneAccess', async () => {

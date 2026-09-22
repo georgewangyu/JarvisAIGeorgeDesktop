@@ -2388,6 +2388,7 @@ export interface Translations {
     projectEmpty: string
     projectLoadFailed: string
     noSessions: string
+    newSideChat: string
     noFilterMatches: string
     projects: {
       showAllSessions: string

@@ -115,6 +115,7 @@ import { resetProjectTreeState } from '../right-sidebar/files/use-project-tree'
 import { PersistentTerminal } from '../right-sidebar/terminal/persistent'
 import { closeAllTerminals } from '../right-sidebar/terminal/terminals'
 import {
+  CONNECTIONS_ROUTE,
   CRON_ROUTE,
   navigateToWorkspacePage,
   routeSessionId,
@@ -252,9 +253,9 @@ export function ContribWiring({ children }: { children: ReactNode }) {
         return
       }
 
-      void window.hermesDesktop?.recycleBackend?.(normalizeProfileKey($activeGatewayProfile.get())).catch(err =>
-        notifyError(err, translateNow('notifications.errors.restartHermesFailed'))
-      )
+      void window.hermesDesktop
+        ?.recycleBackend?.(normalizeProfileKey($activeGatewayProfile.get()))
+        .catch(err => notifyError(err, translateNow('notifications.errors.restartHermesFailed')))
     }
   }, [backendRestartRequest])
 
@@ -1314,12 +1315,15 @@ export function ContribWiring({ children }: { children: ReactNode }) {
         {!isHudWindow() && !isBrowserWindow() && (
           <TitlebarControls
             leftTools={leftTitlebarTools}
-            onOpenSettings={() => navigate(SETTINGS_ROUTE)}
+            onOpenSettings={() => navigate(CONNECTIONS_ROUTE)}
             tools={rightTitlebarTools}
           />
         )}
         {!isHudWindow() && customWindowControls && (
-          <WslgWindowControls isFullscreen={Boolean(connection?.isFullscreen)} isMaximized={Boolean(connection?.isMaximized)} />
+          <WslgWindowControls
+            isFullscreen={Boolean(connection?.isFullscreen)}
+            isMaximized={Boolean(connection?.isMaximized)}
+          />
         )}
         {children}
       </div>

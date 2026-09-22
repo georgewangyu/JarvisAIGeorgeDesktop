@@ -4,6 +4,7 @@ import type { NavigateFunction } from 'react-router'
 
 import { NO_PROJECT_ID } from '@/app/chat/sidebar/projects/workspace-groups'
 import { graftRefreshedTailOntoBackfill } from '@/app/chat/transcript-backfill'
+import { isJarvisMainChat, JARVIS_MAIN_CHAT_TITLE } from '@/app/session/jarvis-main-chat'
 import { defaultNewSessionTarget, prepareDefaultNewSession } from '@/app/session/new-session-route'
 import { revealTreePane } from '@/components/pane-shell/tree/store'
 import { setWorkspaceScope } from '@/components/pane-shell/workspace-scope'
@@ -317,7 +318,10 @@ async function desktopSessionCreateParams(
   }
 
   const profile =
-    capturedRoute?.profile || requestedProfile || $newChatProfile.get() || normalizeProfileKey($activeGatewayProfile.get())
+    capturedRoute?.profile ||
+    requestedProfile ||
+    $newChatProfile.get() ||
+    normalizeProfileKey($activeGatewayProfile.get())
 
   if (capturedRoute) {
     await ensureGatewayAgent(capturedRoute.connectionId, profile)
@@ -345,6 +349,7 @@ async function desktopSessionCreateParams(
 }
 
 interface FreshSessionDraftOptions {
+  intent?: 'main' | 'side'
   preserveRoute?: boolean
   replaceRoute?: boolean
   workspaceTarget?: NewChatWorkspaceTarget
@@ -413,6 +418,10 @@ export function useSessionActions({
   const transcriptHydrationByRuntimeRef = useRef(new Map<string, symbol>())
   const coldDisplayReadsRef = useRef(new Map<string, symbol>())
   const branchCreateFlightsRef = useRef(new Map<string, Promise<SessionCreateResponse>>())
+  // A first launch opens the permanent Jarvis conversation. Every generic
+  // new-chat path (keyboard shortcut, workspace +, branch) explicitly becomes
+  // a side chat; clicking the Jarvis row switches this intent back to main.
+  const freshChatIntentRef = useRef<'main' | 'side'>('main')
 
   // Follow auto-compression's stored-id rotation only while the exact runtime,
   // selection, and route intent still belong to the rotating conversation.
@@ -477,6 +486,7 @@ export function useSessionActions({
   const startFreshSessionDraft = useCallback(
     (options: boolean | FreshSessionDraftOptions = false) => {
       const draftOptions = typeof options === 'boolean' ? { replaceRoute: options } : options
+      freshChatIntentRef.current = draftOptions.intent ?? 'side'
       const preserveRoute = draftOptions.preserveRoute ?? false
       const replaceRoute = draftOptions.replaceRoute ?? false
 
@@ -603,9 +613,17 @@ export function useSessionActions({
         const capturedProfile = $newChatProfile.get() || normalizeProfileKey($activeGatewayProfile.get())
         const legacyProfileIntent = isLegacyNewChatProfile(capturedProfile)
 
+        const mainChatTitle =
+          freshChatIntentRef.current === 'main' && !createOverrides?.title && !$sessions.get().some(isJarvisMainChat)
+            ? JARVIS_MAIN_CHAT_TITLE
+            : undefined
+
         const params = {
           ...(await desktopSessionCreateParams(cwd, capturedRoute, capturedProfile, legacyProfileIntent)),
-          ...sessionCreateOverrideParams(createOverrides, seedMessages)
+          ...sessionCreateOverrideParams(
+            mainChatTitle ? { ...createOverrides, title: mainChatTitle } : createOverrides,
+            seedMessages
+          )
         }
 
         // Lease the owner socket for the whole create → owner-publication
@@ -766,7 +784,15 @@ export function useSessionActions({
       if (item.action === 'new-session') {
         prepareDefaultNewSession()
         setWorkspaceScope('sessions')
-        startFreshSessionDraft()
+        const mainChat = $sessions.get().find(isJarvisMainChat)
+
+        if (mainChat) {
+          navigate(sessionRoute(mainChat.id))
+
+          return
+        }
+
+        startFreshSessionDraft({ intent: 'main' })
 
         return
       }
@@ -811,15 +837,17 @@ export function useSessionActions({
         // to fall through into the last project folder while main chat was
         // occupied (openTab path for "New session in Home").
         const explicitTarget =
-          options?.profile !== undefined || options?.cwd !== undefined || options?.workspaceScope?.ownerRoute !== undefined
+          options?.profile !== undefined ||
+          options?.cwd !== undefined ||
+          options?.workspaceScope?.ownerRoute !== undefined
 
         const defaultTarget = options?.route === undefined && !explicitTarget ? defaultNewSessionTarget() : null
 
         const capturedRoute =
           options?.route !== undefined
             ? options.route
-            : options?.workspaceScope?.ownerRoute ??
-              (defaultTarget ? defaultTarget.route : resolveNewChatOwnerRoute(options?.profile))
+            : (options?.workspaceScope?.ownerRoute ??
+              (defaultTarget ? defaultTarget.route : resolveNewChatOwnerRoute(options?.profile)))
 
         // A named local profile uses the legacy profile-only transport (no
         // connectionId). Tab-strip "+" omits `options.profile`; the draft or

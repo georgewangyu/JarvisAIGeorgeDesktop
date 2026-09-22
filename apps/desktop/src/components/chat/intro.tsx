@@ -163,25 +163,37 @@ export function Intro({ personality, seed }: IntroProps) {
 
   return (
     <div
-      className="pointer-events-none mx-auto flex w-full max-w-3xl min-w-0 flex-col px-4 py-8 text-foreground sm:px-8 sm:py-12"
+      className="pointer-events-none mx-auto flex min-h-full w-full max-w-3xl min-w-0 flex-col justify-center px-5 py-12 text-foreground sm:px-10"
       data-slot="aui_intro"
     >
-      <div className="mb-12 flex items-center gap-3">
-        <span aria-hidden="true" className="size-8 shrink-0 rounded-full bg-primary" />
-        <span className="text-xs font-semibold tracking-[0.2em] text-primary">{t.jarvisIntro.eyebrow}</span>
+      <div className="mb-8 flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground shadow-sm"
+        >
+          J
+        </span>
+        <div>
+          <div className="text-sm font-semibold tracking-tight">Jarvis</div>
+          <div className="mt-0.5 text-[0.6875rem] font-medium tracking-[0.14em] text-muted-foreground">
+            {t.jarvisIntro.kicker}
+          </div>
+        </div>
       </div>
-      <div className="rounded-3xl bg-accent px-7 py-9 sm:px-10 sm:py-12">
-        <p className="mb-4 text-xs font-semibold tracking-[0.2em] text-primary">{t.jarvisIntro.kicker}</p>
-        <h1 className="max-w-xl text-4xl font-semibold leading-tight tracking-tight text-foreground sm:text-5xl">
-          {t.jarvisIntro.headline}
-        </h1>
-        <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">{body}</p>
-      </div>
-      <div className="mt-9 grid gap-0 text-sm font-medium sm:grid-cols-3">
+      <h1 className="max-w-2xl text-4xl font-semibold leading-[1.06] tracking-[-0.045em] text-foreground sm:text-5xl">
+        {t.jarvisIntro.headline}
+      </h1>
+      <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground">{body}</p>
+      <div className="mt-10 grid gap-2 text-sm sm:grid-cols-3">
         {[t.jarvisIntro.think, t.jarvisIntro.delegate, t.jarvisIntro.return].map((label, index) => (
-          <div className="flex items-center gap-3 border-t border-border py-4 sm:pr-3" key={label}>
-            <span className="text-xs font-semibold text-primary">0{index + 1}</span>
-            <span>{label}</span>
+          <div
+            className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/35 px-4 py-3.5 text-foreground/85"
+            key={label}
+          >
+            <span className="grid size-6 place-items-center rounded-full bg-primary/10 text-[0.6875rem] font-semibold text-primary">
+              {index + 1}
+            </span>
+            <span className="font-medium">{label}</span>
           </div>
         ))}
       </div>

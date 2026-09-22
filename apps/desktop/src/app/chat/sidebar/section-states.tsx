@@ -23,18 +23,18 @@ export function SidebarSessionSkeletons() {
   )
 }
 
-export function SidebarBlankState({ onNewProject }: { onNewProject: () => void }) {
+export function SidebarBlankState({ onNewChat }: { onNewChat: () => void }) {
   const { t } = useI18n()
   const s = t.sidebar
 
   return (
     <div className="grid min-h-0 flex-1 place-items-center px-4 text-center">
       <div className="flex flex-col items-center gap-2">
-        <Codicon className="text-(--ui-text-quaternary)" name="root-folder" size="1.25rem" />
+        <Codicon className="text-(--ui-text-quaternary)" name="comment-discussion" size="1.25rem" />
         <p className="text-xs text-(--ui-text-tertiary)">{s.noSessions}</p>
-        <Button className="mt-0.5 text-(--ui-text-secondary)" onClick={onNewProject} size="sm" variant="ghost">
+        <Button className="mt-0.5 text-(--ui-text-secondary)" onClick={onNewChat} size="sm" variant="ghost">
           <Codicon name="add" size="0.75rem" />
-          {s.projects.newButton}
+          {s.newSideChat}
         </Button>
       </div>
     </div>

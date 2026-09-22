@@ -196,6 +196,7 @@ function useApiKeyCatalog(): ApiKeyOption[] {
 // text-out (360ms: CONNECTED fades down, rest scrambles+fades) → hold (300ms)
 // → surface-out (520ms, held back by [transition-delay:660ms]). Finalize after.
 const ONBOARDING_EXIT_MS = 1180
+const ONBOARDING_CARD_EXIT_MS = 560
 
 export function DesktopOnboardingOverlay({
   enabled,
@@ -228,6 +229,48 @@ export function DesktopOnboardingOverlay({
   // behind), THEN finalize so the unmount lands after the fade — mirrors the
   // connecting overlay's exit choreography instead of cutting instantly.
   const [leaving, setLeaving] = useState(false)
+
+  const dismissFirstRun = (after?: () => void) => {
+    if (leaving) {
+      return
+    }
+
+    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+    if (reduce) {
+      dismissFirstRunOnboarding()
+      after?.()
+
+      return
+    }
+
+    setLeaving(true)
+    window.setTimeout(() => {
+      dismissFirstRunOnboarding()
+      setLeaving(false)
+      after?.()
+    }, ONBOARDING_CARD_EXIT_MS)
+  }
+
+  const dismissManual = () => {
+    if (leaving) {
+      return
+    }
+
+    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+    if (reduce) {
+      closeManualOnboarding()
+
+      return
+    }
+
+    setLeaving(true)
+    window.setTimeout(() => {
+      closeManualOnboarding()
+      setLeaving(false)
+    }, ONBOARDING_CARD_EXIT_MS)
+  }
 
   const finalizeOnboarding = () => {
     if (leaving) {
@@ -379,6 +422,7 @@ export function DesktopOnboardingOverlay({
   // found for nous.") would only restate it in the wrong words.
   const reason =
     rawReason &&
+    onboarding.manual &&
     !setupFailure &&
     !isProviderSetupErrorMessage(rawReason) &&
     rawReason !== DEFAULT_ONBOARDING_REASON &&
@@ -431,7 +475,7 @@ export function DesktopOnboardingOverlay({
           <Button
             aria-label={t.common.close}
             className="absolute right-3 top-3 z-10 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground"
-            onClick={() => closeManualOnboarding()}
+            onClick={dismissManual}
             size="icon-sm"
             variant="ghost"
           >
@@ -445,7 +489,7 @@ export function DesktopOnboardingOverlay({
             freeTierIntro ? (
               <FreeTierReadyPanel leaving={leaving} onDismiss={dismissFreeTierIntro} />
             ) : showPicker ? (
-              <Picker ctx={ctx} />
+              <Picker ctx={ctx} onDismissFirstRun={dismissFirstRun} />
             ) : (
               <FlowPanel ctx={ctx} flow={flow} leaving={leaving} onBegin={finalizeOnboarding} />
             )
@@ -570,7 +614,10 @@ function Header() {
   )
 }
 
-export const FEATURED_ID = 'nous'
+// Jarvis is designed for ordinary ChatGPT/Codex subscribers first. Hermes
+// still supports its complete provider catalog behind "Other ways to connect",
+// but the consumer path begins with the account they already use.
+export const FEATURED_ID = 'openai-codex'
 const SHOW_ALL_KEY = 'hermes-onboarding-show-all-v1'
 
 const readShowAll = () => {
@@ -591,7 +638,16 @@ const persistShowAll = (value: boolean) => {
   return value
 }
 
-export function Picker({ ctx }: { ctx: OnboardingContext }) {
+export function Picker({
+  ctx,
+  onDismissFirstRun = after => {
+    dismissFirstRunOnboarding()
+    after?.()
+  }
+}: {
+  ctx: OnboardingContext
+  onDismissFirstRun?: (after?: () => void) => void
+}) {
   const { t } = useI18n()
   const { localEndpoint, manual, mode, providers } = useStore($desktopOnboarding)
   const [showAll, setShowAll] = useState(readShowAll)
@@ -624,7 +680,7 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
         />
         {manual ? null : (
           <div className="flex justify-center pt-1">
-            <ChooseLaterLink />
+            <ChooseLaterLink onChooseLater={() => onDismissFirstRun()} />
           </div>
         )}
       </div>
@@ -653,23 +709,23 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   const openLocalModels = () => {
     if (manual) {
       closeManualOnboarding()
+      window.location.hash = '#/settings?tab=providers&pview=local'
     } else {
-      dismissFirstRunOnboarding()
+      onDismissFirstRun(() => {
+        window.location.hash = '#/settings?tab=providers&pview=local'
+      })
     }
-
-    window.location.hash = '#/settings?tab=providers&pview=local'
   }
 
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
         {featured ? <FeaturedProviderRow onSelect={select} provider={featured} /> : null}
-        {/* The no-account path: everything runs on this machine. Shipped
-            behind the --local launch flag. (Fireworks moved into the
-            expanded list on main.) */}
-        {$localModelsEnabled.get() ? <LocalModelsProviderRow onClick={openLocalModels} /> : null}
         {showRest ? (
           <>
+            {/* Advanced/local choices remain available without competing with
+                the one-click ChatGPT path on first launch. */}
+            {$localModelsEnabled.get() ? <LocalModelsProviderRow onClick={openLocalModels} /> : null}
             {/* Fireworks leads the expanded list, matching CANONICAL_PROVIDERS
                 (Nous → Fireworks), but stays hidden until the user opens it. */}
             <FireworksProviderRow onClick={() => openKeyForm('FIREWORKS_API_KEY')} />
@@ -696,7 +752,7 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
         {/* First run only: let the user defer the choice and land in the app.
             In manual mode the overlay already has a close affordance, so the
             "choose later" escape would be redundant — hide it. */}
-        {manual ? <span /> : <ChooseLaterLink />}
+        {manual ? <span /> : <ChooseLaterLink onChooseLater={() => onDismissFirstRun()} />}
         <Button className="-mr-2 font-medium" onClick={() => openKeyForm()} size="xs" type="button" variant="text">
           {t.onboarding.haveApiKey}
         </Button>
@@ -708,11 +764,11 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
 // "I'll choose a provider later" — dismisses the first-run picker and persists
 // the skip so it never re-nags. The user connects a provider any time from
 // Settings → Providers. Rendered only on the unconfigured first-run flow.
-function ChooseLaterLink() {
+function ChooseLaterLink({ onChooseLater }: { onChooseLater: () => void }) {
   const { t } = useI18n()
 
   return (
-    <Button className="font-medium" onClick={() => dismissFirstRunOnboarding()} size="xs" type="button" variant="text">
+    <Button className="font-medium" onClick={onChooseLater} size="xs" type="button" variant="text">
       {t.onboarding.chooseLater}
     </Button>
   )

@@ -42,6 +42,14 @@ export function discoverBundledPlugins(): void {
       continue
     }
 
+    // Jarvis keeps worker orchestration behind its single-assistant surface.
+    // The Hermes Bot Mode plugin remains in the fork as engine code, but its
+    // roster and routines panes are intentionally not registered in the
+    // consumer desktop shell.
+    if (plugin.id === 'hermes-bots') {
+      continue
+    }
+
     // Same inventory + live-toggle contract as runtime plugins: each bundled
     // plugin publishes a record with activate/deactivate handles, and a
     // persisted disable survives boots by skipping registration here.
