@@ -289,15 +289,16 @@ function matchesQuery(job: CronJob, q: string): boolean {
 }
 
 interface CronViewProps extends React.ComponentProps<'section'> {
+  inline?: boolean
   onClose: () => void
   setStatusbarItemGroup?: SetStatusbarItemGroup
 }
 
-export function CronView({ onClose, setStatusbarItemGroup: _setStatusbarItemGroup }: CronViewProps) {
+export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setStatusbarItemGroup }: CronViewProps) {
   const { t } = useI18n()
   const c = t.cron
   // Source of truth is the shared atom (also fed by the controller poll), so the
-  // sidebar and this overlay never drift — a delete here clears the sidebar row
+  // sidebar and this page never drift — a delete here clears the sidebar row
   // immediately. `loading` only gates the first paint before the atom is filled.
   const jobs = useStore($cronJobs)
   const [loading, setLoading] = useState(jobs.length === 0)
@@ -629,7 +630,7 @@ export function CronView({ onClose, setStatusbarItemGroup: _setStatusbarItemGrou
   }
 
   return (
-    <Panel closeLabel={c.close} onClose={onClose}>
+    <Panel closeLabel={c.close} inline={inline} onClose={onClose}>
       <PanelHeader subtitle={c.count(totalCount)} title={c.title} />
 
       {loading && jobs.length === 0 ? (

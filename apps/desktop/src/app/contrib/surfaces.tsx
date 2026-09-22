@@ -9,7 +9,7 @@
 
 import { useStore } from '@nanostores/react'
 import { type ComponentProps, lazy, memo, type ReactNode, Suspense, useMemo } from 'react'
-import { Navigate, Route, Routes, useParams } from 'react-router'
+import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router'
 
 import { PageLoader } from '@/components/page-loader'
 import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
@@ -44,6 +44,7 @@ const PreferencesView = lazy(async () => ({ default: (await import('../preferenc
 const ConsumerFeedView = lazy(async () => ({ default: (await import('../consumer-pages')).ConsumerFeedView }))
 const ConsumerIdeasView = lazy(async () => ({ default: (await import('../consumer-pages')).ConsumerIdeasView }))
 const ConsumerGoalsView = lazy(async () => ({ default: (await import('../consumer-pages')).ConsumerGoalsView }))
+const CronView = lazy(async () => ({ default: (await import('../cron')).CronView }))
 
 function ConsumerPageLoader() {
   return (
@@ -139,6 +140,7 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
   actions: WiringActions
   maxVoiceRecordingSeconds?: number
 }) {
+  const navigate = useNavigate()
   const activeConnectionId = useStore($activeConnectionId)
   const activeGatewayProfile = useStore($activeGatewayProfile)
   const gateway = useStore($gateway)
@@ -212,9 +214,9 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
       <Route element={page(<ConsumerFeedView />)} path="feed" />
       <Route element={page(<ConsumerIdeasView />)} path="ideas" />
       <Route element={page(<ConsumerGoalsView />)} path="goals" />
+      <Route element={page(<CronView inline onClose={() => navigate(NEW_CHAT_ROUTE)} />)} path="cron" />
       <Route element={null} path="agents" />
       <Route element={null} path="command-center" />
-      <Route element={null} path="cron" />
       <Route element={null} path="profiles" />
       <Route element={null} path="settings" />
       <Route element={null} path="starmap" />

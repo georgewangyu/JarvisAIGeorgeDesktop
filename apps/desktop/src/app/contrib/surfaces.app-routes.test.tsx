@@ -20,6 +20,9 @@ vi.mock('../chat', () => ({ ChatView: () => <div data-testid="chat-view" /> }))
 vi.mock('../capabilities', () => ({ CapabilitiesView: () => null }))
 vi.mock('../messaging', () => ({ MessagingView: () => null }))
 vi.mock('../artifacts', () => ({ ArtifactsView: () => null }))
+vi.mock('../cron', () => ({
+  CronView: ({ inline }: { inline?: boolean }) => <div data-inline={inline} data-testid="cron-page" />
+}))
 vi.mock('../chat/sidebar', () => ({ ChatSidebar: () => null }))
 vi.mock('../right-sidebar/terminal/chrome', () => ({ TerminalPaneChrome: () => null }))
 vi.mock('../shell/hooks/use-status-snapshot', () => ({ useStatusSnapshot: () => ({}) }))
@@ -41,7 +44,7 @@ afterEach(cleanup)
 describe('ChatRoutesSurface and APP_ROUTES', () => {
   const pages = APP_ROUTES.filter(route => route.view !== 'chat' && !isOverlayView(route.view))
 
-  it.each(pages.map(route => [route.path]))('%s has its own route and never opens as a session', path => {
+  it.each(pages.map(route => [route.path]))('%s has its own route and never opens as a session', async path => {
     const actions = { getGateway: () => null } as unknown as WiringActions
 
     render(
@@ -51,5 +54,9 @@ describe('ChatRoutesSurface and APP_ROUTES', () => {
     )
 
     expect(screen.queryByTestId('chat-view')).toBeNull()
+
+    if (path === '/cron') {
+      expect((await screen.findByTestId('cron-page')).getAttribute('data-inline')).toBe('true')
+    }
   })
 })

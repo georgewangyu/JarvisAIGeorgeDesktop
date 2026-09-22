@@ -112,6 +112,13 @@ describe('syncWorkspaceRoute', () => {
     expect(fronted()).toBe(true)
   })
 
+  it('fronts Automations as a workspace page instead of a blocking overlay', () => {
+    syncWorkspaceRoute(CRON_ROUTE)
+
+    expect($workspaceIsPage.get()).toBe(true)
+    expect(fronted()).toBe(true)
+  })
+
   it('fronts when moving between two pages — the atom never changes, the tab must', () => {
     syncWorkspaceRoute(ARTIFACTS_ROUTE)
     vi.mocked(revealTreePane).mockClear()
@@ -141,7 +148,6 @@ describe('syncWorkspaceRoute', () => {
     ['the new-chat route', NEW_CHAT_ROUTE],
     ['an overlay', SETTINGS_ROUTE],
     ['an overlay with a query', `${SETTINGS_ROUTE}?tab=keys`],
-    ['another overlay', CRON_ROUTE],
     ['yet another overlay', AGENTS_ROUTE]
   ])('leaves the tab alone on %s', (_label, to) => {
     syncWorkspaceRoute(to)
@@ -161,14 +167,15 @@ describe('navigateToWorkspacePage', () => {
     expect(fronted()).toBe(true)
   })
 
-  it.each([`${CAPABILITIES_ROUTE}?tab=skills`, `${CAPABILITIES_ROUTE}?tab=toolsets`, `${CAPABILITIES_ROUTE}?tab=mcp&server=ctx7`])(
-    'fronts for the palette target %s',
-    to => {
-      navigateToWorkspacePage(vi.fn(), to)
+  it.each([
+    `${CAPABILITIES_ROUTE}?tab=skills`,
+    `${CAPABILITIES_ROUTE}?tab=toolsets`,
+    `${CAPABILITIES_ROUTE}?tab=mcp&server=ctx7`
+  ])('fronts for the palette target %s', to => {
+    navigateToWorkspacePage(vi.fn(), to)
 
-      expect(fronted()).toBe(true)
-    }
-  )
+    expect(fronted()).toBe(true)
+  })
 
   it('passes navigation options through', () => {
     const navigate = vi.fn()

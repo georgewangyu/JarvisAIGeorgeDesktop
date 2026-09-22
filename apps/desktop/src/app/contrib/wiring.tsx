@@ -178,7 +178,6 @@ import { POOL_LIMITS_SETTINGS_ROUTE } from './wiring-routing'
 // ChatRoutesSurface's and live in ./surfaces.
 const AgentsView = lazy(async () => ({ default: (await import('../agents')).AgentsView }))
 const CommandCenterView = lazy(async () => ({ default: (await import('../command-center')).CommandCenterView }))
-const CronView = lazy(async () => ({ default: (await import('../cron')).CronView }))
 const WebhooksView = lazy(async () => ({ default: (await import('../webhooks')).WebhooksView }))
 const ProfilesView = lazy(async () => ({ default: (await import('../profiles')).ProfilesView }))
 const SettingsView = lazy(async () => ({ default: (await import('../settings')).SettingsView }))
@@ -341,7 +340,6 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     closeOverlayToPreviousRoute,
     commandCenterInitialSection,
     commandCenterOpen,
-    cronOpen,
     currentView,
     openAgents,
     openCommandCenterSection,
@@ -1430,12 +1428,6 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       {agentsOpen && (
         <Suspense fallback={null}>
           <AgentsView onClose={closeOverlayToPreviousRoute} />
-        </Suspense>
-      )}
-
-      {cronOpen && (
-        <Suspense fallback={null}>
-          <CronView onClose={closeOverlayToPreviousRoute} />
         </Suspense>
       )}
 

@@ -34,6 +34,8 @@ interface PanelProps {
   className?: string
   closeLabel?: string
   contentClassName?: string
+  /** Render inside the workspace page instead of as a blocking window overlay. */
+  inline?: boolean
   onClose: () => void
 }
 
@@ -42,8 +44,23 @@ export function Panel({
   className,
   closeLabel = translateNow('common.close'),
   contentClassName,
+  inline = false,
   onClose
 }: PanelProps) {
+  if (inline) {
+    return (
+      <section
+        className={cn(
+          'mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col px-6 pb-6 pt-8 sm:px-10',
+          contentClassName,
+          className
+        )}
+      >
+        {children}
+      </section>
+    )
+  }
+
   return (
     <OverlayView
       closeLabel={closeLabel}
