@@ -1103,6 +1103,7 @@ export function ChatBar({
       busyAction={busyAction}
       canSubmit={canSubmit}
       compactModelPill={poppedOut || compactPill}
+      consumer={themeName === 'jarvis' && !hudMode && !poppedOut}
       conversation={{
         active: voiceConversationActive,
         level: conversation.level,

@@ -22,10 +22,12 @@ import { useVoiceEngineName, VoiceEngineRows } from './voice-engine-rows'
 export function StartVoiceButton({
   disabled,
   label,
+  showEnginePicker = true,
   onStart
 }: {
   disabled: boolean
   label: string
+  showEnginePicker?: boolean
   onStart: () => void
 }) {
   const { t } = useI18n()
@@ -36,7 +38,7 @@ export function StartVoiceButton({
       <Tip label={engine ? `${label} — ${engine}` : label} placement="control">
         <Button
           aria-label={label}
-          className={cn(PRIMARY_ICON_BTN, engine && 'rounded-r-none')}
+          className={cn(PRIMARY_ICON_BTN, engine && showEnginePicker && 'rounded-r-none')}
           disabled={disabled}
           onClick={() => {
             triggerHaptic('open')
@@ -48,7 +50,7 @@ export function StartVoiceButton({
           <AudioLines className={iconSize.sm} />
         </Button>
       </Tip>
-      {engine ? (
+      {engine && showEnginePicker ? (
         <DropdownMenu>
           <Tip label={t.composer.voiceEngine} placement="control">
             <DropdownMenuTrigger asChild>

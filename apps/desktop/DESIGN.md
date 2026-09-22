@@ -39,6 +39,12 @@ compact category navigation, one content scroller, utility-sized headings,
 and a horizontal navigation fallback on narrow windows. Categories only expose
 implemented controls; advanced runtime settings remain an explicit destination.
 
+The ordinary Jarvis composer discloses model/reasoning controls in Chat options
+and folds voice configuration into the existing live-state voice menu. The
+model-picker shortcut opens options when closed; HUD, pop-out, guided-chat and
+minimal-width behavior retain their existing contracts. No provider state is
+duplicated by the disclosure.
+
 1. **Flat, not boxed.** No card-in-card, no divider borders inside a panel.
    Group with whitespace and a single hairline, never nested rounded boxes.
 2. **Borderless elevation for floating panels.** Overlays float on

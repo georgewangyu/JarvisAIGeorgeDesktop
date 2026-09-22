@@ -8,7 +8,8 @@ import { applyWakeStartResult, applyWakeStatus, resetWakeWordState } from '@/sto
 
 import { ComposerControls } from './controls'
 
-vi.mock('./model-pill', () => ({ ModelPill: () => null }))
+vi.mock('./model-pill', () => ({ ModelPill: () => <button type="button">Choose model</button> }))
+vi.mock('./voice-engine-rows', () => ({ useVoiceEngineName: () => 'Test engine', VoiceEngineRows: () => null }))
 
 const state: ChatBarState = {
   model: { canSwitch: false, model: '', provider: '' },
@@ -137,6 +138,41 @@ describe('narrow tiles', () => {
     renderControls({ busy: true, busyAction: 'stop', foldVoice: true, hasComposerPayload: false, minimal: true })
 
     expect(screen.getByLabelText('Stop')).toBeTruthy()
+  })
+})
+
+describe('consumer composer', () => {
+  it('keeps the primary voice action without the extra engine dropdown', () => {
+    renderControls({ consumer: true, hasComposerPayload: false })
+    expect(screen.getByLabelText('Start voice conversation')).toBeTruthy()
+    expect(screen.queryByLabelText('Voice chat engine')).toBeNull()
+  })
+
+  it('opens options for its own keyboard target, not another pane', () => {
+    renderControls({ consumer: true })
+    fireEvent(window, new CustomEvent('hermes:composer-model-menu', { detail: { target: 'tile:other' } }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent(window, new CustomEvent('hermes:composer-model-menu', { detail: { target: 'main' } }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+  })
+
+  it('discloses model controls on demand while keeping send and voice reachable', async () => {
+    renderControls({ consumer: true })
+
+    expect(screen.queryByRole('button', { name: 'Choose model' })).toBeNull()
+    expect(screen.getByLabelText('Send')).toBeTruthy()
+    expect(screen.getByLabelText('Voice')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Chat options' }))
+    expect(await screen.findByRole('button', { name: 'Choose model' })).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: 'Choose model' })).toBeNull()
+  })
+
+  it('honors guided-chat hiding and preserves live dictation status', () => {
+    renderControls({ consumer: true, hideModelPill: true, voiceStatus: 'recording' })
+
+    expect(screen.queryByRole('button', { name: 'Chat options' })).toBeNull()
+    expect(screen.getByLabelText('Stop dictation')).toBeTruthy()
   })
 })
 

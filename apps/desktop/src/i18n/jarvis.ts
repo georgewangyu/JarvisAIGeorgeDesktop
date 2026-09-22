@@ -2,6 +2,7 @@ import { useI18n } from '@/i18n'
 
 const copy = {
   en: {
+    chatOptions: 'Chat options',
     general: 'General',
     connectionsNav: 'Connections',
     runResult: 'Automation result',
@@ -24,6 +25,7 @@ const copy = {
     local: 'Tasks send relevant context to your connected AI provider. Chat storage depends on your connection setup.'
   },
   ja: {
+    chatOptions: 'チャット設定',
     general: '一般',
     connectionsNav: '接続',
     runResult: '自動化の結果',
@@ -45,6 +47,7 @@ const copy = {
     local: 'タスクに関連する情報は接続先のAIプロバイダーに送信されます。チャットの保存先は接続設定によって異なります。'
   },
   zh: {
+    chatOptions: '聊天选项',
     general: '通用',
     connectionsNav: '连接',
     runResult: '自动化结果',
@@ -66,6 +69,7 @@ const copy = {
     local: '任务会将相关内容发送给已连接的 AI 提供商。聊天存储位置取决于连接设置。'
   },
   'zh-hant': {
+    chatOptions: '聊天選項',
     general: '一般',
     connectionsNav: '連線',
     runResult: '自動化結果',

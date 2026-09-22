@@ -1,9 +1,12 @@
 import { useStore } from '@nanostores/react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { triggerHaptic } from '@/lib/haptics'
 import { Ear, EarOff, iconSize, Layers3, Loader2, Square } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -11,9 +14,11 @@ import { $hudMode, closeHud, resetHudLayout } from '@/store/hud'
 import { $wakeWord, toggleWakeWord } from '@/store/wake-word'
 
 import { ACTIVE_ICON_BTN, GHOST_ICON_BTN, PRIMARY_ICON_BTN } from './control-classes'
+import { onComposerModelMenuRequest } from './focus'
 import type { ConversationStatus } from './hooks/use-voice-conversation'
 import { ModelPill } from './model-pill'
 import { ReasoningPill } from './reasoning-pill'
+import { useComposerScope } from './scope'
 import { StartVoiceButton } from './start-voice-button'
 import type { ChatBarState, VoiceStatus } from './types'
 import { VoiceFan } from './voice-fan'
@@ -40,6 +45,7 @@ export function ComposerControls({
   busyAction,
   canSubmit,
   compactModelPill = false,
+  consumer = false,
   conversation,
   disabled,
   foldVoice = false,
@@ -57,6 +63,7 @@ export function ComposerControls({
   busyAction: 'steer' | 'queue' | 'stop'
   canSubmit: boolean
   compactModelPill?: boolean
+  consumer?: boolean
   conversation: ConversationProps
   disabled: boolean
   foldVoice?: boolean
@@ -70,8 +77,25 @@ export function ComposerControls({
   onToggleAutoSpeak: () => void
 }) {
   const { t } = useI18n()
+  const jarvis = useJarvisCopy()
   const c = t.composer
   const hudMode = useStore($hudMode)
+  const scope = useComposerScope()
+  const [optionsOpen, setOptionsOpen] = useState(false)
+
+  // The pill is deliberately unmounted when undisclosed. Keep its keyboard
+  // entry point reachable, scoped to the same composer as the existing picker.
+  useEffect(() => {
+    if (!consumer || hideModelPill || minimal || disabled || conversation.active || optionsOpen) {
+      return
+    }
+
+    return onComposerModelMenuRequest(target => {
+      if (target === scope.target) {
+        setOptionsOpen(true)
+      }
+    })
+  }, [consumer, hideModelPill, minimal, disabled, conversation.active, optionsOpen, scope.target])
 
   if (conversation.active) {
     return <ConversationPill {...conversation} disabled={disabled} />
@@ -88,7 +112,7 @@ export function ComposerControls({
   // same reason — same controls, same state, different budget. Below that
   // even the menu goes: at `minimal` the row is the send button and nothing
   // else, which is the one thing that must survive every width.
-  const foldedVoice = hudMode || foldVoice
+  const foldedVoice = hudMode || foldVoice || consumer
 
   const voiceControls = foldedVoice ? (
     <VoiceMenu
@@ -116,7 +140,29 @@ export function ComposerControls({
     <div className="ml-auto flex min-w-0 shrink items-center gap-(--composer-control-gap)">
       {minimal ? null : (
         <>
-          {hideModelPill ? null : (
+          {hideModelPill ? null : consumer ? (
+            <Popover onOpenChange={setOptionsOpen} open={optionsOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  aria-label={jarvis.chatOptions}
+                  className={GHOST_ICON_BTN}
+                  disabled={disabled}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Codicon name="settings-gear" size="0.875rem" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" aria-label={jarvis.chatOptions} className="w-72 p-3" side="top">
+                <p className="mb-2 text-sm font-medium">{jarvis.chatOptions}</p>
+                <div className="flex flex-wrap items-center gap-1">
+                  <ModelPill disabled={disabled} model={state.model} />
+                  <ReasoningPill disabled={disabled} model={state.model} />
+                </div>
+              </PopoverContent>
+            </Popover>
+          ) : (
             <>
               <ModelPill compact={compactModelPill} disabled={disabled} model={state.model} />
               {compactModelPill ? null : <ReasoningPill disabled={disabled} model={state.model} />}
@@ -141,7 +187,12 @@ export function ComposerControls({
         </Tip>
       ) : null}
       {showVoicePrimary ? (
-        <StartVoiceButton disabled={disabled} label={c.startVoice} onStart={conversation.onStart} />
+        <StartVoiceButton
+          disabled={disabled}
+          label={c.startVoice}
+          onStart={conversation.onStart}
+          showEnginePicker={!consumer}
+        />
       ) : (
         <Tip
           label={
