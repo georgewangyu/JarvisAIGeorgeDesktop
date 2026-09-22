@@ -533,6 +533,11 @@ export function ChatSidebar({
 
   const activitySessions = useMemo(() => filterSessionsByProfileScope(sessions, profileScope), [sessions, profileScope])
 
+  const mainChatRecent = useMemo(
+    () => activitySessions.filter(isJarvisMainChat).sort((a, b) => sessionTime(b) - sessionTime(a))[0],
+    [activitySessions]
+  )
+
   const activityAutomationSessions = useMemo(
     () => filterSessionsByProfileScope(cronSessions, profileScope),
     [cronSessions, profileScope]
@@ -1711,7 +1716,14 @@ export function ChatSidebar({
                         variant="ghost"
                       >
                         <Codicon name="sparkle" size="0.75rem" />
-                        {s.mainChat}
+                        <span className="min-w-0 text-left">
+                          <span className="block">{s.mainChat}</span>
+                          {mainChatRecent?.preview ? (
+                            <span className="block truncate text-xs text-(--ui-text-tertiary)">
+                              {mainChatRecent.preview}
+                            </span>
+                          ) : null}
+                        </span>
                       </Button>
                     </div>
                   )}

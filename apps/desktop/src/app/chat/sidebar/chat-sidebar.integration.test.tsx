@@ -122,4 +122,23 @@ describe('consumer chat navigation', () => {
     expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({ id: 'new-session' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull())
   })
+
+  it('shows the real permanent main chat preview in Search recents', async () => {
+    $sessions.set([
+      ...sessions,
+      makeSessionInfo({
+        id: 'main-chat',
+        last_active: 4,
+        preview: 'Recent main chat preview',
+        profile: 'default',
+        title: 'Jarvis'
+      })
+    ])
+
+    renderSidebar()
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+
+    const preview = await screen.findByText('Recent main chat preview')
+    expect(preview.closest('button')).toBe(screen.getByRole('button', { name: /Main chat/ }))
+  })
 })
