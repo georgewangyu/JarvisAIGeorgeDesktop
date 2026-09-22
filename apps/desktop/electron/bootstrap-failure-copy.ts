@@ -54,8 +54,8 @@ export function bootstrapStageLabel(stage: string | null | undefined): string | 
 }
 
 const BOOTSTRAP_FAILURE_REMEDY =
-  'Common causes: no internet connection, antivirus blocking the installer, or another copy of Hermes running. ' +
-  'Close other Hermes windows and choose Reload and retry; if it fails again, open the logs and send them to support.'
+  'Common causes: no internet connection, antivirus blocking setup, or another copy of Jarvis running. ' +
+  'Close other Jarvis windows and choose Reload and retry; if it fails again, open the logs and send them to support.'
 
 /**
  * Build the Error.message for a failed bootstrap. First line is the plain
@@ -65,8 +65,8 @@ export function describeBootstrapFailure(failedStage: string | null | undefined,
   const label = bootstrapStageLabel(failedStage)
 
   const lead = label
-    ? `Setting up Hermes stopped during the '${label}' step.`
-    : 'Setting up Hermes stopped before it could finish.'
+    ? `Setting up Jarvis stopped during the '${label}' step.`
+    : 'Setting up Jarvis stopped before it could finish.'
 
   const details = typeof rawError === 'string' && rawError.trim() ? rawError.trim() : 'unknown error'
 
@@ -75,14 +75,14 @@ export function describeBootstrapFailure(failedStage: string | null | undefined,
 
 /**
  * Error.message for an installed Hermes with a piece missing (source tree,
- * Python environment). The renderer's install overlay offers the Repair install
+ * Python environment). The renderer's install overlay offers the Repair Jarvis
  * button ('hermes:bootstrap:repair'), so the copy points there. `whatIsMissing`
  * names the missing part and its path, e.g. "Python environment missing at /x".
  */
 export function missingInstallPartMessage(whatIsMissing: string): string {
   return (
-    "Part of Hermes' installation is missing (it may have been deleted or quarantined by antivirus). " +
-    'Choose Repair install below to put it back — your chats and settings are not affected. ' +
+    'Part of Jarvis is missing (it may have been deleted or quarantined by antivirus). ' +
+    'Choose Repair Jarvis below to put it back — your chats and settings are not affected. ' +
     `Details: ${whatIsMissing}`
   )
 }

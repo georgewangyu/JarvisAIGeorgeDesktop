@@ -158,7 +158,7 @@ export const en: Translations = {
       backendStopped: 'Hermes stopped working in the background',
       restartHermes: 'Restart Hermes',
       openLogs: 'Open logs',
-      desktopBootFailed: "Hermes couldn't start",
+      desktopBootFailed: 'Jarvis needs a moment',
       gatewayConnectionLost: 'Hermes lost its connection',
       gatewayConnectionLostDetail:
         'Still trying to reconnect. You can keep reading and drafting. If this keeps up, reconnect now or check your connection settings.',
@@ -172,32 +172,32 @@ export const en: Translations = {
     // Plain causes for a local backend boot failure (`classifyBootFailure`);
     // the raw output stays behind "Show recent logs".
     causes: {
-      exitedEarly: "Hermes' background service stopped right after starting.",
-      timedOut: "Hermes' background service didn't answer in time.",
-      permission: "Hermes couldn't write to its data folder (permission problem).",
-      diskFull: 'The disk is full, so Hermes could not start.',
-      portInUse: 'Another program is using the network port Hermes needs.',
-      installMissing: "Part of Hermes' installation is missing. Choose Repair install to put it back."
+      exitedEarly: "Jarvis' assistant service stopped right after starting.",
+      timedOut: "Jarvis' assistant service didn't answer in time.",
+      permission: "Jarvis couldn't write to its data folder.",
+      diskFull: 'The disk is full, so Jarvis could not start.',
+      portInUse: 'Another program is using a network connection Jarvis needs.',
+      installMissing: "Part of Jarvis is missing. Choose Repair Jarvis to put it back."
     },
     failure: {
-      title: "Hermes couldn't start",
+      title: 'Jarvis needs a moment',
       description:
-        "Hermes' background service didn't come up. Try one of the recovery steps below. Nothing here deletes your chats or settings.",
+        "Jarvis couldn't start its assistant service. Try one of the recovery steps below. Nothing here deletes your chats or settings.",
       details: 'Details',
-      remoteTitle: 'Remote gateway sign-in required',
+      remoteTitle: 'Sign in again to Jarvis',
       remoteDescription:
-        'Your remote gateway session has expired. Sign in again to reconnect. Nothing here deletes your chats or settings.',
-      retry: 'Retry',
-      repairInstall: 'Repair install',
-      useLocalGateway: 'Use local gateway',
-      gatewaySettings: 'Gateway settings',
+        'Your saved connection has expired. Sign in again to reconnect. Nothing here deletes your chats or settings.',
+      retry: 'Try again',
+      repairInstall: 'Repair Jarvis',
+      useLocalGateway: 'Use this Mac',
+      gatewaySettings: 'Connection settings',
       back: 'Back',
       openLogs: 'Open logs',
       repairHint: 'Repair re-runs the installer and can take a few minutes on a fresh machine.',
       remoteSignInHint: signInLabel =>
         `Signs out of the saved remote browser session, then opens ${signInLabel}. Use local gateway to switch to the bundled backend instead.`,
       signOutAndSignIn: 'Sign out & sign in',
-      remoteFailureHint: 'Check the gateway URL and sign-in under Gateway settings, or switch to the local gateway.',
+      remoteFailureHint: 'Check the service address and sign-in under Connection settings, or use Jarvis from this Mac.',
       cloudDownTitle: 'Nous Cloud agent is down',
       cloudDownDescription:
         'The Nous-managed cloud agent this gateway connects to is returning a server error. It cannot be restarted from here — check its status, switch to the local gateway, or get support.',

@@ -74,8 +74,8 @@ describe('BootFailureOverlay', () => {
       </>
     )
 
-    const recoverySurface = screen.getByRole('dialog', { name: /Hermes couldn't start/i })
-    const retry = screen.getByRole('button', { name: /retry/i })
+    const recoverySurface = screen.getByRole('dialog', { name: /Jarvis needs a moment/i })
+    const retry = screen.getByRole('button', { name: /try again/i })
     const backgroundAction = screen.getByText(/background action/i)
 
     retry.focus()
@@ -85,50 +85,50 @@ describe('BootFailureOverlay', () => {
     expect(recoverySurface.contains(globalThis.document.activeElement)).toBe(true)
   })
 
-  it('swaps to the in-place gateway settings view (no route nav) and back', async () => {
+  it('swaps to the in-place connection settings view (no route nav) and back', async () => {
     render(<BootFailureOverlay />)
 
-    fireEvent.click(screen.getByRole('button', { name: /gateway settings/i }))
+    fireEvent.click(screen.getByRole('button', { name: /connection settings/i }))
     // Recovery actions give way to the embedded panel (behind a Back control).
     expect(await screen.findByRole('button', { name: /back/i })).toBeTruthy()
-    expect(screen.getByRole('dialog', { name: /gateway settings/i }).getAttribute('aria-modal')).toBe('true')
-    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()
+    expect(screen.getByRole('dialog', { name: /connection settings/i }).getAttribute('aria-modal')).toBe('true')
+    expect(screen.queryByRole('button', { name: /try again/i })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /back/i }))
-    expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /back/i })).toBeNull()
   })
 
   it('drops local-only Repair and Use-local-gateway on a local failure', () => {
     render(<BootFailureOverlay />)
     // No connection config stub → treated as a local failure.
-    expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /repair/i })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /use local gateway/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /use this Mac/i })).toBeNull()
   })
 
-  it('leads with Gateway settings and drops Repair for a remote (token) failure', async () => {
+  it('leads with Connection settings and drops Repair for a remote (token) failure', async () => {
     const restore = stubDesktop(remoteToken)
 
     try {
       render(<BootFailureOverlay />)
       await waitFor(() => expect(screen.queryByRole('button', { name: /repair/i })).toBeNull())
-      expect(screen.getByRole('button', { name: /gateway settings/i })).toBeTruthy()
-      expect(screen.getByRole('button', { name: /use local gateway/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /connection settings/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /use this Mac/i })).toBeTruthy()
     } finally {
       restore()
     }
   })
 
-  it('opens gateway settings with a partial persisted remote config', async () => {
+  it('opens connection settings with a partial persisted remote config', async () => {
     const restore = stubDesktop({ mode: 'remote', remoteAuthMode: undefined, remoteUrl: undefined })
 
     try {
       render(<BootFailureOverlay />)
-      fireEvent.click(screen.getByRole('button', { name: /gateway settings/i }))
+      fireEvent.click(screen.getByRole('button', { name: /connection settings/i }))
 
       expect(await screen.findByRole('button', { name: /back/i })).toBeTruthy()
-      expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: /try again/i })).toBeNull()
     } finally {
       restore()
     }
@@ -239,8 +239,8 @@ describe('BootFailureOverlay', () => {
       // Cloud-down is a remote failure: local-only Repair is dropped; the
       // actionable paths are Gateway settings + Use local gateway.
       expect(screen.queryByRole('button', { name: /repair/i })).toBeNull()
-      expect(screen.getByRole('button', { name: /gateway settings/i })).toBeTruthy()
-      expect(screen.getByRole('button', { name: /use local gateway/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /connection settings/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /use this Mac/i })).toBeTruthy()
       // The electron-built error message (portal / local mode / Discord) is
       // still surfaced in the error box.
       expect(screen.getByText(/ares-3009\.agents\.nousresearch\.com/i)).toBeTruthy()
