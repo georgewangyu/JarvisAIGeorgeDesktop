@@ -88,6 +88,12 @@ it('shows detected local apps without claiming their access is connected', async
   expect(screen.getByText('WhatsApp')).toBeTruthy()
   expect(screen.getByText('App detection only. WhatsApp access is not connected yet.')).toBeTruthy()
   expect(screen.getByText('Not installed')).toBeTruthy()
+  expect(screen.getAllByText('Detected')).toHaveLength(3)
+
+  for (const detected of screen.getAllByText('Detected')) {
+    expect(detected.className).not.toContain('text-emerald')
+  }
+
   expect(screen.getByText('Browser research is set up when a task needs it.')).toBeTruthy()
   expect(screen.getByText('On demand')).toBeTruthy()
 })

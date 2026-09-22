@@ -261,7 +261,7 @@ export function ConnectionsView() {
             icon={Mail}
             label="Mail"
             status={
-              <Status active={permissions.apps.mail}>{permissions.apps.mail ? 'Detected' : 'Not installed'}</Status>
+              <Status>{permissions.apps.mail ? 'Detected' : 'Not installed'}</Status>
             }
           />
           <ConnectionRow
@@ -269,7 +269,7 @@ export function ConnectionsView() {
             icon={MessageCircle}
             label="Messages"
             status={
-              <Status active={permissions.apps.messages}>
+              <Status>
                 {permissions.apps.messages ? 'Detected' : 'Not installed'}
               </Status>
             }
@@ -279,7 +279,7 @@ export function ConnectionsView() {
             icon={NotebookTabs}
             label="Notes"
             status={
-              <Status active={permissions.apps.notes}>{permissions.apps.notes ? 'Detected' : 'Not installed'}</Status>
+              <Status>{permissions.apps.notes ? 'Detected' : 'Not installed'}</Status>
             }
           />
           <ConnectionRow
@@ -287,7 +287,7 @@ export function ConnectionsView() {
             icon={MessageCircle}
             label="WhatsApp"
             status={
-              <Status active={permissions.apps.whatsapp}>
+              <Status>
                 {permissions.apps.whatsapp ? 'Detected' : 'Not installed'}
               </Status>
             }
