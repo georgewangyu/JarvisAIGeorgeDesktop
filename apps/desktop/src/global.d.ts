@@ -660,6 +660,9 @@ export interface HermesTerminalExit {
 }
 
 export interface DesktopVersionInfo {
+  /** Version of the packaged Electron app; distinct from the Hermes engine version below. */
+  desktopAppVersion?: string
+  /** Hermes engine version, retained for the existing About/update surfaces. */
   appVersion: string
   electronVersion: string
   nodeVersion: string

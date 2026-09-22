@@ -17697,6 +17697,7 @@ ipcMain.handle('hermes:version', async () => {
 
   return {
     appVersion: resolveHermesVersion(),
+    desktopAppVersion: app.getVersion(),
     electronVersion: process.versions.electron,
     nodeVersion: process.versions.node,
     platform: process.platform,

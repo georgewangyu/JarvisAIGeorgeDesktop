@@ -81,7 +81,7 @@ export function PreferencesView() {
       </details>
       <section className="mt-10 flex items-center justify-between gap-4 border-t border-(--ui-stroke-tertiary) pt-8">
         <h2 className="text-sm font-medium">{s.appVersion}</h2>
-        <span className="text-sm text-muted-foreground">{version?.appVersion ?? '—'}</span>
+        <span className="text-sm text-muted-foreground">{version?.desktopAppVersion ?? '—'}</span>
       </section>
       <p className="mt-12 text-xs leading-5 text-muted-foreground">{s.local}</p>
     </ConsumerSettingsLayout>

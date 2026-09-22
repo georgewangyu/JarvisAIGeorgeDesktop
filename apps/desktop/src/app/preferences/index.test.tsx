@@ -53,7 +53,8 @@ it('opens connections without confusing the settings route with a chat', () => {
 
 it('shows the running app version from the desktop bridge without offering an updater', async () => {
   const getVersion = vi.fn().mockResolvedValue({
-    appVersion: '0.17.6', electronVersion: '40', nodeVersion: '24', platform: 'darwin', hermesRoot: '/synthetic'
+    appVersion: '0.21.3', desktopAppVersion: '0.17.6', electronVersion: '40', nodeVersion: '24',
+    platform: 'darwin', hermesRoot: '/synthetic'
   })
 
   Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { getVersion } })
@@ -61,6 +62,7 @@ it('shows the running app version from the desktop bridge without offering an up
   render(<MemoryRouter><PreferencesView /></MemoryRouter>)
 
   expect(await screen.findByText('0.17.6')).toBeTruthy()
+  expect(screen.queryByText('0.21.3')).toBeNull()
   expect(screen.getByRole('heading', { name: 'App version' })).toBeTruthy()
   expect(getVersion).toHaveBeenCalledOnce()
   expect(screen.queryByRole('button', { name: /check for updates/i })).toBeNull()
