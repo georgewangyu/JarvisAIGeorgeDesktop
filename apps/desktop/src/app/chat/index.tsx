@@ -6,6 +6,7 @@ import type { ReadableAtom } from 'nanostores'
 import type * as React from 'react'
 import { memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
+import { useNavigate } from 'react-router'
 
 import type { SubmitTextOptions } from '@/app/session/hooks/use-prompt-actions/utils'
 import { sessionShouldHaveTranscript } from '@/app/session/hooks/use-session-actions/utils'
@@ -16,6 +17,7 @@ import { COMPOSER_HEART_CONFIG, HeartField } from '@/components/chat/vibe-hearts
 import { usePaneGroup, usePaneVisible } from '@/components/pane-shell/pane-visibility'
 import { $hoveredTreeGroup, $sessionTileDragging, $sessionTileEdgeHover } from '@/components/pane-shell/tree/store'
 import { PromptOverlays } from '@/components/prompt-overlays'
+import { Codicon } from '@/components/ui/codicon'
 import { TitleMenuTrigger } from '@/components/ui/title-menu-trigger'
 import { type HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
@@ -50,8 +52,9 @@ import {
 import { $focusedStoredSessionId, $sessionStates, sessionTileDelegate } from '@/store/session-states'
 import { $transcriptTailBySessionId, transcriptTailState } from '@/store/transcript-tail'
 import { isAuxiliaryWindow, isWatchWindow } from '@/store/windows'
+import { useTheme } from '@/themes'
 
-import { primaryRouteSelectedSessionId, routeSessionId } from '../routes'
+import { CRON_ROUTE, primaryRouteSelectedSessionId, routeSessionId } from '../routes'
 import { titlebarHeaderBaseClass, titlebarHeaderShadowClass, titlebarHeaderTitleClass } from '../shell/titlebar'
 
 import { ChatDropOverlay } from './chat-drop-overlay'
@@ -72,6 +75,7 @@ import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { useSessionView } from './session-view'
+import { OPEN_CONSUMER_CHATS_EVENT } from './sidebar'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
 import {
@@ -130,6 +134,8 @@ function ChatHeader({
   onToggleSelectedPin,
   selectedSessionId
 }: ChatHeaderProps) {
+  const navigate = useNavigate()
+  const { themeName } = useTheme()
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const profiles = useStore($profiles)
@@ -152,6 +158,30 @@ function ChatHeader({
     : selectedSessionId
       ? pinnedSessionIds.includes(selectedSessionId)
       : false
+
+  if (themeName === 'jarvis') {
+    return (
+      <header className="consumer-chat-header" data-slot="consumer-chat-header">
+        <button
+          className="consumer-header-pill consumer-chats-trigger"
+          onClick={() => window.dispatchEvent(new Event(OPEN_CONSUMER_CHATS_EVENT))}
+          type="button"
+        >
+          <Codicon aria-hidden name="menu" size="0.9rem" />
+          <span>Chats</span>
+        </button>
+        <span className="consumer-chat-title">{title === NEW_SESSION_TITLE ? 'Jarvis' : title}</span>
+        <button
+          className="consumer-header-pill consumer-automations-trigger"
+          onClick={() => navigate(CRON_ROUTE)}
+          type="button"
+        >
+          <Codicon aria-hidden name="watch" size="0.9rem" />
+          <span>Automations</span>
+        </button>
+      </header>
+    )
+  }
 
   // Secondary windows (new-session scratch, subagent watch, cmd-click pop-out)
   // are compact side panels — they drop the session-actions header + border
@@ -368,7 +398,7 @@ export function ChatRuntimeBoundary({
 
       return true
     },
-    [runtimeId, storedId, tailProfile, view, history.page, history.revealOlder]
+    [history, runtimeId, storedId, tailProfile, view]
   )
 
   // An open history page carries its own reach: its first prompt is the anchor,

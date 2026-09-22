@@ -12,7 +12,7 @@ import { makeSessionInfo } from '@/test/session-info'
 
 import { $gatewayGroupOrder } from './gateway-group-preferences'
 
-import { ChatSidebar } from './index'
+import { ChatSidebar, OPEN_CONSUMER_CHATS_EVENT } from './index'
 
 // Gateway/profile groups reorder by drag as well as by the ⋯ menu's Move
 // up/down. The grab handle only reveals itself on hover, so the visible
@@ -48,7 +48,7 @@ afterEach(() => {
   $gatewayGroupOrder.set([])
 })
 
-const arrange = () => {
+const arrange = async () => {
   mount()
   act(() => {
     $connectionsRegistry.set({
@@ -68,18 +68,19 @@ const arrange = () => {
       )
     )
   })
+  act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_CHATS_EVENT)))
 
   const sectionIds = () =>
     [...document.querySelectorAll('[data-gateway-section]')].map(node => node.getAttribute('data-gateway-section'))
 
-  const device = screen.getByText('This device').closest('[data-gateway-section]') as HTMLElement
+  const device = (await screen.findByText('This device')).closest('[data-gateway-section]') as HTMLElement
   expect(sectionIds()).toEqual([JSON.stringify(['gateway', 'remote-1']), JSON.stringify(['gateway', 'local'])])
 
   return { device, sectionIds }
 }
 
 it('arms the reorder from a pointer press on the header label', async () => {
-  const { device } = arrange()
+  const { device } = await arrange()
   // Pointer path: a press on the fold label plus a move past the 6px
   // activation distance arms the sortable (jsdom has no layout, so the drop
   // itself cannot resolve a target here — arming is the assertion).
@@ -98,7 +99,7 @@ it('arms the reorder from a pointer press on the header label', async () => {
 })
 
 it('reorders gateway sections from the grabber by keyboard', async () => {
-  const { device, sectionIds } = arrange()
+  const { device, sectionIds } = await arrange()
   // Keyboard path: Space on the focused grabber arms the drag, ArrowUp moves it
   // over the previous item, Space drops. Drives the same listeners without
   // needing layout in jsdom.

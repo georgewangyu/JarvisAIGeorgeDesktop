@@ -28,13 +28,11 @@ import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
 import { $activeConnectionId } from '@/store/connections'
-import { $cronJobs } from '@/store/cron'
 import {
   $dismissedAutoProjectIds,
   $panesFlipped,
   $pinnedSessionIds,
   $sidebarCardRows,
-  $sidebarCronOpen,
   $sidebarFiltersActive,
   $sidebarGrouping,
   $sidebarMessagingOpenIds,
@@ -57,7 +55,6 @@ import {
   pinSession,
   SESSION_SEARCH_FOCUS_EVENT,
   setPinnedSessionOrder,
-  setSidebarCronOpen,
   setSidebarPinsOpen,
   setSidebarProjectOrderIds,
   setSidebarRecentsOpen,
@@ -130,14 +127,22 @@ import { markSessionUnread } from '@/store/session-unread-remote'
 import { $archivedSessions, loadArchivedSessions } from '@/store/sidebar-archive'
 import { $sidebarSessionRankIds } from '@/store/sidebar-sort'
 
-import { type AppView, CONNECTIONS_ROUTE, CRON_ROUTE, PREFERENCES_ROUTE } from '../../routes'
+import {
+  type AppView,
+  ARTIFACTS_ROUTE,
+  CONNECTIONS_ROUTE,
+  CRON_ROUTE,
+  FEED_ROUTE,
+  GOALS_ROUTE,
+  IDEAS_ROUTE,
+  PREFERENCES_ROUTE
+} from '../../routes'
 import { isJarvisMainChat } from '../../session/jarvis-main-chat'
 import type { SidebarNavItem } from '../../types'
 import type { NewSessionSplitHandler } from '../new-session-drag'
 
 import { SidebarSectionAddButton } from './chrome'
 import { ConsumerActivity } from './consumer-activity'
-import { SidebarCronJobsSection } from './cron-jobs-section'
 import { SidebarFilterMenu } from './filter-menu'
 import { useGatewaySessionGroups } from './gateway-group-model'
 import { SidebarLoadMoreRow } from './load-more-row'
@@ -195,10 +200,34 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     action: 'new-session'
   },
   {
-    id: 'chats',
-    label: 'Chats',
-    icon: props => <Codicon name="comment-discussion" {...props} />,
-    action: 'open-chats'
+    id: 'search',
+    label: 'Search',
+    icon: props => <Codicon name="search" {...props} />,
+    action: 'open-search'
+  },
+  {
+    id: 'feed',
+    label: 'Feed',
+    icon: props => <Codicon name="list-flat" {...props} />,
+    route: FEED_ROUTE
+  },
+  {
+    id: 'ideas',
+    label: 'Ideas',
+    icon: props => <Codicon name="lightbulb" {...props} />,
+    route: IDEAS_ROUTE
+  },
+  {
+    id: 'goals',
+    label: 'Goals',
+    icon: props => <Codicon name="pass" {...props} />,
+    route: GOALS_ROUTE
+  },
+  {
+    id: 'library',
+    label: 'Library',
+    icon: props => <Codicon name="library" {...props} />,
+    route: ARTIFACTS_ROUTE
   },
   {
     id: 'cron',
@@ -222,6 +251,8 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
 ]
 
 const AUTOMATIONS_NAV_ITEM = SIDEBAR_NAV.find(item => item.id === 'cron')!
+export const OPEN_CONSUMER_CHATS_EVENT = 'jarvis:open-chats'
+export const OPEN_CONSUMER_SEARCH_EVENT = 'jarvis:open-search'
 
 // Two modes via the `compact` height variant (styles.css):
 //   tall    → each section is shrink-0, capped, its own scroller; Sessions is flex-1.
@@ -321,9 +352,7 @@ export function ChatSidebar({
   onArchiveSession,
   onBranchSession,
   onNewSessionInWorkspace,
-  onNewSessionSplit,
-  onManageCronJob,
-  onTriggerCronJob
+  onNewSessionSplit
 }: ChatSidebarProps) {
   const { t } = useI18n()
   const s = t.sidebar
@@ -352,7 +381,6 @@ export function ChatSidebar({
   const unconfirmedPinWrites = useStore($unconfirmedPinWrites)
   const pinsOpen = useStore($sidebarPinsOpen)
   const agentsOpen = useStore($sidebarRecentsOpen)
-  const cronOpen = useStore($sidebarCronOpen)
   // The sidebar highlight tracks the FOCUSED session — the interacted tile's
   // tab, else the main selection — so it stays 1:1 with whatever tab is active.
   const selectedSessionId = useStore($focusedStoredSessionId)
@@ -360,7 +388,6 @@ export function ChatSidebar({
   const currentView = focusedSessionIsTile ? 'chat' : routeView
   const sessions = useStore($sessions)
   const cronSessions = useStore($cronSessions)
-  const cronJobs = useStore($cronJobs)
   const messagingSessions = useStore($messagingSessions)
   const messagingPlatformTotals = useStore($messagingPlatformTotals)
   const messagingTruncated = useStore($messagingTruncated)
@@ -420,6 +447,7 @@ export function ChatSidebar({
   const dismissedAutoProjects = useStore($dismissedAutoProjectIds)
   const [searchQuery, setSearchQuery] = useState('')
   const [chatsOpen, setChatsOpen] = useState(false)
+  const [drawerMode, setDrawerMode] = useState<'chats' | 'search'>('chats')
   const [serverMatches, setServerMatches] = useState<SessionSearchResult[]>([])
   const [searchPending, setSearchPending] = useState(false)
   const [messagingLoadMorePending, setMessagingLoadMorePending] = useState<Record<string, boolean>>({})
@@ -438,6 +466,42 @@ export function ChatSidebar({
 
     return () => window.removeEventListener(SESSION_SEARCH_FOCUS_EVENT, onFocus)
   }, [])
+
+  useEffect(() => {
+    const onOpenSearch = () => {
+      setDrawerMode('search')
+      setChatsOpen(true)
+      window.setTimeout(() => searchInputRef.current?.focus({ preventScroll: true }), 0)
+    }
+
+    window.addEventListener(OPEN_CONSUMER_SEARCH_EVENT, onOpenSearch)
+
+    return () => window.removeEventListener(OPEN_CONSUMER_SEARCH_EVENT, onOpenSearch)
+  }, [])
+
+  useEffect(() => {
+    const onOpenChats = () => {
+      setDrawerMode('chats')
+      setChatsOpen(true)
+    }
+
+    window.addEventListener(OPEN_CONSUMER_CHATS_EVENT, onOpenChats)
+
+    return () => window.removeEventListener(OPEN_CONSUMER_CHATS_EVENT, onOpenChats)
+  }, [])
+
+  const openNewSideChat = useCallback(() => {
+    setChatsOpen(false)
+    onNewSessionInWorkspace(null)
+  }, [onNewSessionInWorkspace])
+
+  const resumeFromDrawer = useCallback(
+    (sessionId: string, session?: SessionInfo) => {
+      setChatsOpen(false)
+      onResumeSession(sessionId, session)
+    },
+    [onResumeSession]
+  )
 
   const activeSidebarSessionId = currentView === 'chat' ? selectedSessionId : null
 
@@ -1458,23 +1522,17 @@ export function ChatSidebar({
       data-tour="sessions-sidebar"
     >
       <SidebarContent className="jarvis-consumer-rail gap-0 overflow-hidden bg-transparent px-1.5">
-        <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.5rem)]">
-          <SidebarGroupContent>
-            <SidebarMenu className="items-center gap-1.5">
+        <SidebarGroup className="min-h-0 flex-1 p-0 pb-3 pt-[calc(var(--titlebar-height)+0.75rem)]">
+          <SidebarGroupContent className="h-full">
+            <SidebarMenu className="h-full items-center gap-2">
               {SIDEBAR_NAV.map(item => {
                 const isInteractive = Boolean(item.action) || Boolean(item.route)
-                const isChats = item.action === 'open-chats'
+                const isSearch = item.action === 'open-search'
 
                 const active =
-                  (item.id === 'capabilities' && currentView === 'capabilities') ||
-                  (item.id === 'messaging' && currentView === 'messaging') ||
-                  (item.id === 'artifacts' && currentView === 'artifacts') ||
-                  (item.id === 'cron' && currentView === 'cron') ||
-                  (item.id === 'connections' && currentView === 'connections') ||
-                  (item.id === 'settings' && currentView === 'preferences') ||
-                  (item.id === 'chats' && chatsOpen) ||
-                  // Contributed rows light up at their own route.
-                  (currentView === 'extension' && Boolean(item.route) && pathname === item.route)
+                  (Boolean(item.route) && pathname === item.route) ||
+                  (item.id === 'new-session' && currentView === 'chat' && !chatsOpen) ||
+                  (item.id === 'search' && chatsOpen && drawerMode === 'search')
 
                 const isNewSession = item.id === 'new-session'
 
@@ -1507,8 +1565,10 @@ export function ChatSidebar({
                         $newChatProfile.set(null)
                       }
 
-                      if (isChats) {
+                      if (isSearch) {
+                        setDrawerMode('search')
                         setChatsOpen(true)
+                        window.setTimeout(() => searchInputRef.current?.focus({ preventScroll: true }), 0)
                       } else {
                         onNavigate(item)
                       }
@@ -1543,7 +1603,7 @@ export function ChatSidebar({
                 // New session + route-backed pages can open in a split —
                 // right-click for the directional "Open in split" submenu.
                 return (
-                  <SidebarMenuItem key={item.id}>
+                  <SidebarMenuItem className={item.id === 'connections' ? 'mt-auto' : undefined} key={item.id}>
                     {item.route ? (
                       <ContextMenu>
                         <ContextMenuTrigger asChild>{button}</ContextMenuTrigger>
@@ -1569,33 +1629,54 @@ export function ChatSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <Sheet modal={false} onOpenChange={setChatsOpen} open={chatsOpen}>
+        <Sheet
+          modal={false}
+          onOpenChange={open => {
+            setChatsOpen(open)
+
+            if (!open) {
+              setDrawerMode('chats')
+            }
+          }}
+          open={chatsOpen}
+        >
           <SheetContent
             className="jarvis-chat-drawer w-[20rem] max-w-[calc(100vw-4.5rem)] gap-0 p-0 sm:max-w-[20rem]"
+            showOverlay={false}
             side={panesFlipped ? 'right' : 'left'}
           >
-            <SheetHeader className="border-b border-(--ui-stroke-secondary) px-4 pb-3 pt-[calc(var(--titlebar-height)+0.75rem)]">
-              <SheetTitle>Chats</SheetTitle>
-              <SheetDescription>Your permanent Jarvis conversation and private side chats.</SheetDescription>
+            <SheetHeader className="border-b border-(--ui-stroke-secondary) px-4 pb-3 pt-12">
+              <SheetTitle className="text-lg tracking-tight">{drawerMode === 'search' ? 'Search' : 'Chats'}</SheetTitle>
+              <SheetDescription className="sr-only">
+                {drawerMode === 'search' ? 'Search Jarvis conversations' : 'Jarvis conversation and side chats'}
+              </SheetDescription>
             </SheetHeader>
 
             <div className="flex min-h-0 flex-1 flex-col px-2.5 pt-2">
               {showSessionSections && (
                 <div className="shrink-0 px-2 pb-1 pt-1">
-                  <div className="flex items-center justify-between">
-                    <Button onClick={() => onNewSessionInWorkspace(null)} size="sm" variant="ghost">
-                      <Codicon name="add" size="0.75rem" />
-                      {s.newSideChat}
-                    </Button>
-                    <ConsumerActivity
-                      automationSessions={activityAutomationSessions}
-                      onOpenAutomations={() => onNavigate(AUTOMATIONS_NAV_ITEM)}
-                      onOpenChat={onResumeSession}
-                      sessions={activitySessions}
-                    />
-                  </div>
+                  {drawerMode === 'chats' && (
+                    <div className="flex items-center justify-between">
+                      <Button onClick={openNewSideChat} size="sm" variant="ghost">
+                        <Codicon name="add" size="0.75rem" />
+                        {s.newSideChat}
+                      </Button>
+                      <ConsumerActivity
+                        automationSessions={activityAutomationSessions}
+                        onOpenAutomations={() => onNavigate(AUTOMATIONS_NAV_ITEM)}
+                        onOpenChat={resumeFromDrawer}
+                        sessions={activitySessions}
+                      />
+                    </div>
+                  )}
                   <SearchField
                     aria-label={s.searchAria}
+                    containerClassName={
+                      drawerMode === 'search'
+                        ? 'mt-1 w-full rounded-xl bg-(--ui-bg-secondary) px-3 py-1 opacity-100'
+                        : undefined
+                    }
+                    inputClassName={drawerMode === 'search' ? 'w-full [field-sizing:fixed]' : undefined}
                     inputRef={searchInputRef}
                     onChange={setSearchQuery}
                     placeholder={s.searchPlaceholder}
@@ -1627,7 +1708,7 @@ export function ChatSidebar({
                       onArchiveSession={onArchiveSession}
                       onBranchSession={onBranchSession}
                       onDeleteSession={onDeleteSession}
-                      onResumeSession={onResumeSession}
+                      onResumeSession={resumeFromDrawer}
                       onToggle={() => undefined}
                       onTogglePin={pinSession}
                       onToggleUnread={toggleUnread}
@@ -1650,7 +1731,7 @@ export function ChatSidebar({
                       onBranchSession={onBranchSession}
                       onDeleteSession={onDeleteSession}
                       onReorderSessions={reorderPinned}
-                      onResumeSession={onResumeSession}
+                      onResumeSession={resumeFromDrawer}
                       onToggle={() => setSidebarPinsOpen(!pinsOpen)}
                       onTogglePin={unpinSession}
                       onToggleUnread={toggleUnread}
@@ -1727,61 +1808,62 @@ export function ChatSidebar({
                       grouping={showArchived || rankedGlobally ? 'none' : grouping === 'status' ? 'status' : 'date'}
                       groups={displayAgentGroups}
                       headerAction={
-                        // One cluster, not a fragment: the header is justify-between,
-                        // so two children (mark-all + the rest) park the check-all in
-                        // the middle as a blank 24px hole until hover.
-                        <div className="flex shrink-0 items-center gap-0.5">
-                          {unreadCount > 0 && (
-                            <Tip label={s.markAllRead}>
-                              <Button
-                                aria-label={s.markAllRead}
-                                className={HEADER_ACTION_BTN}
-                                onClick={event => {
-                                  event.stopPropagation()
-                                  markAllSessionsRead()
-                                  // Ack the persisted layer too, or the next list
-                                  // refresh repaints every dot just dismissed.
-                                  ackAllSessionsRead()
-                                }}
-                                size="icon-xs"
-                                variant="ghost"
-                              >
-                                <Codicon name="check-all" size="0.75rem" />
-                              </Button>
-                            </Tip>
-                          )}
-                          {inProject && enteredProject ? (
-                            <div className="group/workspace flex shrink-0 items-center gap-0.5">
-                              {enteredProject.path && <StartWorkButton repoPath={enteredProject.path} />}
-                              {/* Home has no folder and no record to rename, theme, or delete. */}
-                              {!enteredProject.isNoProject && (
-                                <ProjectMenu
-                                  isActive={enteredProject.id === activeProjectId}
-                                  onExitScope={exitProjectScope}
-                                  project={enteredProject}
-                                  scoped
-                                />
-                              )}
-                              <div className="grid size-6 place-items-center">
-                                <Tip label={s.showProjects}>
-                                  <Button
-                                    aria-label={s.showProjects}
-                                    className={HEADER_NAV_BTN}
-                                    onClick={event => {
-                                      event.stopPropagation()
-                                      exitProjectScope()
-                                    }}
-                                    size="icon-xs"
-                                    variant="ghost"
-                                  >
-                                    <Codicon name="list-unordered" size="0.75rem" />
-                                  </Button>
-                                </Tip>
+                        drawerMode === 'search' ? undefined : (
+                          // One cluster, not a fragment: the header is justify-between,
+                          // so two children (mark-all + the rest) park the check-all in
+                          // the middle as a blank 24px hole until hover.
+                          <div className="flex shrink-0 items-center gap-0.5">
+                            {unreadCount > 0 && (
+                              <Tip label={s.markAllRead}>
+                                <Button
+                                  aria-label={s.markAllRead}
+                                  className={HEADER_ACTION_BTN}
+                                  onClick={event => {
+                                    event.stopPropagation()
+                                    markAllSessionsRead()
+                                    // Ack the persisted layer too, or the next list
+                                    // refresh repaints every dot just dismissed.
+                                    ackAllSessionsRead()
+                                  }}
+                                  size="icon-xs"
+                                  variant="ghost"
+                                >
+                                  <Codicon name="check-all" size="0.75rem" />
+                                </Button>
+                              </Tip>
+                            )}
+                            {inProject && enteredProject ? (
+                              <div className="group/workspace flex shrink-0 items-center gap-0.5">
+                                {enteredProject.path && <StartWorkButton repoPath={enteredProject.path} />}
+                                {/* Home has no folder and no record to rename, theme, or delete. */}
+                                {!enteredProject.isNoProject && (
+                                  <ProjectMenu
+                                    isActive={enteredProject.id === activeProjectId}
+                                    onExitScope={exitProjectScope}
+                                    project={enteredProject}
+                                    scoped
+                                  />
+                                )}
+                                <div className="grid size-6 place-items-center">
+                                  <Tip label={s.showProjects}>
+                                    <Button
+                                      aria-label={s.showProjects}
+                                      className={HEADER_NAV_BTN}
+                                      onClick={event => {
+                                        event.stopPropagation()
+                                        exitProjectScope()
+                                      }}
+                                      size="icon-xs"
+                                      variant="ghost"
+                                    >
+                                      <Codicon name="list-unordered" size="0.75rem" />
+                                    </Button>
+                                  </Tip>
+                                </div>
                               </div>
-                            </div>
-                          ) : (
-                            <>
-                              {/* The flat-list header "+" is a drag source too — the
+                            ) : (
+                              <>
+                                {/* The flat-list header "+" is a drag source too — the
                             same gesture as the nav's "New session" row: drag
                             it onto a chat zone's tab strip / edge / center to
                             create the session exactly there. Project-overview
@@ -1789,33 +1871,34 @@ export function ChatSidebar({
                             the project-drag variant: a drop opens the SAME
                             project dialog, and the created project starts at
                             the dropped spot. */}
-                              <SidebarSectionAddButton
-                                ariaLabel={agentsGrouped ? s.projects.newButton : s.newSideChat}
-                                onNewProjectDrag={
-                                  agentsGrouped
-                                    ? {
-                                        // Dragging the "New project" + arms WHERE the
-                                        // project should start; the dialog flow consumes
-                                        // it on create (see $newProjectDropPlacement).
-                                        onArm: placement => $newProjectDropPlacement.set(placement)
-                                      }
-                                    : undefined
-                                }
-                                onNewSessionSplit={agentsGrouped ? undefined : onNewSessionSplit}
-                                onPlainClick={() => {
-                                  if (agentsGrouped) {
-                                    openProjectCreate()
-                                  } else {
-                                    onNewSessionInWorkspace(null)
+                                <SidebarSectionAddButton
+                                  ariaLabel={agentsGrouped ? s.projects.newButton : s.newSideChat}
+                                  onNewProjectDrag={
+                                    agentsGrouped
+                                      ? {
+                                          // Dragging the "New project" + arms WHERE the
+                                          // project should start; the dialog flow consumes
+                                          // it on create (see $newProjectDropPlacement).
+                                          onArm: placement => $newProjectDropPlacement.set(placement)
+                                        }
+                                      : undefined
                                   }
-                                }}
-                              />
-                              <div className="grid size-6 place-items-center">
-                                <SidebarFilterMenu className={HEADER_NAV_BTN} />
-                              </div>
-                            </>
-                          )}
-                        </div>
+                                  onNewSessionSplit={agentsGrouped ? undefined : onNewSessionSplit}
+                                  onPlainClick={() => {
+                                    if (agentsGrouped) {
+                                      openProjectCreate()
+                                    } else {
+                                      onNewSessionInWorkspace(null)
+                                    }
+                                  }}
+                                />
+                                <div className="grid size-6 place-items-center">
+                                  <SidebarFilterMenu className={HEADER_NAV_BTN} />
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )
                       }
                       label={sessionsLabel}
                       labelMeta={
@@ -1838,7 +1921,7 @@ export function ChatSidebar({
                       onNewSessionSplit={onNewSessionSplit}
                       onReorderProjects={showAllProfiles ? undefined : reorderProjects}
                       onReorderSessions={showAllProfiles ? undefined : reorderSessions}
-                      onResumeSession={onResumeSession}
+                      onResumeSession={resumeFromDrawer}
                       onToggle={() => setSidebarRecentsOpen(!agentsOpen)}
                       onTogglePin={pinSession}
                       onToggleUnread={toggleUnread}
@@ -1899,7 +1982,7 @@ export function ChatSidebar({
                           }
                           onArchiveSession={onArchiveSession}
                           onDeleteSession={onDeleteSession}
-                          onResumeSession={onResumeSession}
+                          onResumeSession={resumeFromDrawer}
                           onToggle={() => toggleSidebarMessagingOpen(group.sourceId)}
                           onTogglePin={pinSession}
                           onToggleUnread={toggleUnread}
@@ -1910,22 +1993,10 @@ export function ChatSidebar({
                         />
                       )
                     })}
-
-                  {!trimmedQuery && !worktreeGroupingActive && cronJobs.length > 0 && (
-                    <SidebarCronJobsSection
-                      jobs={cronJobs}
-                      label={s.cronJobs}
-                      onManageJob={onManageCronJob}
-                      onOpenRun={onResumeSession}
-                      onToggle={() => setSidebarCronOpen(!cronOpen)}
-                      onTriggerJob={onTriggerCronJob}
-                      open={cronOpen}
-                    />
-                  )}
                 </div>
               )}
 
-              {!showSessionSections && <SidebarBlankState onNewChat={() => onNewSessionInWorkspace(null)} />}
+              {!showSessionSections && <SidebarBlankState onNewChat={openNewSideChat} />}
             </div>
           </SheetContent>
         </Sheet>

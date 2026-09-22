@@ -80,8 +80,8 @@ function SetupShell({ children, onBack, step }: { children: React.ReactNode; onB
           )}
           <span className="text-sm font-medium tracking-tight">JarvisAIGeorge</span>
         </div>
-        <span className="rounded-full bg-(--ui-bg-quaternary) px-2.5 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
-          Local preview
+        <span className="text-xs font-medium text-(--ui-text-tertiary)">
+          Step {STEPS.indexOf(step) + 1} of {STEPS.length}
         </span>
       </header>
 
@@ -183,15 +183,15 @@ export function JarvisSetupJourney({
               }}
               size="lg"
             >
-              Continue with ChatGPT / Codex
+              Get started
             </Button>
             <Button onClick={onConnectOther} size="sm" variant="text">
-              More ways to connect
+              Other AI providers
             </Button>
           </div>
 
           <p className="mt-6 text-xs leading-5 text-(--ui-text-tertiary)">
-            Provider sign-in opens after the local engine is ready. No API key is required for ChatGPT / Codex.
+            You’ll sign in securely with ChatGPT before setup finishes. No API key is required.
           </p>
           {startError ? <p className="mt-4 text-sm text-destructive">{startError}</p> : null}
         </div>
@@ -344,14 +344,14 @@ export function JarvisSetupJourney({
           {bootstrapComplete ? <Check className="size-9" strokeWidth={2} /> : <BrandMark className="size-12" />}
         </div>
         <h1 className="mt-7 text-4xl font-semibold tracking-[-0.04em]">
-          {bootstrapComplete ? 'Jarvis is ready' : bootstrapError ? 'Setup needs attention' : 'Finishing local setup'}
+          {bootstrapComplete ? 'Jarvis is ready' : bootstrapError ? 'Setup needs attention' : 'Preparing Jarvis'}
         </h1>
         <p className="mt-4 max-w-lg text-base leading-7 text-(--ui-text-secondary)">
           {bootstrapComplete
-            ? 'Next, choose your AI provider and complete sign-in.'
+            ? 'One last step: sign in with ChatGPT to start using Jarvis.'
             : bootstrapError
-              ? 'The local engine did not finish installing. Your permission choices were not lost.'
-              : 'Jarvis is installing its local engine in the background. This usually takes a few minutes the first time.'}
+              ? 'Jarvis could not finish setup. Your permission choices were saved.'
+              : 'Jarvis is finishing setup in the background. This can take a few minutes the first time.'}
         </p>
 
         <div className="mt-9 grid w-full max-w-sm gap-3">

@@ -7,7 +7,7 @@ import { useJarvisCopy } from '@/i18n/jarvis'
 import { useTheme } from '@/themes'
 import type { ThemeMode } from '@/themes/context'
 
-import { CONNECTIONS_ROUTE, SETTINGS_ROUTE } from '../routes'
+import { CONNECTIONS_ROUTE } from '../routes'
 
 import { ConsumerSettingsLayout } from './settings-layout'
 
@@ -50,9 +50,9 @@ export function PreferencesView() {
       <details className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
         <summary className="cursor-pointer text-base font-semibold">{t.settings.sections.advanced}</summary>
         <p className="mb-4 mt-3 text-sm text-muted-foreground">{s.advancedDetail}</p>
-        <Button onClick={() => navigate(SETTINGS_ROUTE)} variant="secondary">
-          {s.advancedOpen}
-        </Button>
+        <p className="text-sm text-muted-foreground">
+          Jarvis keeps provider, safety, and runtime details managed automatically in this preview.
+        </p>
       </details>
       <p className="mt-12 text-xs leading-5 text-muted-foreground">{s.local}</p>
     </ConsumerSettingsLayout>

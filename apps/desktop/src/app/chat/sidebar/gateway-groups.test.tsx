@@ -10,7 +10,7 @@ import { $newChatRoute, $profiles } from '@/store/profile'
 import { $sessionProfilesUsage, $sessions } from '@/store/session'
 import { makeSessionInfo } from '@/test/session-info'
 
-import { ChatSidebar } from './index'
+import { ChatSidebar, OPEN_CONSUMER_CHATS_EVENT } from './index'
 
 const noop = () => {}
 const resume = vi.fn()
@@ -76,6 +76,7 @@ it('keeps equal profile names on separate gateways and routes section creation a
       makeSessionInfo({ id: 'legacy', profile: 'default', title: 'Legacy session', last_active: Date.now() / 1000 })
     ])
   )
+  act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_CHATS_EVENT)))
   expect(screen.getAllByText(/\$3\.00/)).toHaveLength(1)
   expect(
     screen
@@ -106,13 +107,15 @@ it('keeps equal profile names on separate gateways and routes section creation a
     'cloud-1',
     expect.objectContaining({ connection_id: 'cloud-1', profile: 'default' })
   )
-  const group = within(gateway).getByText('default').closest('[data-gateway-group]')!
+  act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_CHATS_EVENT)))
+  const reopenedGateway = screen.getByText('Homelab').closest('[data-gateway-section]') as HTMLElement
+  const group = within(reopenedGateway).getByText('default').closest('[data-gateway-group]')!
   fireEvent.click(within(group as HTMLElement).getByRole('button', { name: 'Hide default sessions' }))
   expect(screen.queryByText('remote-1 session')).toBeNull()
   expect(screen.getByText('Work session')).toBeTruthy()
-  fireEvent.click(within(gateway).getByRole('button', { name: 'Hide Homelab sessions' }))
+  fireEvent.click(within(reopenedGateway).getByRole('button', { name: 'Hide Homelab sessions' }))
   expect(screen.queryByText('Work session')).toBeNull()
-  fireEvent.click(within(gateway).getByRole('button', { name: 'Show Homelab sessions' }))
+  fireEvent.click(within(reopenedGateway).getByRole('button', { name: 'Show Homelab sessions' }))
   expect(screen.getByText('Work session')).toBeTruthy()
   expect(screen.queryByText('remote-1 session')).toBeNull()
   expect(screen.getByText('local session')).toBeTruthy()

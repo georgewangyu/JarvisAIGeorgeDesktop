@@ -11,6 +11,7 @@ import { useStore } from '@nanostores/react'
 import { type ComponentProps, lazy, memo, type ReactNode, Suspense, useMemo } from 'react'
 import { Navigate, Route, Routes, useParams } from 'react-router'
 
+import { PageLoader } from '@/components/page-loader'
 import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { $activeConnectionId } from '@/store/connections'
@@ -40,6 +41,18 @@ const MessagingView = lazy(async () => ({ default: (await import('../messaging')
 const CapabilitiesView = lazy(async () => ({ default: (await import('../capabilities')).CapabilitiesView }))
 const ConnectionsView = lazy(async () => ({ default: (await import('../connections')).ConnectionsView }))
 const PreferencesView = lazy(async () => ({ default: (await import('../preferences')).PreferencesView }))
+const ConsumerFeedView = lazy(async () => ({ default: (await import('../consumer-pages')).ConsumerFeedView }))
+const ConsumerIdeasView = lazy(async () => ({ default: (await import('../consumer-pages')).ConsumerIdeasView }))
+const ConsumerGoalsView = lazy(async () => ({ default: (await import('../consumer-pages')).ConsumerGoalsView }))
+
+function ConsumerPageLoader() {
+  return (
+    <div className="flex h-full min-h-96 flex-col items-center justify-center gap-3 text-(--ui-text-tertiary)">
+      <PageLoader className="h-auto" label="Loading Jarvis" />
+      <span className="text-sm">Loading Jarvis…</span>
+    </div>
+  )
+}
 
 export function LegacySessionRedirect() {
   const { sessionId } = useParams()
@@ -183,7 +196,7 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
   // longer exists, and nothing has read it since.
   const page = (view: ReactNode) => (
     <div className="contents">
-      <Suspense fallback={null}>{view}</Suspense>
+      <Suspense fallback={<ConsumerPageLoader />}>{view}</Suspense>
     </div>
   )
 
@@ -196,6 +209,9 @@ export const ChatRoutesSurface = memo(function ChatRoutesSurface({
       <Route element={page(<ArtifactsView setStatusbarItemGroup={setStatusbarItemGroup} />)} path="artifacts" />
       <Route element={page(<ConnectionsView />)} path="connections" />
       <Route element={page(<PreferencesView />)} path="preferences" />
+      <Route element={page(<ConsumerFeedView />)} path="feed" />
+      <Route element={page(<ConsumerIdeasView />)} path="ideas" />
+      <Route element={page(<ConsumerGoalsView />)} path="goals" />
       <Route element={null} path="agents" />
       <Route element={null} path="command-center" />
       <Route element={null} path="cron" />

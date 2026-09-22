@@ -1,31 +1,29 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { group, split } from '@/components/pane-shell/tree/model'
-import { $layoutTree, noteActiveTreeGroup } from '@/components/pane-shell/tree/store'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { registry } from '@/contrib/registry'
-import { $selectedStoredSessionId, $sessions } from '@/store/session'
+import { $sessions } from '@/store/session'
 import { $removedSessionIds } from '@/store/session-removal'
 import { makeSessionInfo } from '@/test/session-info'
 
 import { type AppView, ROUTES_AREA, SIDEBAR_NAV_AREA } from '../../routes'
 
-import { ChatSidebar } from './index'
+import { ChatSidebar, OPEN_CONSUMER_CHATS_EVENT, OPEN_CONSUMER_SEARCH_EVENT } from './index'
 
 const noop = () => {}
 
 const noopAsync = async () => {}
 
-const sessionRows = [
-  makeSessionInfo({ id: 'tile-one', last_active: 2, profile: 'default', started_at: 1, title: 'Tile one' }),
-  makeSessionInfo({ id: 'tile-two', last_active: 2, profile: 'default', started_at: 1, title: 'Tile two' })
+const sessions = [
+  makeSessionInfo({ id: 'side-one', last_active: 2, profile: 'default', started_at: 1, title: 'Side chat one' }),
+  makeSessionInfo({ id: 'side-two', last_active: 3, profile: 'default', started_at: 1, title: 'Side chat two' })
 ]
 
-const renderSidebar = (pathname: string, currentView: AppView) =>
-  render(
+function renderSidebar(pathname = '/', currentView: AppView = 'chat', onResumeSession = vi.fn()) {
+  const result = render(
     <MemoryRouter initialEntries={[pathname]}>
       <SidebarProvider>
         <ChatSidebar
@@ -38,127 +36,70 @@ const renderSidebar = (pathname: string, currentView: AppView) =>
           onNavigate={noop}
           onNewSessionInWorkspace={noop}
           onNewSessionSplit={noop}
-          onResumeSession={noop}
+          onResumeSession={onResumeSession}
           onTriggerCronJob={noopAsync}
         />
       </SidebarProvider>
     </MemoryRouter>
   )
 
-const currentButtons = () =>
-  screen.queryAllByRole('button').filter(button => button.classList.contains('bg-(--ui-control-active-background)'))
-
-const expectOnlyCurrent = (label: string | null) => {
-  const button = label ? screen.getByRole('button', { name: label }) : null
-
-  expect(currentButtons()).toEqual(button ? [button] : [])
+  return { ...result, onResumeSession }
 }
 
-const expectOnlySelectedSession = (title: string | null) => {
-  const rows = ['Tile one', 'Tile two']
-    .map(label => screen.queryByText(label)?.closest('.group.row-hover'))
-    .filter(row => row !== undefined)
-
-  const selectedRows = rows.filter(row => row?.className.includes('bg-(--ui-row-active-background)'))
-  const expected = title ? [screen.getByText(title).closest('.group.row-hover')] : []
-
-  expect(selectedRows).toEqual(expected)
-}
-
-const focus = (groupId: null | string) => act(() => noteActiveTreeGroup(groupId))
-
-describe('ChatSidebar navigation activity', () => {
-  let disposeContributions: () => void
-
+describe('consumer chat navigation', () => {
   beforeEach(() => {
-    disposeContributions = registry.registerMany([
-      { area: ROUTES_AREA, id: 'kanban-page', data: { path: '/kanban' }, render: () => null },
-      { area: ROUTES_AREA, id: 'reports-page', data: { path: '/reports' }, render: () => null },
-      { area: SIDEBAR_NAV_AREA, id: 'kanban-nav', data: { codicon: 'project', label: 'Kanban', path: '/kanban' } },
-      { area: SIDEBAR_NAV_AREA, id: 'reports-nav', data: { codicon: 'graph', label: 'Reports', path: '/reports' } }
-    ])
-    $selectedStoredSessionId.set('tile-one')
-    $sessions.set(sessionRows)
+    $sessions.set(sessions)
     $removedSessionIds.set(new Set())
-    $layoutTree.set(
-      split('row', [
-        group(['workspace'], { active: 'workspace', id: 'workspace-group' }),
-        group(['session-tile:tile-one'], { active: 'session-tile:tile-one', id: 'tile-one-group' }),
-        group(['session-tile:tile-two'], { active: 'session-tile:tile-two', id: 'tile-two-group' })
-      ])
-    )
-    noteActiveTreeGroup('workspace-group')
   })
 
   afterEach(() => {
     cleanup()
-    disposeContributions()
-    $selectedStoredSessionId.set(null)
     $sessions.set([])
     $removedSessionIds.set(new Set())
-    $layoutTree.set(null)
-    noteActiveTreeGroup(null)
   })
 
-  it('keeps navigation and session activity coherent with the focused pane', () => {
-    renderSidebar('/kanban', 'extension')
-    expectOnlyCurrent('Kanban')
-    expectOnlySelectedSession(null)
+  it('keeps the rail focused on consumer destinations even when plugins contribute developer pages', () => {
+    const dispose = registry.registerMany([
+      { area: ROUTES_AREA, id: 'kanban-page', data: { path: '/kanban' }, render: () => null },
+      { area: SIDEBAR_NAV_AREA, id: 'kanban-nav', data: { codicon: 'project', label: 'Kanban', path: '/kanban' } }
+    ])
 
-    focus('tile-one-group')
-    expectOnlyCurrent(null)
-    expectOnlySelectedSession('Tile one')
+    renderSidebar()
 
-    focus('tile-two-group')
-    expectOnlyCurrent(null)
-    expectOnlySelectedSession('Tile two')
-
-    focus(null)
-    expectOnlyCurrent('Kanban')
-    expectOnlySelectedSession(null)
-
-    focus('tile-two-group')
-    act(() => {
-      $removedSessionIds.set(new Set(['tile-two']))
-      $sessions.set([sessionRows[0]])
-    })
-    expectOnlyCurrent(null)
-    expectOnlySelectedSession(null)
-
-    act(() => {
-      $removedSessionIds.set(new Set())
-      $sessions.set(sessionRows)
-    })
-
-    for (const [pathname, currentView, label] of [
-      ['/capabilities', 'capabilities', 'Capabilities'],
-      ['/messaging', 'messaging', 'Messaging'],
-      ['/artifacts', 'artifacts', 'Artifacts'],
-      ['/cron', 'cron', 'Scheduled jobs']
-    ] as const) {
-      cleanup()
-      focus('workspace-group')
-      renderSidebar(pathname, currentView)
-      expectOnlyCurrent(label)
-      expectOnlySelectedSession(null)
-
-      focus('tile-one-group')
-      expectOnlyCurrent(null)
-      expectOnlySelectedSession('Tile one')
-    }
-
-    cleanup()
-    focus('workspace-group')
-    renderSidebar('/reports', 'extension')
-    expectOnlyCurrent('Reports')
-
-    cleanup()
-    disposeContributions()
-    disposeContributions = noop
-    focus('workspace-group')
-    renderSidebar('/kanban', 'extension')
+    expect(screen.getByRole('button', { name: 'Jarvis' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Feed' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Ideas' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Goals' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Library' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Automations' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Connections' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Kanban' })).toBeNull()
-    expectOnlyCurrent(null)
-    expectOnlySelectedSession(null)
+
+    dispose()
+  })
+
+  it('opens Chats as a drawer and closes it after a side chat is selected', async () => {
+    const { onResumeSession } = renderSidebar()
+
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_CHATS_EVENT)))
+    expect(await screen.findByRole('dialog', { name: 'Chats' })).toBeTruthy()
+    fireEvent.click(screen.getByText('Side chat two'))
+
+    expect(onResumeSession).toHaveBeenCalledWith('side-two', expect.objectContaining({ title: 'Side chat two' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chats' })).toBeNull())
+  })
+
+  it('opens a dedicated Search drawer and focuses its query field', async () => {
+    renderSidebar()
+
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+
+    expect(await screen.findByRole('dialog', { name: 'Search' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'New side chat' })).toBeNull()
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Search chats' }) === window.document.activeElement).toBe(true)
+    )
   })
 })

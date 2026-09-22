@@ -17,6 +17,7 @@ import {
   PaginationPrevious
 } from '@/components/ui/pagination'
 import { RowButton } from '@/components/ui/row-button'
+import { SearchField } from '@/components/ui/search-field'
 import { Tip } from '@/components/ui/tooltip'
 import { getAllSessionMessages, listAllProfileSessions } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
@@ -36,10 +37,10 @@ import { fmtDayTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 
+import { ConsumerPage } from '../consumer-pages'
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { openSession } from '../open-session'
-import { PageSearchShell } from '../page-search-shell'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
 import {
@@ -316,51 +317,79 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const cellCtx: CellCtx = useMemo(() => ({ onOpen: openArtifact, onOpenChat: openChat }), [openArtifact, openChat])
 
   return (
-    <PageSearchShell
-      {...props}
-      activeTab={kindFilter}
-      onSearchChange={setQuery}
-      onTabChange={id => setKindFilter(id as typeof kindFilter)}
-      searchHidden={counts.all === 0}
-      searchHints={searchHints}
-      searchPlaceholder={a.search}
-      searchTrailingAction={
-        <Tip label={refreshing ? a.refreshing : a.refresh}>
-          <Button
-            aria-label={refreshing ? a.refreshing : a.refresh}
-            className="text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover) hover:text-foreground"
-            disabled={refreshing}
-            onClick={() => void refreshArtifacts()}
-            size="icon-titlebar"
-            variant="ghost"
-          >
-            {refreshing ? <TitlebarIcon name="loading" spinning /> : <TitlebarIcon name="refresh" />}
-          </Button>
-        </Tip>
-      }
-      searchValue={query}
-      tabs={[
-        { id: 'all', label: a.tabAll, meta: artifacts ? counts.all : null },
-        { id: 'image', label: a.tabImages, meta: artifacts ? counts.image : null },
-        { id: 'file', label: a.tabFiles, meta: artifacts ? counts.file : null },
-        { id: 'link', label: a.tabLinks, meta: artifacts ? counts.link : null }
-      ]}
-    >
-      {!artifacts ? (
-        <PageLoader label={a.indexing} />
-      ) : visibleArtifacts.length === 0 ? (
-        <div className="grid h-full place-items-center px-6 text-center">
-          <div>
-            <div className="text-sm font-medium">{a.noArtifactsTitle}</div>
-            <div className="mt-1 text-xs text-muted-foreground">{a.noArtifactsDesc}</div>
+    <ConsumerPage description="Files, images, and links Jarvis has created or collected for you." title="Library">
+      <section {...props} className={cn('space-y-6', props.className)}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-1 rounded-2xl bg-(--ui-bg-secondary) p-1">
+            {(
+              [
+                ['all', a.tabAll, counts.all],
+                ['image', a.tabImages, counts.image],
+                ['file', a.tabFiles, counts.file],
+                ['link', a.tabLinks, counts.link]
+              ] as const
+            ).map(([id, label, count]) => (
+              <Button
+                aria-pressed={kindFilter === id}
+                className="rounded-xl"
+                key={id}
+                onClick={() => setKindFilter(id)}
+                size="sm"
+                variant={kindFilter === id ? 'secondary' : 'ghost'}
+              >
+                {label}
+                {artifacts ? <span className="text-(--ui-text-tertiary)">{count}</span> : null}
+              </Button>
+            ))}
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            {counts.all > 0 ? (
+              <SearchField
+                aria-label={a.search}
+                containerClassName="rounded-xl bg-(--ui-bg-secondary) px-3 py-1 opacity-100"
+                hints={searchHints}
+                inputClassName="w-44 [field-sizing:fixed]"
+                onChange={setQuery}
+                placeholder={a.search}
+                value={query}
+              />
+            ) : null}
+            <Tip label={refreshing ? a.refreshing : a.refresh}>
+              <Button
+                aria-label={refreshing ? a.refreshing : a.refresh}
+                className="rounded-xl text-(--ui-text-tertiary)"
+                disabled={refreshing}
+                onClick={() => void refreshArtifacts()}
+                size="icon"
+                variant="secondary"
+              >
+                {refreshing ? <TitlebarIcon name="loading" spinning /> : <TitlebarIcon name="refresh" />}
+              </Button>
+            </Tip>
           </div>
         </div>
-      ) : (
-        <div className="h-full overflow-y-auto [scrollbar-gutter:stable]">
-          <div className="flex flex-col gap-3 px-3 pb-2">
+
+        {!artifacts ? (
+          <div className="grid min-h-72 place-items-center rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
+            <PageLoader label={a.indexing} />
+          </div>
+        ) : visibleArtifacts.length === 0 ? (
+          <div className="grid min-h-72 place-items-center rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-6 text-center">
+            <div>
+              <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-(--ui-bg-tertiary)">
+                <FolderOpen className="size-5 text-(--ui-text-secondary)" />
+              </div>
+              <div className="mt-5 text-lg font-semibold">{a.noArtifactsTitle}</div>
+              <div className="mx-auto mt-2 max-w-md text-sm leading-6 text-(--ui-text-tertiary)">
+                {a.noArtifactsDesc}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 pb-2">
             {visibleImageArtifacts.length > 0 && (
               <section className="flex flex-col">
-                <div className="sticky top-0 z-10 -mx-3 flex h-7 items-center gap-3 overflow-x-auto bg-background px-3">
+                <div className="flex h-7 items-center gap-3 overflow-x-auto">
                   <ArtifactsPagination
                     className="ml-auto justify-end px-0"
                     itemLabel={a.itemsImage}
@@ -386,7 +415,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
 
             {visibleFileArtifacts.length > 0 && (
               <section className="flex flex-col">
-                <div className="sticky top-0 z-10 -mx-3 flex h-7 items-center gap-3 overflow-x-auto bg-background px-3">
+                <div className="flex h-7 items-center gap-3 overflow-x-auto">
                   <ArtifactsPagination
                     className="ml-auto justify-end px-0"
                     itemLabel={itemsLabel(kindFilter, a)}
@@ -402,9 +431,9 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
               </section>
             )}
           </div>
-        </div>
-      )}
-    </PageSearchShell>
+        )}
+      </section>
+    </ConsumerPage>
   )
 }
 

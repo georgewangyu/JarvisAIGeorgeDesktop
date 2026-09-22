@@ -131,7 +131,7 @@ export interface SidebarNavItem {
   label: string
   icon: React.ComponentType<{ className?: string }>
   route?: string
-  action?: 'new-session' | 'open-chats'
+  action?: 'new-session' | 'open-chats' | 'open-search'
   /** Keybind action id — when set, the tooltip shows the keybind hint. */
   keybindActionId?: string
 }

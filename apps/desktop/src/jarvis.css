@@ -5,14 +5,14 @@
   /* Muse keeps the conversation deliberately narrow even in a wide window.
      The assistant should feel like one continuous correspondence, not an IDE
      canvas that happens to contain messages. */
-  --composer-width: 38rem;
+  --composer-width: 42rem;
   --conversation-text-font-size: 1rem;
   --conversation-line-height: 1.55rem;
   --conversation-turn-gap: 1.75rem;
   --composer-input-min-height: 2.875rem;
   --composer-surface-pad-x: 0.75rem;
   --composer-surface-pad-y: 0.625rem;
-  --composer-shell-pad-block-end: 1.5rem;
+  --composer-shell-pad-block-end: 1.25rem;
   --composer-control-size: 1.875rem;
   --composer-control-primary-size: 2rem;
   --composer-row-gap: 0.625rem;
@@ -58,7 +58,7 @@
 }
 
 :root[data-hermes-theme='jarvis'] [data-slot='aui_thread-content'] {
-  padding-top: 6.25rem;
+  padding-top: 4.5rem;
   padding-inline: 0.875rem;
 }
 
@@ -92,6 +92,11 @@
   letter-spacing: -0.03em;
 }
 
+:root[data-hermes-theme='jarvis']
+  [data-slot='aui_thread-viewport']:has([data-slot='aui_turn-pair'])::before {
+  display: none;
+}
+
 :root.dark[data-hermes-theme='jarvis'] [data-slot='aui_thread-viewport']::before {
   color: color-mix(in srgb, var(--ui-accent) 22%, white);
 }
@@ -112,14 +117,29 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-base) 4%, transparent);
 }
 
-:root[data-hermes-theme='jarvis'] [data-slot='aui_user-message-root'] > .composer-human-message {
-  width: fit-content;
+:root[data-hermes-theme='jarvis'] [data-slot='aui_user-message-root'] {
+  position: relative;
+  top: auto;
+  width: auto;
   max-width: 88%;
+  margin-right: 0;
+  margin-left: auto;
+  padding: 0 0 var(--conversation-turn-gap);
+  align-items: flex-end;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='aui_user-message-root'] .composer-human-message {
+  width: fit-content;
+  max-width: 100%;
   align-self: flex-end;
   border-color: transparent;
   border-radius: 1.25rem;
-  background: color-mix(in srgb, var(--ui-accent) 11%, var(--dt-card));
+  background: color-mix(in srgb, var(--ui-accent) 12%, var(--dt-card));
   box-shadow: none;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='thread-timeline'] {
+  display: none;
 }
 
 /* Model/version/debug chrome belongs in Advanced. The consumer shell should
@@ -129,17 +149,95 @@
 }
 
 :root[data-hermes-theme='jarvis'] [data-slot='sidebar'] {
-  background: color-mix(in srgb, var(--ui-bg-sidebar) 96%, transparent);
+  border-color: color-mix(in srgb, var(--ui-base) 7%, transparent);
+  background: color-mix(in srgb, var(--ui-bg-sidebar) 98%, transparent);
 }
 
 :root[data-hermes-theme='jarvis'] .jarvis-chat-drawer {
+  z-index: 120;
+  color: var(--ui-text-primary);
   background: var(--dt-background);
   box-shadow: 1rem 0 3rem color-mix(in srgb, var(--ui-base) 10%, transparent);
 }
 
 :root[data-hermes-theme='jarvis'] [data-slot='sidebar-menu-button'] svg {
-  width: 1.05rem;
-  height: 1.05rem;
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='sidebar-menu-button'] {
+  color: color-mix(in srgb, var(--ui-text-primary) 62%, transparent);
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='sidebar-menu-button']:hover {
+  color: var(--ui-text-primary);
+}
+
+:root[data-hermes-theme='jarvis'] [data-slot='sidebar-menu-button'].bg-\(--ui-control-active-background\) {
+  border-color: color-mix(in srgb, var(--ui-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--ui-accent) 13%, var(--ui-bg-sidebar));
+  color: color-mix(in srgb, var(--ui-accent) 58%, var(--ui-text-primary));
+}
+
+:root[data-hermes-theme='jarvis'] [data-titlebar-cluster] {
+  display: none;
+}
+
+:root[data-hermes-theme='jarvis'] .consumer-chat-header {
+  position: relative;
+  z-index: 55;
+  display: flex;
+  height: calc(var(--titlebar-height) + 0.875rem);
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.75rem 0;
+  background: transparent;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+
+:root[data-hermes-theme='jarvis'] .consumer-header-pill {
+  display: inline-flex;
+  height: 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--ui-base) 7%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dt-card) 92%, transparent);
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--ui-base) 7%, transparent);
+  color: var(--ui-text-primary);
+  font-size: 0.82rem;
+  font-weight: 570;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+:root[data-hermes-theme='jarvis'] .consumer-header-pill:hover {
+  background: color-mix(in srgb, var(--ui-accent) 8%, var(--dt-card));
+}
+
+:root[data-hermes-theme='jarvis'] .consumer-chat-title {
+  position: absolute;
+  left: 50%;
+  max-width: min(42rem, 42vw);
+  translate: -50% 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ui-base) 5%, transparent);
+  padding: 0.3rem 0.75rem;
+  color: color-mix(in srgb, var(--ui-text-primary) 82%, transparent);
+  font-size: 0.74rem;
+  font-weight: 560;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-hermes-theme='jarvis'] .jarvis-chat-drawer [data-slot='sheet-close'] {
+  top: 2.9rem;
+  right: 0.8rem;
 }
 
 :root[data-hermes-theme='jarvis'] .consumer-page {

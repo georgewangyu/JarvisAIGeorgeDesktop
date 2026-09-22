@@ -3,11 +3,10 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { useI18n } from '@/i18n'
 import { useJarvisCopy } from '@/i18n/jarvis'
 
 import { PAGE_INSET_X } from '../layout-constants'
-import { CONNECTIONS_ROUTE, PREFERENCES_ROUTE, SETTINGS_ROUTE } from '../routes'
+import { CONNECTIONS_ROUTE, PREFERENCES_ROUTE } from '../routes'
 
 interface ConsumerSettingsLayoutProps {
   section: 'general' | 'connections'
@@ -16,7 +15,6 @@ interface ConsumerSettingsLayoutProps {
 
 export function ConsumerSettingsLayout({ section, children }: ConsumerSettingsLayoutProps) {
   const navigate = useNavigate()
-  const { t } = useI18n()
   const s = useJarvisCopy()
 
   return (
@@ -41,10 +39,6 @@ export function ConsumerSettingsLayout({ section, children }: ConsumerSettingsLa
           variant={section === 'connections' ? 'secondary' : 'ghost'}
         >
           <Codicon name="plug" /> {s.connectionsNav}
-        </Button>
-        <div className="hidden flex-1 md:block" />
-        <Button className="justify-start" onClick={() => navigate(SETTINGS_ROUTE)} variant="ghost">
-          <Codicon name="settings" /> {t.settings.sections.advanced}
         </Button>
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto">

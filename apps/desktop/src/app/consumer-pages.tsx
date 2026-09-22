@@ -1,0 +1,259 @@
+import { useStore } from '@nanostores/react'
+import type { ReactNode } from 'react'
+import { useNavigate } from 'react-router'
+
+import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
+import { cn } from '@/lib/utils'
+import { setComposerDraft } from '@/store/composer'
+import { $cronJobs } from '@/store/cron'
+import { $goalsBySession, type GoalStatus } from '@/store/goals'
+import { $sessions } from '@/store/session'
+
+import { CRON_ROUTE, NEW_CHAT_ROUTE, sessionRoute } from './routes'
+
+export function ConsumerPage({
+  children,
+  description,
+  title
+}: {
+  children: ReactNode
+  description: string
+  title: string
+}) {
+  return (
+    <div className="consumer-page h-full overflow-y-auto bg-(--ui-chat-surface-background) pt-(--titlebar-height)">
+      <main className="mx-auto w-full max-w-3xl px-8 pb-20 pt-10">
+        <h1 className="text-3xl font-semibold tracking-[-0.035em]">{title}</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-(--ui-text-secondary)">{description}</p>
+        <div className="mt-9">{children}</div>
+      </main>
+    </div>
+  )
+}
+
+function EmptyState({ children, icon, title }: { children: ReactNode; icon: string; title: string }) {
+  return (
+    <div className="grid min-h-72 place-items-center rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-8 text-center">
+      <div>
+        <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-(--ui-bg-tertiary)">
+          <Codicon className="text-(--ui-text-secondary)" name={icon} size="1.25rem" />
+        </div>
+        <h2 className="mt-5 text-lg font-semibold">{title}</h2>
+        <div className="mx-auto mt-2 max-w-md text-sm leading-6 text-(--ui-text-tertiary)">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function formatRelativeTime(seconds: number): string {
+  const elapsed = Math.max(0, Date.now() - seconds * 1000)
+  const minutes = Math.floor(elapsed / 60_000)
+
+  if (minutes < 1) {
+    return 'Just now'
+  }
+
+  if (minutes < 60) {
+    return `${minutes}m ago`
+  }
+
+  const hours = Math.floor(minutes / 60)
+
+  if (hours < 24) {
+    return `${hours}h ago`
+  }
+
+  const days = Math.floor(hours / 24)
+
+  return `${days}d ago`
+}
+
+export function ConsumerFeedView() {
+  const navigate = useNavigate()
+  const sessions = useStore($sessions)
+  const jobs = useStore($cronJobs)
+
+  const recentSessions = [...sessions]
+    .filter(session => !session.archived)
+    .sort((a, b) => b.last_active - a.last_active)
+    .slice(0, 8)
+
+  return (
+    <ConsumerPage description="Recent conversations and scheduled work, collected in one calm timeline." title="Feed">
+      {recentSessions.length === 0 && jobs.length === 0 ? (
+        <EmptyState icon="list-flat" title="Nothing new yet">
+          Jarvis will collect recent conversations and automation activity here as you use the app.
+        </EmptyState>
+      ) : (
+        <div className="space-y-8">
+          {recentSessions.length > 0 ? (
+            <section>
+              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
+                Recent chats
+              </h2>
+              <div className="mt-3 overflow-hidden rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
+                {recentSessions.map(session => (
+                  <button
+                    className="flex w-full items-center gap-4 border-t border-(--ui-stroke-tertiary) px-5 py-4 text-left transition-colors first:border-t-0 hover:bg-(--ui-control-hover-background)"
+                    key={session.id}
+                    onClick={() => navigate(sessionRoute(session.id))}
+                    type="button"
+                  >
+                    <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-(--ui-bg-tertiary)">
+                      <Codicon name="comment-discussion" size="1rem" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{session.title || 'Untitled chat'}</span>
+                      <span className="mt-1 block truncate text-sm text-(--ui-text-tertiary)">
+                        {session.preview || 'Open this conversation'}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs text-(--ui-text-tertiary)">
+                      {formatRelativeTime(session.last_active)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {jobs.length > 0 ? (
+            <section>
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
+                  Scheduled
+                </h2>
+                <Button onClick={() => navigate(CRON_ROUTE)} size="sm" variant="text">
+                  View automations
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {jobs.slice(0, 4).map(job => (
+                  <button
+                    className="rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5 text-left transition-colors hover:bg-(--ui-control-hover-background)"
+                    key={job.id}
+                    onClick={() => navigate(CRON_ROUTE)}
+                    type="button"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{job.name || 'Scheduled task'}</span>
+                      <span className={cn('size-2 rounded-full', job.enabled ? 'bg-emerald-500' : 'bg-zinc-400')} />
+                    </div>
+                    <p className="mt-2 text-sm text-(--ui-text-tertiary)">
+                      {job.schedule_display || job.schedule?.display || (job.enabled ? 'Scheduled' : 'Paused')}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      )}
+    </ConsumerPage>
+  )
+}
+
+const IDEAS = [
+  ['Plan my day', 'Help me plan today around my calendar, priorities, and energy.'],
+  ['Catch me up', 'Give me a concise catch-up on what needs my attention today.'],
+  ['Prepare for a meeting', 'Help me prepare for an upcoming meeting and identify the decisions I need to make.'],
+  ['Organize a project', 'Turn a project I have in mind into a clear plan with milestones and next actions.'],
+  ['Research a decision', 'Help me research a decision, compare the options, and surface the tradeoffs.'],
+  ['Build a routine', 'Help me create a realistic recurring routine and decide what Jarvis should automate.']
+] as const
+
+export function ConsumerIdeasView() {
+  const navigate = useNavigate()
+
+  const startIdea = (prompt: string) => {
+    setComposerDraft(prompt)
+    navigate(NEW_CHAT_ROUTE)
+  }
+
+  return (
+    <ConsumerPage description="Useful starting points for everyday work. Pick one and make it yours." title="Ideas">
+      <div className="grid gap-4 sm:grid-cols-2">
+        {IDEAS.map(([title, prompt], index) => (
+          <button
+            className="group min-h-40 rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-6 text-left transition-all hover:-translate-y-0.5 hover:bg-(--ui-control-hover-background) hover:shadow-sm"
+            key={title}
+            onClick={() => startIdea(prompt)}
+            type="button"
+          >
+            <span className="grid size-10 place-items-center rounded-2xl bg-(--ui-bg-tertiary) text-(--ui-accent)">
+              <Codicon name={['calendar', 'bell', 'organization', 'map', 'search', 'history'][index]} size="1rem" />
+            </span>
+            <span className="mt-5 block font-semibold">{title}</span>
+            <span className="mt-2 block text-sm leading-5 text-(--ui-text-tertiary)">{prompt}</span>
+          </button>
+        ))}
+      </div>
+    </ConsumerPage>
+  )
+}
+
+const GOAL_TONE: Record<GoalStatus, string> = {
+  active: 'bg-emerald-500',
+  done: 'bg-(--ui-accent)',
+  paused: 'bg-amber-500',
+  waiting: 'bg-sky-500'
+}
+
+export function ConsumerGoalsView() {
+  const navigate = useNavigate()
+  const goals = useStore($goalsBySession)
+  const sessions = useStore($sessions)
+  const sessionById = new Map(sessions.map(session => [session.id, session]))
+  const items = Object.entries(goals).sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
+
+  const startGoal = () => {
+    setComposerDraft('Help me set a goal and turn it into a realistic plan: ')
+    navigate(NEW_CHAT_ROUTE)
+  }
+
+  return (
+    <ConsumerPage
+      description="Goals Jarvis is actively helping you move forward, without exposing worker agents."
+      title="Goals"
+    >
+      {items.length === 0 ? (
+        <EmptyState icon="pass" title="No active goals">
+          <p>Start with an outcome you care about. Jarvis can turn it into a plan and keep the work moving.</p>
+          <Button className="mt-5" onClick={startGoal}>
+            Start a goal
+          </Button>
+        </EmptyState>
+      ) : (
+        <div className="space-y-3">
+          {items.map(([sessionId, goal]) => {
+            const session = sessionById.get(sessionId)
+
+            return (
+              <button
+                className="flex w-full items-start gap-4 rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5 text-left transition-colors hover:bg-(--ui-control-hover-background)"
+                key={sessionId}
+                onClick={() => navigate(sessionRoute(sessionId))}
+                type="button"
+              >
+                <span className={cn('mt-2 size-2.5 shrink-0 rounded-full', GOAL_TONE[goal.status])} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{goal.title}</span>
+                  <span className="mt-1 block text-sm text-(--ui-text-tertiary)">
+                    {goal.detail || session?.title || 'Open the conversation'}
+                  </span>
+                </span>
+                <span className="rounded-full bg-(--ui-bg-tertiary) px-2.5 py-1 text-xs capitalize text-(--ui-text-secondary)">
+                  {goal.status}
+                </span>
+              </button>
+            )
+          })}
+          <Button className="mt-3" onClick={startGoal} variant="secondary">
+            Start another goal
+          </Button>
+        </div>
+      )}
+    </ConsumerPage>
+  )
+}

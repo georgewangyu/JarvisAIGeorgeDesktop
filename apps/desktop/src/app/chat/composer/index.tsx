@@ -396,7 +396,7 @@ export function ChatBar({
     poppedOut
   })
 
-  const stacked = adaptiveStacked || (themeName === 'jarvis' && !hudMode && !poppedOut)
+  const stacked = adaptiveStacked
 
   const hasComposerPayload = hasText || attachments.length > 0
   const canSubmit = busy || hasComposerPayload
