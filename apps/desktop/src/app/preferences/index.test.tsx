@@ -24,7 +24,12 @@ it('uses the shared appearance authority for mode and theme choices', () => {
   expect(setMode).toHaveBeenCalledWith('dark')
   fireEvent.click(screen.getByRole('button', { name: 'Use Jarvis theme' }))
   expect(setTheme).toHaveBeenCalledWith('jarvis')
-  expect(screen.getByText('Advanced').closest('details')?.open).toBe(false)
+  expect(
+    screen
+      .getAllByText('Advanced')
+      .find(element => element.closest('details'))
+      ?.closest('details')?.open
+  ).toBe(false)
 })
 
 it('opens connections without confusing the settings route with a chat', () => {

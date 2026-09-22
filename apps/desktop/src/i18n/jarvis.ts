@@ -2,6 +2,8 @@ import { useI18n } from '@/i18n'
 
 const copy = {
   en: {
+    general: 'General',
+    connectionsNav: 'Connections',
     runResult: 'Automation result',
     runEmpty: 'No new update from this run.',
     runError: 'Could not load this result. Try again.',
@@ -22,6 +24,8 @@ const copy = {
     local: 'Tasks send relevant context to your connected AI provider. Chat storage depends on your connection setup.'
   },
   ja: {
+    general: '一般',
+    connectionsNav: '接続',
     runResult: '自動化の結果',
     runEmpty: '今回の実行に新しい報告はありません。',
     runError: '結果を読み込めませんでした。もう一度お試しください。',
@@ -41,6 +45,8 @@ const copy = {
     local: 'タスクに関連する情報は接続先のAIプロバイダーに送信されます。チャットの保存先は接続設定によって異なります。'
   },
   zh: {
+    general: '通用',
+    connectionsNav: '连接',
     runResult: '自动化结果',
     runEmpty: '此次运行没有新消息。',
     runError: '无法加载结果，请重试。',
@@ -60,6 +66,8 @@ const copy = {
     local: '任务会将相关内容发送给已连接的 AI 提供商。聊天存储位置取决于连接设置。'
   },
   'zh-hant': {
+    general: '一般',
+    connectionsNav: '連線',
     runResult: '自動化結果',
     runEmpty: '此次執行沒有新消息。',
     runError: '無法載入結果，請重試。',

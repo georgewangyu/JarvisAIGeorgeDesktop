@@ -34,6 +34,11 @@ layout. Appearance is chosen in Settings; engine settings remain under
 Advanced. The Jarvis palette in `themes/presets.ts` owns SnackVoice lavender
 and warm neutral surfaces. Do not duplicate those colors in components.
 
+Consumer General and Connections share `preferences/settings-layout.tsx`:
+compact category navigation, one content scroller, utility-sized headings,
+and a horizontal navigation fallback on narrow windows. Categories only expose
+implemented controls; advanced runtime settings remain an explicit destination.
+
 1. **Flat, not boxed.** No card-in-card, no divider borders inside a panel.
    Group with whitespace and a single hairline, never nested rounded boxes.
 2. **Borderless elevation for floating panels.** Overlays float on

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { listOAuthProviders } from '@/api/config'
@@ -27,7 +28,11 @@ afterEach(() => {
 })
 
 it('does not treat a selected model as proof of an authenticated account', async () => {
-  render(<ConnectionsView />)
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
   await waitFor(() => expect(listOAuthProviders).toHaveBeenCalled())
   expect(screen.getByText('Not connected')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy()
@@ -43,7 +48,11 @@ it('refreshes account and model state immediately after successful sign-in', asy
     provider: 'openai-codex',
     model: 'connected-model'
   } as Awaited<ReturnType<typeof getGlobalModelInfo>>)
-  render(<ConnectionsView />)
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
   await waitFor(() => expect(listOAuthProviders).toHaveBeenCalledTimes(1))
   fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
   await screen.findByText('Connected')
