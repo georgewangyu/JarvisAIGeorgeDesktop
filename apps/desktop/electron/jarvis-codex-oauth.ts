@@ -30,6 +30,10 @@ function safeFailure(output: string): string {
     .filter(Boolean)
     .filter(line => !line.includes('https://'))
 
+  if (lines.some(line => /authorization timed out waiting for the local callback/i.test(line))) {
+    return 'The sign-in window expired. Choose Connect to try again.'
+  }
+
   return lines.at(-1) || 'ChatGPT sign-in did not finish. Please try again.'
 }
 
