@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router'
 
+import { LanguageSwitcher } from '@/components/language-switcher'
 import { Button } from '@/components/ui/button'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { useI18n } from '@/i18n'
@@ -22,7 +23,14 @@ export function PreferencesView() {
   return (
     <ConsumerSettingsLayout section="general">
       <h1 className="text-2xl font-semibold tracking-tight">{s.general}</h1>
-      <section className="mt-10 space-y-5">
+      <section className="mt-10 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold">{t.language.label}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t.language.description}</p>
+        </div>
+        <LanguageSwitcher />
+      </section>
+      <section className="mt-10 space-y-5 border-t border-(--ui-stroke-tertiary) pt-8">
         <h2 className="text-base font-semibold">{t.settings.sections.appearance}</h2>
         <SegmentedControl<ThemeMode>
           onChange={setMode}

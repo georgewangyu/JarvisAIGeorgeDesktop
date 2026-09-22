@@ -25,6 +25,8 @@ it('uses the shared appearance authority for mode and theme choices', () => {
   expect(setMode).toHaveBeenCalledWith('dark')
   fireEvent.click(screen.getByRole('button', { name: 'Use Jarvis theme' }))
   expect(setTheme).toHaveBeenCalledWith('jarvis')
+  expect(screen.getByRole('heading', { name: 'Language' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Switch language' })).toBeTruthy()
   expect(
     screen
       .getAllByText('Advanced')
