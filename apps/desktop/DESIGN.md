@@ -45,6 +45,11 @@ model-picker shortcut opens options when closed; HUD, pop-out, guided-chat and
 minimal-width behavior retain their existing contracts. No provider state is
 duplicated by the disclosure.
 
+The side-chat toolbar owns a compact Jarvis activity disclosure. It projects
+the existing session status model into consumer language (working, needs input,
+finished) and opens the owning visible chat; it never invents a second task log,
+shows worker topology, or steals focus for background changes.
+
 1. **Flat, not boxed.** No card-in-card, no divider borders inside a panel.
    Group with whitespace and a single hairline, never nested rounded boxes.
 2. **Borderless elevation for floating panels.** Overlays float on

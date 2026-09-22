@@ -2,6 +2,13 @@ import { useI18n } from '@/i18n'
 
 const copy = {
   en: {
+    activity: 'Jarvis activity',
+    activityDetail: 'Background work and updates from your chats.',
+    activityReady: 'Jarvis is ready',
+    activityReadyDetail: 'Nothing needs your attention.',
+    activityNeedsInput: 'Needs your input',
+    activityFinished: 'Finished — new update',
+    activityWorking: 'Working in the background',
     chatOptions: 'Chat options',
     general: 'General',
     connectionsNav: 'Connections',
@@ -25,6 +32,13 @@ const copy = {
     local: 'Tasks send relevant context to your connected AI provider. Chat storage depends on your connection setup.'
   },
   ja: {
+    activity: 'Jarvisのアクティビティ',
+    activityDetail: 'チャットのバックグラウンド作業と更新です。',
+    activityReady: 'Jarvisは準備できています',
+    activityReadyDetail: '対応が必要な項目はありません。',
+    activityNeedsInput: '入力が必要です',
+    activityFinished: '完了 — 新しい更新',
+    activityWorking: 'バックグラウンドで作業中',
     chatOptions: 'チャット設定',
     general: '一般',
     connectionsNav: '接続',
@@ -47,6 +61,13 @@ const copy = {
     local: 'タスクに関連する情報は接続先のAIプロバイダーに送信されます。チャットの保存先は接続設定によって異なります。'
   },
   zh: {
+    activity: 'Jarvis 活动',
+    activityDetail: '聊天中的后台工作和更新。',
+    activityReady: 'Jarvis 已就绪',
+    activityReadyDetail: '目前没有需要你处理的事项。',
+    activityNeedsInput: '需要你的输入',
+    activityFinished: '已完成 — 有新更新',
+    activityWorking: '正在后台处理',
     chatOptions: '聊天选项',
     general: '通用',
     connectionsNav: '连接',
@@ -69,6 +90,13 @@ const copy = {
     local: '任务会将相关内容发送给已连接的 AI 提供商。聊天存储位置取决于连接设置。'
   },
   'zh-hant': {
+    activity: 'Jarvis 活動',
+    activityDetail: '聊天中的背景工作和更新。',
+    activityReady: 'Jarvis 已就緒',
+    activityReadyDetail: '目前沒有需要你處理的事項。',
+    activityNeedsInput: '需要你的輸入',
+    activityFinished: '已完成 — 有新更新',
+    activityWorking: '正在背景處理',
     chatOptions: '聊天選項',
     general: '一般',
     connectionsNav: '連線',

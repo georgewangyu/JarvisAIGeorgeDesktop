@@ -135,6 +135,7 @@ import type { SidebarNavItem } from '../../types'
 import type { NewSessionSplitHandler } from '../new-session-drag'
 
 import { SidebarSectionAddButton } from './chrome'
+import { ConsumerActivity } from './consumer-activity'
 import { SidebarCronJobsSection } from './cron-jobs-section'
 import { SidebarFilterMenu } from './filter-menu'
 import { useGatewaySessionGroups } from './gateway-group-model'
@@ -453,6 +454,8 @@ export function ChatSidebar({
     // twice in the consumer UI.
     return filterSessionsByProfileScope(pool, profileScope).filter(session => !isJarvisMainChat(session))
   }, [sessions, archivedSessions, showArchived, profileScope])
+
+  const activitySessions = useMemo(() => filterSessionsByProfileScope(sessions, profileScope), [sessions, profileScope])
 
   // One predicate for the status/project filters, so the flat list and the
   // project lanes narrow by the same rule. A project lane holds rows the loaded
@@ -1547,10 +1550,13 @@ export function ChatSidebar({
 
         {showSessionSections && (
           <div className="shrink-0 px-2 pb-1 pt-1">
-            <Button onClick={() => onNewSessionInWorkspace(null)} size="sm" variant="ghost">
-              <Codicon name="add" size="0.75rem" />
-              {s.newSideChat}
-            </Button>
+            <div className="flex items-center justify-between">
+              <Button onClick={() => onNewSessionInWorkspace(null)} size="sm" variant="ghost">
+                <Codicon name="add" size="0.75rem" />
+                {s.newSideChat}
+              </Button>
+              <ConsumerActivity onOpenChat={onResumeSession} sessions={activitySessions} />
+            </div>
             <SearchField
               aria-label={s.searchAria}
               inputRef={searchInputRef}
