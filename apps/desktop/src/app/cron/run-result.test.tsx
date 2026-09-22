@@ -44,3 +44,17 @@ it('retries a failed read against the run owner instead of the active chat', asy
     { passive: true }
   )
 })
+
+it('refreshes an expanded result when its run receives a completion update', async () => {
+  vi.mocked(getSessionMessages).mockResolvedValueOnce({ session_id: 'run-one', messages: [] })
+  const run = { id: 'run-one', profile: 'owner', last_active: 1, message_count: 1, is_active: true } as SessionInfo
+  const { rerender } = render(<AutomationRunResult run={run} />)
+  await screen.findByText('No new update from this run.')
+  vi.mocked(getSessionMessages).mockResolvedValueOnce({
+    session_id: 'run-one',
+    messages: [{ role: 'assistant', content: 'Finished in the background' }]
+  })
+  rerender(<AutomationRunResult run={{ ...run, last_active: 2, message_count: 2, is_active: false }} />)
+  await screen.findByText('Finished in the background')
+  expect(getSessionMessages).toHaveBeenCalledTimes(2)
+})

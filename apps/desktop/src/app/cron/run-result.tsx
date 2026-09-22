@@ -49,7 +49,7 @@ export function AutomationRunResult({ run }: { run: SessionInfo }) {
     return () => {
       cancelled = true
     }
-  }, [run.id, run.profile, attempt])
+  }, [run.id, run.profile, run.last_active, run.message_count, run.is_active, attempt])
 
   return (
     <div aria-label={s.runResult} className="my-3 rounded-xl bg-(--ui-bg-secondary) p-5" role="region">

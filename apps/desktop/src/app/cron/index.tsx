@@ -83,6 +83,7 @@ import {
   toggleCronDeliveryTarget,
   validateCronEditor
 } from './cron-job-model'
+import { JobActions } from './job-actions'
 import { jobState, jobTitle, nextRunOverdueMs, STATE_DOT } from './job-state'
 import { AutomationRunResult } from './run-result'
 
@@ -792,7 +793,6 @@ interface CronJobDetailProps {
 
 function CronJobDetail({ busy, c, job, onEdit, onOpenSession, onPauseResume, onTrigger }: CronJobDetailProps) {
   const state = jobState(job)
-  const isPaused = state === 'paused'
   const deliver = jobDeliver(job)
   const prompt = jobPrompt(job)
   const modelOverride = jobModel(job)
@@ -805,14 +805,7 @@ function CronJobDetail({ busy, c, job, onEdit, onOpenSession, onPauseResume, onT
             <h3 className="text-[0.95rem] font-semibold tracking-tight text-foreground">{jobTitle(job)}</h3>
             <PanelPill tone={STATE_TONE[state] ?? 'muted'}>{c.states[state] ?? state}</PanelPill>
           </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <PanelAction disabled={busy} icon={isPaused ? 'play' : 'debug-pause'} onClick={onPauseResume}>
-              {isPaused ? c.resumeTitle : c.pauseTitle}
-            </PanelAction>
-            <PanelAction disabled={busy} icon="zap" onClick={onTrigger} primary>
-              {c.triggerNow}
-            </PanelAction>
-          </div>
+          <JobActions busy={busy} c={c} onPauseResume={onPauseResume} onTrigger={onTrigger} state={state} />
         </div>
 
         <PanelMeta

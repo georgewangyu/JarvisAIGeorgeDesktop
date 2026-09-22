@@ -19,7 +19,7 @@ const copy = {
     open: 'Manage connections',
     advancedDetail: 'Provider, safety, voice, and runtime controls for when you need them.',
     advancedOpen: 'Open advanced settings',
-    local: 'Your chats stay on this Mac. Tasks send relevant context to your connected AI provider.'
+    local: 'Tasks send relevant context to your connected AI provider. Chat storage depends on your connection setup.'
   },
   ja: {
     runResult: '自動化の結果',
@@ -38,7 +38,7 @@ const copy = {
     open: '接続を管理',
     advancedDetail: '必要に応じてプロバイダー、安全性、音声、実行環境を設定します。',
     advancedOpen: '詳細設定を開く',
-    local: 'チャットはこのMacに保存されます。タスクに関連する情報は接続先のAIプロバイダーに送信されます。'
+    local: 'タスクに関連する情報は接続先のAIプロバイダーに送信されます。チャットの保存先は接続設定によって異なります。'
   },
   zh: {
     runResult: '自动化结果',
@@ -57,7 +57,7 @@ const copy = {
     open: '管理连接',
     advancedDetail: '按需配置提供商、安全、语音和运行环境。',
     advancedOpen: '打开高级设置',
-    local: '聊天保存在这台 Mac 上。任务会将相关内容发送给已连接的 AI 提供商。'
+    local: '任务会将相关内容发送给已连接的 AI 提供商。聊天存储位置取决于连接设置。'
   },
   'zh-hant': {
     runResult: '自動化結果',
@@ -76,7 +76,7 @@ const copy = {
     open: '管理連線',
     advancedDetail: '按需設定供應商、安全、語音和執行環境。',
     advancedOpen: '開啟進階設定',
-    local: '聊天儲存在這台 Mac 上。任務會將相關內容傳送給已連線的 AI 供應商。'
+    local: '任務會將相關內容傳送給已連線的 AI 供應商。聊天儲存位置取決於連線設定。'
   }
 }
 
