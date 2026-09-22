@@ -59,7 +59,7 @@ const isConnectingShown = () =>
   screen.queryAllByText((_, el) => /^CONN[/\\|\-_=+<>~:*A-Z]*$/.test(el?.textContent?.trim() ?? '')).length > 0
 
 const isRecoveryShown = () =>
-  Boolean(screen.queryByText(/use local gateway/i) || screen.queryByText(/retry/i) || screen.queryByText(/sign in/i))
+  Boolean(screen.queryByText(/use this mac/i) || screen.queryByText(/try again/i) || screen.queryByText(/sign in/i))
 
 describe('connecting overlay vs recovery surface', () => {
   it('hard initial-boot failure surfaces the recovery overlay (the working path)', async () => {
@@ -194,7 +194,7 @@ describe('connecting overlay vs recovery surface', () => {
 
     // Escape hatch is reachable; the connecting overlay bows out.
     expect(isRecoveryShown()).toBe(true)
-    expect(screen.getByRole('button', { name: /gateway settings/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /connection settings/i })).toBeTruthy()
     expect(isConnectingShown()).toBe(false)
   })
 })

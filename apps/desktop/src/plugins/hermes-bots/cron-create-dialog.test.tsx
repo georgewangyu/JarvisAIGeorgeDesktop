@@ -105,7 +105,7 @@ describe('where the run\u2019s output lands', () => {
     render(<CreateRoutineDialog bot={{ name: 'ops' }} onClose={() => undefined} open />)
     fillRequiredFields()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create cron' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create automation' }))
 
     await waitFor(() => expect(request).toHaveBeenCalled())
 
@@ -121,7 +121,7 @@ describe('where the run\u2019s output lands', () => {
 
     fireEvent.click(controlUnder('Send results to'))
     fireEvent.click(screen.getByRole('option', { name: /chat \(bot responds\)/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Create cron' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create automation' }))
 
     await waitFor(() => expect(request).toHaveBeenCalled())
 
