@@ -99,24 +99,42 @@ export function ConnectionsView() {
   const [refreshing, setRefreshing] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [signedIn, setSignedIn] = useState(false)
+
+  const [accountState, setAccountState] = useState<'checking' | 'connected' | 'disconnected' | 'unavailable'>(
+    'checking'
+  )
 
   const refresh = useCallback(async () => {
     setRefreshing(true)
 
     try {
-      const [snapshot, accounts] = await Promise.all([
+      const [snapshotResult, accountsResult] = await Promise.allSettled([
         window.hermesDesktop?.jarvisOnboarding?.getPermissions?.(),
         listOAuthProviders()
       ])
 
-      setSignedIn(accounts.providers.some(provider => provider.id === 'openai-codex' && provider.status.logged_in))
+      const failures: string[] = []
 
-      if (snapshot) {
-        setPermissions(snapshot)
+      if (accountsResult.status === 'fulfilled') {
+        setAccountState(
+          accountsResult.value.providers.some(provider => provider.id === 'openai-codex' && provider.status.logged_in)
+            ? 'connected'
+            : 'disconnected'
+        )
+      } else {
+        setAccountState('unavailable')
+        failures.push('Could not check your AI account.')
       }
 
-      setError(null)
+      if (snapshotResult.status === 'fulfilled') {
+        if (snapshotResult.value) {
+          setPermissions(snapshotResult.value)
+        }
+      } else {
+        failures.push('Could not check Mac permissions.')
+      }
+
+      setError(failures.length > 0 ? failures.join(' ') : null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not check this Mac.')
     } finally {
@@ -158,7 +176,7 @@ export function ConnectionsView() {
         <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
           <ConnectionRow
             action={
-              signedIn ? null : (
+              accountState === 'disconnected' ? (
                 <Button
                   disabled={signingIn}
                   loading={signingIn}
@@ -189,16 +207,26 @@ export function ConnectionsView() {
                 >
                   Connect
                 </Button>
-              )
+              ) : null
             }
             detail={
-              signedIn && currentProvider === 'openai-codex'
+              accountState === 'connected' && currentProvider === 'openai-codex'
                 ? currentModel
                 : 'Use your ChatGPT or Codex subscription. No API key required.'
             }
             icon={KeyRound}
             label="ChatGPT / Codex"
-            status={<Status active={signedIn}>{signedIn ? 'Connected' : 'Not connected'}</Status>}
+            status={
+              <Status active={accountState === 'connected'}>
+                {accountState === 'connected'
+                  ? 'Connected'
+                  : accountState === 'disconnected'
+                    ? 'Not connected'
+                    : accountState === 'checking'
+                      ? 'Checking'
+                      : 'Unavailable'}
+              </Status>
+            }
           />
         </div>
       </section>

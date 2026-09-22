@@ -33,9 +33,76 @@ it('does not treat a selected model as proof of an authenticated account', async
       <ConnectionsView />
     </MemoryRouter>
   )
-  await waitFor(() => expect(listOAuthProviders).toHaveBeenCalled())
-  expect(screen.getByText('Not connected')).toBeTruthy()
+  await screen.findByText('Not connected')
   expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy()
+})
+
+it('keeps Mac permission results when the AI account check fails', async () => {
+  vi.mocked(listOAuthProviders).mockRejectedValue(new Error('Account request failed'))
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: {
+      jarvisOnboarding: {
+        getPermissions: vi.fn().mockResolvedValue({
+          apps: { mail: true, messages: false, notes: false, whatsapp: false },
+          fullDiskAccess: 'granted',
+          microphone: 'not-determined',
+          platform: 'darwin'
+        })
+      }
+    }
+  })
+
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
+
+  await screen.findByText('Unavailable')
+  expect(screen.getByText('Allowed')).toBeTruthy()
+  expect(screen.getByText('Could not check your AI account.')).toBeTruthy()
+  expect(screen.queryByText('Not connected')).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
+})
+
+it('recovers the account state after a failed check and refresh', async () => {
+  const connected = makeOAuthProvider('openai-codex')
+  connected.status.logged_in = true
+  vi.mocked(listOAuthProviders)
+    .mockRejectedValueOnce(new Error('Temporary account failure'))
+    .mockResolvedValue({ providers: [connected] })
+
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
+
+  await screen.findByText('Unavailable')
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+  await screen.findByText('Connected')
+  expect(screen.queryByText('Could not check your AI account.')).toBeNull()
+})
+
+it('keeps a verified AI account when the Mac permission check fails', async () => {
+  const connected = makeOAuthProvider('openai-codex')
+  connected.status.logged_in = true
+  vi.mocked(listOAuthProviders).mockResolvedValue({ providers: [connected] })
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisOnboarding: { getPermissions: vi.fn().mockRejectedValue(new Error('Mac request failed')) } }
+  })
+
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
+
+  await screen.findByText('Connected')
+  expect(screen.getByText('Could not check Mac permissions.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
 })
 
 it('refreshes account and model state immediately after successful sign-in', async () => {
