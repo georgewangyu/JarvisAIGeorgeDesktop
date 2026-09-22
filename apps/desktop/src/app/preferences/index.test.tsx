@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
@@ -12,6 +12,7 @@ vi.mock('@/themes', () => ({
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  Reflect.deleteProperty(window, 'hermesDesktop')
 })
 
 it('uses the shared appearance authority for mode and theme choices', () => {
@@ -43,4 +44,37 @@ it('opens connections without confusing the settings route with a chat', () => {
   )
   fireEvent.click(screen.getByRole('button', { name: 'Manage connections' }))
   expect(screen.getByText('Connection destination')).toBeTruthy()
+})
+
+it('shows the real macOS quick-chat registration and saves its setting through the desktop bridge', async () => {
+  const getSettings = vi.fn().mockResolvedValue({
+    enabled: true,
+    error: null,
+    registered: true,
+    shortcut: 'CommandOrControl+Shift+Space'
+  })
+
+  const setSettings = vi.fn().mockResolvedValue({
+    enabled: false,
+    error: null,
+    registered: false,
+    shortcut: 'CommandOrControl+Shift+Space'
+  })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { quickEntry: { getSettings, setSettings } }
+  })
+
+  render(
+    <MemoryRouter>
+      <PreferencesView />
+    </MemoryRouter>
+  )
+
+  expect(screen.getByRole('heading', { name: 'Quick chat' })).toBeTruthy()
+  await waitFor(() => expect(screen.getByText('Shortcut is active.')).toBeTruthy())
+  expect(getSettings).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByRole('switch', { name: 'Quick Entry' }))
+  await waitFor(() => expect(setSettings).toHaveBeenCalledWith({ enabled: false }))
 })
