@@ -60,3 +60,34 @@ it('refreshes account and model state immediately after successful sign-in', asy
   expect(setGlobalModel).toHaveBeenCalled()
   expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
 })
+
+it('shows detected local apps without claiming their access is connected', async () => {
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: {
+      jarvisOnboarding: {
+        getPermissions: vi.fn().mockResolvedValue({
+          apps: { mail: true, messages: true, notes: true, whatsapp: false },
+          fullDiskAccess: 'not-determined',
+          microphone: 'not-determined',
+          platform: 'darwin'
+        })
+      }
+    }
+  })
+
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
+
+  await screen.findByText('App detection only. Mail access is not connected yet.')
+  expect(screen.getByText('App detection only. Message access is not connected yet.')).toBeTruthy()
+  expect(screen.getByText('App detection only. Notes access is not connected yet.')).toBeTruthy()
+  expect(screen.getByText('WhatsApp')).toBeTruthy()
+  expect(screen.getByText('App detection only. WhatsApp access is not connected yet.')).toBeTruthy()
+  expect(screen.getByText('Not installed')).toBeTruthy()
+  expect(screen.getByText('Browser research is set up when a task needs it.')).toBeTruthy()
+  expect(screen.getByText('On demand')).toBeTruthy()
+})

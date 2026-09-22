@@ -257,7 +257,7 @@ export function ConnectionsView() {
         <p className="mt-1 text-sm text-(--ui-text-tertiary)">{s.appInventoryDetail}</p>
         <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
           <ConnectionRow
-            detail="Find messages and prepare replies."
+            detail="App detection only. Mail access is not connected yet."
             icon={Mail}
             label="Mail"
             status={
@@ -265,7 +265,7 @@ export function ConnectionsView() {
             }
           />
           <ConnectionRow
-            detail="Find conversations and prepare messages."
+            detail="App detection only. Message access is not connected yet."
             icon={MessageCircle}
             label="Messages"
             status={
@@ -275,7 +275,7 @@ export function ConnectionsView() {
             }
           />
           <ConnectionRow
-            detail="Find, summarize, and update notes when requested."
+            detail="App detection only. Notes access is not connected yet."
             icon={NotebookTabs}
             label="Notes"
             status={
@@ -283,10 +283,20 @@ export function ConnectionsView() {
             }
           />
           <ConnectionRow
-            detail="Use approved browser context for research and web tasks."
+            detail="App detection only. WhatsApp access is not connected yet."
+            icon={MessageCircle}
+            label="WhatsApp"
+            status={
+              <Status active={permissions.apps.whatsapp}>
+                {permissions.apps.whatsapp ? 'Detected' : 'Not installed'}
+              </Status>
+            }
+          />
+          <ConnectionRow
+            detail="Browser research is set up when a task needs it."
             icon={Globe}
             label="Browser"
-            status={<Status active>Available</Status>}
+            status={<Status>On demand</Status>}
           />
         </div>
       </section>
