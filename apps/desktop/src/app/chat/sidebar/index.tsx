@@ -738,6 +738,10 @@ export function ChatSidebar({
     return [...out.values()]
   }, [trimmedQuery, sortedSessions, serverMatches, sessionByAnyId])
 
+  const matchingPages = trimmedQuery
+    ? SIDEBAR_NAV.filter(item => item.route && item.label.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : []
+
   const unpinnedAgentSessions = useMemo(
     () => sortedSessions.filter(s => !isPinnedSession(s)),
     [sortedSessions, isPinnedSession]
@@ -1728,11 +1732,35 @@ export function ChatSidebar({
                     </div>
                   )}
                   {trimmedQuery && (
+                    matchingPages.length > 0 ? (
+                      <div className="px-2 pb-3 pt-1">
+                        <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wider text-(--ui-text-tertiary)">
+                          Pages
+                        </div>
+                        {matchingPages.map(item => (
+                          <Button
+                            className="w-full justify-start"
+                            key={item.id}
+                            onClick={() => {
+                              setChatsOpen(false)
+                              onNavigate(item)
+                            }}
+                            size="sm"
+                            variant="ghost"
+                          >
+                            <item.icon className="size-3" />
+                            {item.label}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null
+                  )}
+                  {trimmedQuery && (
                     <SidebarSessionsSection
                       activeSessionId={activeSidebarSessionId}
                       contentClassName={cn('flex min-h-0 flex-1 flex-col gap-px pb-1.75', SCROLL_Y)}
                       emptyState={
-                        searchPending ? (
+                        matchingPages.length > 0 ? null : searchPending ? (
                           <SidebarSessionSkeletons />
                         ) : (
                           <div className="wrap-anywhere grid min-h-24 place-items-center rounded-lg px-2 text-center text-xs text-(--ui-text-tertiary)">

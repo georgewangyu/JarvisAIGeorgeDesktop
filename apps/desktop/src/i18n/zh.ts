@@ -2908,8 +2908,8 @@ export const zh = defineLocale({
       artifacts: '产物',
       cron: '定时任务'
     },
-    searchAria: '搜索会话',
-    searchPlaceholder: '搜索会话…',
+    searchAria: '搜索聊天和页面',
+    searchPlaceholder: '搜索聊天和页面…',
     clearSearch: '清除搜索',
     noMatch: query => `没有会话匹配"${query}"。`,
     results: '结果',

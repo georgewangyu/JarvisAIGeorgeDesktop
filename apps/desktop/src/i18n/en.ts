@@ -2767,8 +2767,8 @@ export const en: Translations = {
       artifacts: 'Artifacts',
       cron: 'Automations'
     },
-    searchAria: 'Search chats',
-    searchPlaceholder: 'Search chats…',
+    searchAria: 'Search chats and pages',
+    searchPlaceholder: 'Search chats and pages…',
     clearSearch: 'Clear search',
     noMatch: query => `No sessions match “${query}”.`,
     results: 'Results',

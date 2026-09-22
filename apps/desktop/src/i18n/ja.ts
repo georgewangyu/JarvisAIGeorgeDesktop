@@ -2271,8 +2271,8 @@ export const ja = defineLocale({
       artifacts: 'アーティファクト',
       cron: 'スケジュール済みジョブ'
     },
-    searchAria: 'セッションを検索',
-    searchPlaceholder: 'セッションを検索…',
+    searchAria: 'チャットとページを検索',
+    searchPlaceholder: 'チャットとページを検索…',
     clearSearch: '検索をクリア',
     noMatch: query => `"${query}" に一致するセッションがありません。`,
     results: '結果',

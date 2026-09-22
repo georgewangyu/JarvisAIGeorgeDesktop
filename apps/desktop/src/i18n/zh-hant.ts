@@ -2260,8 +2260,8 @@ export const zhHant = defineLocale({
       artifacts: '成品',
       cron: '排程工作'
     },
-    searchAria: '搜尋工作階段',
-    searchPlaceholder: '搜尋工作階段…',
+    searchAria: '搜尋聊天和頁面',
+    searchPlaceholder: '搜尋聊天和頁面…',
     clearSearch: '清除搜尋',
     noMatch: query => `沒有工作階段符合「${query}」。`,
     results: '結果',
