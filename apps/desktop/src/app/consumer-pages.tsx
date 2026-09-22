@@ -23,14 +23,14 @@ export function ConsumerPage({
   title
 }: {
   children: ReactNode
-  description: string
+  description?: string
   title: string
 }) {
   return (
     <div className="consumer-page h-full overflow-y-auto bg-(--ui-chat-surface-background) pt-(--titlebar-height)">
       <main className="mx-auto w-full max-w-3xl px-8 pb-20 pt-10">
         <h1 className="text-3xl font-semibold tracking-[-0.035em]">{title}</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-(--ui-text-secondary)">{description}</p>
+        {description && <p className="mt-3 max-w-2xl text-sm leading-6 text-(--ui-text-secondary)">{description}</p>}
         <div className="mt-9">{children}</div>
       </main>
     </div>
@@ -184,13 +184,26 @@ export function ConsumerFeedView() {
   )
 }
 
-const IDEAS = [
-  ['Plan my day', 'Help me plan today around my calendar, priorities, and energy.'],
-  ['Catch me up', 'Give me a concise catch-up on what needs my attention today.'],
-  ['Prepare for a meeting', 'Help me prepare for an upcoming meeting and identify the decisions I need to make.'],
-  ['Organize a project', 'Turn a project I have in mind into a clear plan with milestones and next actions.'],
-  ['Research a decision', 'Help me research a decision, compare the options, and surface the tradeoffs.'],
-  ['Build a routine', 'Help me create a realistic recurring routine and decide what Jarvis should automate.']
+const IDEA_GROUPS = [
+  {
+    title: 'For today',
+    ideas: [
+      ['Plan my day', 'Help me plan today around my calendar, priorities, and energy.'],
+      ['Catch me up', 'Give me a concise catch-up on what needs my attention today.'],
+      ['Prepare for a meeting', 'Help me prepare for an upcoming meeting and identify the decisions I need to make.']
+    ]
+  },
+  {
+    title: 'Make progress',
+    ideas: [
+      ['Organize a project', 'Turn a project I have in mind into a clear plan with milestones and next actions.'],
+      ['Build a routine', 'Help me create a realistic recurring routine and decide what Jarvis should automate.']
+    ]
+  },
+  {
+    title: 'Explore',
+    ideas: [['Research a decision', 'Help me research a decision, compare the options, and surface the tradeoffs.']]
+  }
 ] as const
 
 function startConsumerDraft(prompt: string, navigate: ReturnType<typeof useNavigate>): void {
@@ -208,21 +221,25 @@ export function ConsumerIdeasView() {
   }
 
   return (
-    <ConsumerPage description="Useful starting points for everyday work. Pick one and make it yours." title="Ideas">
-      <div className="grid gap-4 sm:grid-cols-2">
-        {IDEAS.map(([title, prompt], index) => (
-          <button
-            className="group min-h-40 rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-6 text-left transition-all hover:-translate-y-0.5 hover:bg-(--ui-control-hover-background) hover:shadow-sm"
-            key={title}
-            onClick={() => startIdea(prompt)}
-            type="button"
-          >
-            <span className="grid size-10 place-items-center rounded-2xl bg-(--ui-bg-tertiary) text-(--ui-accent)">
-              <Codicon name={['calendar', 'bell', 'organization', 'map', 'search', 'history'][index]} size="1rem" />
-            </span>
-            <span className="mt-5 block font-semibold">{title}</span>
-            <span className="mt-2 block text-sm leading-5 text-(--ui-text-tertiary)">{prompt}</span>
-          </button>
+    <ConsumerPage title="Ideas">
+      <div className="space-y-10">
+        {IDEA_GROUPS.map(group => (
+          <section key={group.title}>
+            <h2 className="mb-3 text-xl font-semibold tracking-tight">{group.title}</h2>
+            <div className="space-y-1">
+              {group.ideas.map(([title, prompt]) => (
+                <button
+                  className="block w-full rounded-2xl px-4 py-3 text-left transition-colors hover:bg-(--ui-control-hover-background)"
+                  key={title}
+                  onClick={() => startIdea(prompt)}
+                  type="button"
+                >
+                  <span className="block font-medium">{title}</span>
+                  <span className="mt-1 block text-sm leading-6 text-(--ui-text-tertiary)">{prompt}</span>
+                </button>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
     </ConsumerPage>

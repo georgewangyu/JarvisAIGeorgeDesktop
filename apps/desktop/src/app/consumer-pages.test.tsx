@@ -84,6 +84,8 @@ it('turns an Idea into an editable chat draft without sending it', () => {
 
   fireEvent.click(screen.getByRole('button', { name: /Plan my day/ }))
   expect(takeSessionDraft(null).text).toBe('Help me plan today around my calendar, priorities, and energy.')
+  expect(screen.getByRole('heading', { name: 'For today' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Make progress' })).toBeTruthy()
 })
 
 it('preserves an existing unsent draft when starting a goal', async () => {
