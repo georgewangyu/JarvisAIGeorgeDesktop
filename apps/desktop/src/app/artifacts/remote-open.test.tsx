@@ -61,6 +61,8 @@ it('keeps discovered file paths and originating session scope intact through rem
     </MemoryRouter>
   )
 
+  expect((await screen.findByRole('combobox', { name: 'Sort Library' })).textContent).toContain('Newest')
+
   for (const name of [
     'USER.md',
     'report.md',

@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { $connection } from '@/store/session'
 import type { SessionInfo, SessionMessage } from '@/types/hermes'
 
-import { artifactImageSrc, collectArtifactsForSession, loadArtifactsForSessions } from './artifact-utils'
+import {
+  artifactImageSrc,
+  collectArtifactsForSession,
+  loadArtifactsForSessions,
+  sortArtifactRecords
+} from './artifact-utils'
 
 function makeSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
   return {
@@ -23,6 +28,26 @@ function makeSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
     ...overrides
   }
 }
+
+it('sorts existing Library records without mutating the source index', () => {
+  const records = [
+    { id: 'later', label: 'Apple', timestamp: 3 },
+    { id: 'first', label: 'Zebra', timestamp: 1 },
+    { id: 'middle', label: 'Mango', timestamp: 2 }
+  ].map(record => ({
+    ...record,
+    href: record.label,
+    kind: 'file' as const,
+    sessionId: 'session-1',
+    sessionTitle: 'Session',
+    value: record.label
+  }))
+
+  expect(sortArtifactRecords(records, 'newest').map(record => record.id)).toEqual(['later', 'middle', 'first'])
+  expect(sortArtifactRecords(records, 'oldest').map(record => record.id)).toEqual(['first', 'middle', 'later'])
+  expect(sortArtifactRecords(records, 'name').map(record => record.id)).toEqual(['later', 'middle', 'first'])
+  expect(records.map(record => record.id)).toEqual(['later', 'first', 'middle'])
+})
 
 describe('collectArtifactsForSession', () => {
   afterEach(() => {

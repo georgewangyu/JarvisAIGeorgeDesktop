@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/pagination'
 import { RowButton } from '@/components/ui/row-button'
 import { SearchField } from '@/components/ui/search-field'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tip } from '@/components/ui/tooltip'
 import { getAllSessionMessages, listAllProfileSessions } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
@@ -48,7 +49,9 @@ import {
   type ArtifactFilter,
   artifactImageSrc,
   type ArtifactRecord,
-  loadArtifactsForSessions
+  type ArtifactSort,
+  loadArtifactsForSessions,
+  sortArtifactRecords
 } from './artifact-utils'
 
 function formatArtifactTime(timestamp: number): string {
@@ -118,6 +121,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const navigate = useNavigate()
   const [artifacts, setArtifacts] = useState<ArtifactRecord[] | null>(null)
   const [query, setQuery] = useState('')
+  const [sortOrder, setSortOrder] = useState<ArtifactSort>('newest')
 
   const [kindFilter, setKindFilter] = useRouteEnumParam('tab', ARTIFACT_FILTERS, 'all')
 
@@ -168,7 +172,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
         })
       }
 
-      setArtifacts(nextArtifacts.sort((left, right) => right.timestamp - left.timestamp))
+      setArtifacts(nextArtifacts)
     } catch (err) {
       notifyError(err, a.failedLoad)
       setArtifacts([])
@@ -187,7 +191,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   useEffect(() => {
     setImagePage(1)
     setFilePage(1)
-  }, [artifacts, kindFilter, query])
+  }, [artifacts, kindFilter, query, sortOrder])
 
   const visibleArtifacts = useMemo(() => {
     if (!artifacts) {
@@ -196,22 +200,25 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
 
     const q = normalize(query)
 
-    return artifacts.filter(artifact => {
-      if (kindFilter !== 'all' && artifact.kind !== kindFilter) {
-        return false
-      }
+    return sortArtifactRecords(
+      artifacts.filter(artifact => {
+        if (kindFilter !== 'all' && artifact.kind !== kindFilter) {
+          return false
+        }
 
-      if (!q) {
-        return true
-      }
+        if (!q) {
+          return true
+        }
 
-      return (
-        artifact.label.toLowerCase().includes(q) ||
-        artifact.value.toLowerCase().includes(q) ||
-        artifact.sessionTitle.toLowerCase().includes(q)
-      )
-    })
-  }, [artifacts, kindFilter, query])
+        return (
+          artifact.label.toLowerCase().includes(q) ||
+          artifact.value.toLowerCase().includes(q) ||
+          artifact.sessionTitle.toLowerCase().includes(q)
+        )
+      }),
+      sortOrder
+    )
+  }, [artifacts, kindFilter, query, sortOrder])
 
   const visibleImageArtifacts = useMemo(
     () => visibleArtifacts.filter(artifact => artifact.kind === 'image'),
@@ -343,6 +350,18 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
             ))}
           </div>
           <div className="flex min-w-0 items-center gap-2">
+            {counts.all > 0 ? (
+              <Select onValueChange={value => setSortOrder(value as ArtifactSort)} value={sortOrder}>
+                <SelectTrigger aria-label={a.sortLabel} size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">{a.sortNewest}</SelectItem>
+                  <SelectItem value="oldest">{a.sortOldest}</SelectItem>
+                  <SelectItem value="name">{a.sortName}</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
             {counts.all > 0 ? (
               <SearchField
                 aria-label={a.search}

@@ -2309,6 +2309,10 @@ export interface Translations {
     tabImages: string
     tabFiles: string
     tabLinks: string
+    sortLabel: string
+    sortNewest: string
+    sortOldest: string
+    sortName: string
     noArtifactsTitle: string
     noArtifactsDesc: string
     failedLoad: string

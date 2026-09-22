@@ -4,6 +4,7 @@ import type { SessionInfo, SessionMessage } from '@/types/hermes'
 
 export type ArtifactKind = 'image' | 'file' | 'link'
 export type ArtifactFilter = 'all' | ArtifactKind
+export type ArtifactSort = 'newest' | 'oldest' | 'name'
 export const ARTIFACT_FILTERS: readonly ArtifactFilter[] = ['all', 'image', 'file', 'link']
 
 export interface ArtifactRecord {
@@ -16,6 +17,20 @@ export interface ArtifactRecord {
   profile?: string
   sessionTitle: string
   timestamp: number
+}
+
+export function sortArtifactRecords(records: ArtifactRecord[], order: ArtifactSort): ArtifactRecord[] {
+  return [...records].sort((left, right) => {
+    if (order === 'name') {
+      return (
+        left.label.localeCompare(right.label) || right.timestamp - left.timestamp || left.id.localeCompare(right.id)
+      )
+    }
+
+    const timeDifference = order === 'oldest' ? left.timestamp - right.timestamp : right.timestamp - left.timestamp
+
+    return timeDifference || left.id.localeCompare(right.id)
+  })
 }
 
 export interface ArtifactLoadFailure {
