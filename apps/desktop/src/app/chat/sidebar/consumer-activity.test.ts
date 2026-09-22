@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { SessionDotState } from '@/store/session-dot-state'
 import type { SessionInfo } from '@/types/hermes'
 
-import { buildConsumerActivityRows } from './consumer-activity'
+import { buildConsumerActivityRows, openConsumerActivityRow } from './consumer-activity'
 
 const session = (id: string, title: string, lastActive: number): SessionInfo => ({
   ended_at: null,
@@ -38,9 +38,9 @@ describe('consumer activity rows', () => {
     }
 
     expect(buildConsumerActivityRows(sessions, states)).toEqual([
-      { id: 'input', status: 'needs-input', title: 'Book dinner' },
-      { id: 'working', status: 'working', title: 'Trip planning' },
-      { id: 'done', status: 'unread', title: 'Finished plan' }
+      { id: 'input', kind: 'chat', status: 'needs-input', title: 'Book dinner' },
+      { id: 'working', kind: 'chat', status: 'working', title: 'Trip planning' },
+      { id: 'done', kind: 'chat', status: 'unread', title: 'Finished plan' }
     ])
   })
 
@@ -49,5 +49,35 @@ describe('consumer activity rows', () => {
     const states = Object.fromEntries(sessions.map(item => [item.id, 'working' as const]))
 
     expect(buildConsumerActivityRows(sessions, states).map(row => row.id)).toEqual(['s7', 's6', 's5', 's4', 's3', 's2'])
+  })
+
+  it('includes scheduled runs as automations without exposing their runtime source', () => {
+    const automation = session('cron-run', 'Morning briefing', 10)
+
+    expect(buildConsumerActivityRows([], { 'cron-run': 'unread' }, [automation])).toEqual([
+      { id: 'cron-run', kind: 'automation', status: 'unread', title: 'Morning briefing' }
+    ])
+  })
+
+  it('routes automation rows to Automations and chat rows to their visible chat', () => {
+    const openChat = vi.fn()
+    const openAutomations = vi.fn()
+    const visibleChat = session('chat', 'Trip planning', 1)
+
+    openConsumerActivityRow(
+      { id: 'cron-run', kind: 'automation', status: 'working', title: 'Morning briefing' },
+      undefined,
+      openChat,
+      openAutomations
+    )
+    openConsumerActivityRow(
+      { id: 'chat', kind: 'chat', status: 'working', title: 'Trip planning' },
+      visibleChat,
+      openChat,
+      openAutomations
+    )
+
+    expect(openAutomations).toHaveBeenCalledOnce()
+    expect(openChat).toHaveBeenCalledWith('chat', visibleChat)
   })
 })

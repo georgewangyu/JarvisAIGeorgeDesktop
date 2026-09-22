@@ -214,6 +214,8 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
   }
 ]
 
+const AUTOMATIONS_NAV_ITEM = SIDEBAR_NAV.find(item => item.id === 'cron')!
+
 // Two modes via the `compact` height variant (styles.css):
 //   tall    → each section is shrink-0, capped, its own scroller; Sessions is flex-1.
 //   compact → COMPACT_FLAT drops the caps so the whole stack scrolls as one.
@@ -456,6 +458,11 @@ export function ChatSidebar({
   }, [sessions, archivedSessions, showArchived, profileScope])
 
   const activitySessions = useMemo(() => filterSessionsByProfileScope(sessions, profileScope), [sessions, profileScope])
+
+  const activityAutomationSessions = useMemo(
+    () => filterSessionsByProfileScope(cronSessions, profileScope),
+    [cronSessions, profileScope]
+  )
 
   // One predicate for the status/project filters, so the flat list and the
   // project lanes narrow by the same rule. A project lane holds rows the loaded
@@ -1555,7 +1562,12 @@ export function ChatSidebar({
                 <Codicon name="add" size="0.75rem" />
                 {s.newSideChat}
               </Button>
-              <ConsumerActivity onOpenChat={onResumeSession} sessions={activitySessions} />
+              <ConsumerActivity
+                automationSessions={activityAutomationSessions}
+                onOpenAutomations={() => onNavigate(AUTOMATIONS_NAV_ITEM)}
+                onOpenChat={onResumeSession}
+                sessions={activitySessions}
+              />
             </div>
             <SearchField
               aria-label={s.searchAria}

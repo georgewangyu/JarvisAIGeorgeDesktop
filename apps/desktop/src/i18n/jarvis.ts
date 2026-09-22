@@ -3,6 +3,9 @@ import { useI18n } from '@/i18n'
 const copy = {
   en: {
     activity: 'Jarvis activity',
+    activityAutomationFinished: 'Automation finished — new update',
+    activityAutomationNeedsInput: 'Automation needs your input',
+    activityAutomationWorking: 'Automation running',
     activityDetail: 'Background work and updates from your chats.',
     activityReady: 'Jarvis is ready',
     activityReadyDetail: 'Nothing needs your attention.',
@@ -33,6 +36,9 @@ const copy = {
   },
   ja: {
     activity: 'Jarvisのアクティビティ',
+    activityAutomationFinished: '自動化が完了 — 新しい更新',
+    activityAutomationNeedsInput: '自動化に入力が必要です',
+    activityAutomationWorking: '自動化を実行中',
     activityDetail: 'チャットのバックグラウンド作業と更新です。',
     activityReady: 'Jarvisは準備できています',
     activityReadyDetail: '対応が必要な項目はありません。',
@@ -62,6 +68,9 @@ const copy = {
   },
   zh: {
     activity: 'Jarvis 活动',
+    activityAutomationFinished: '自动化已完成 — 有新更新',
+    activityAutomationNeedsInput: '自动化需要你的输入',
+    activityAutomationWorking: '自动化正在运行',
     activityDetail: '聊天中的后台工作和更新。',
     activityReady: 'Jarvis 已就绪',
     activityReadyDetail: '目前没有需要你处理的事项。',
@@ -91,6 +100,9 @@ const copy = {
   },
   'zh-hant': {
     activity: 'Jarvis 活動',
+    activityAutomationFinished: '自動化已完成 — 有新更新',
+    activityAutomationNeedsInput: '自動化需要你的輸入',
+    activityAutomationWorking: '自動化正在執行',
     activityDetail: '聊天中的背景工作和更新。',
     activityReady: 'Jarvis 已就緒',
     activityReadyDetail: '目前沒有需要你處理的事項。',

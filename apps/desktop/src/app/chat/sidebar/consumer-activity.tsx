@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react'
 
 import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useJarvisCopy } from '@/i18n/jarvis'
 import { sessionTitle } from '@/lib/chat-runtime'
@@ -16,8 +17,24 @@ import type { SessionInfo } from '@/types/hermes'
 
 export interface ConsumerActivityRow {
   id: string
+  kind: 'automation' | 'chat'
   status: Exclude<SessionStatusBucket, 'draft' | 'idle'>
   title: string
+}
+
+export function openConsumerActivityRow(
+  row: ConsumerActivityRow,
+  session: SessionInfo | undefined,
+  onOpenChat: (sessionId: string, session?: SessionInfo) => void,
+  onOpenAutomations: () => void
+): void {
+  if (row.kind === 'automation') {
+    onOpenAutomations()
+
+    return
+  }
+
+  onOpenChat(row.id, session)
 }
 
 const STATUS_RANK: Record<ConsumerActivityRow['status'], number> = {
@@ -27,9 +44,12 @@ const STATUS_RANK: Record<ConsumerActivityRow['status'], number> = {
 }
 
 export function buildConsumerActivityRows(
-  sessions: readonly SessionInfo[],
-  states: Readonly<Record<string, SessionDotState>>
+  chatSessions: readonly SessionInfo[],
+  states: Readonly<Record<string, SessionDotState>>,
+  automationSessions: readonly SessionInfo[] = []
 ): ConsumerActivityRow[] {
+  const sessions = [...chatSessions, ...automationSessions]
+  const automationIds = new Set(automationSessions.map(session => session.id))
   const lastActiveById = new Map(sessions.map(session => [session.id, session.last_active]))
 
   return sessions
@@ -40,7 +60,14 @@ export function buildConsumerActivityRows(
         return []
       }
 
-      return [{ id: session.id, status, title: sessionTitle(session) }]
+      return [
+        {
+          id: session.id,
+          kind: automationIds.has(session.id) ? ('automation' as const) : ('chat' as const),
+          status,
+          title: sessionTitle(session)
+        }
+      ]
     })
     .sort((left, right) => {
       const statusOrder = STATUS_RANK[left.status] - STATUS_RANK[right.status]
@@ -55,16 +82,20 @@ export function buildConsumerActivityRows(
 }
 
 export function ConsumerActivity({
+  automationSessions = [],
   onOpenChat,
+  onOpenAutomations,
   sessions
 }: {
+  automationSessions?: readonly SessionInfo[]
   onOpenChat: (sessionId: string, session?: SessionInfo) => void
+  onOpenAutomations: () => void
   sessions: readonly SessionInfo[]
 }) {
   const copy = useJarvisCopy()
   const states = useStore($sessionDotStateById)
-  const rows = buildConsumerActivityRows(sessions, states)
-  const sessionById = new Map(sessions.map(session => [session.id, session]))
+  const rows = buildConsumerActivityRows(sessions, states, automationSessions)
+  const sessionById = new Map([...sessions, ...automationSessions].map(session => [session.id, session]))
   const attentionCount = rows.filter(row => row.status === 'needs-input').length
 
   return (
@@ -100,28 +131,49 @@ export function ConsumerActivity({
               <button
                 className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-(--ui-control-hover-background)"
                 key={row.id}
-                onClick={() => onOpenChat(row.id, sessionById.get(row.id))}
+                onClick={() => openConsumerActivityRow(row, sessionById.get(row.id), onOpenChat, onOpenAutomations)}
                 type="button"
               >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'mt-1.5 size-1.5 shrink-0 rounded-full',
-                    row.status === 'needs-input'
-                      ? 'bg-amber-500'
-                      : row.status === 'unread'
-                        ? 'bg-(--ui-success)'
-                        : 'bg-(--ui-accent)'
-                  )}
-                />
+                {row.kind === 'automation' ? (
+                  <Codicon
+                    className={cn(
+                      'mt-0.5 shrink-0',
+                      row.status === 'needs-input'
+                        ? 'text-amber-500'
+                        : row.status === 'unread'
+                          ? 'text-(--ui-success)'
+                          : 'text-(--ui-accent)'
+                    )}
+                    name="watch"
+                    size="0.875rem"
+                  />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'mt-1.5 size-1.5 shrink-0 rounded-full',
+                      row.status === 'needs-input'
+                        ? 'bg-amber-500'
+                        : row.status === 'unread'
+                          ? 'bg-(--ui-success)'
+                          : 'bg-(--ui-accent)'
+                    )}
+                  />
+                )}
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-foreground">{row.title}</span>
                   <span className="block text-xs text-(--ui-text-tertiary)">
-                    {row.status === 'needs-input'
-                      ? copy.activityNeedsInput
-                      : row.status === 'unread'
-                        ? copy.activityFinished
-                        : copy.activityWorking}
+                    {row.kind === 'automation'
+                      ? row.status === 'needs-input'
+                        ? copy.activityAutomationNeedsInput
+                        : row.status === 'unread'
+                          ? copy.activityAutomationFinished
+                          : copy.activityAutomationWorking
+                      : row.status === 'needs-input'
+                        ? copy.activityNeedsInput
+                        : row.status === 'unread'
+                          ? copy.activityFinished
+                          : copy.activityWorking}
                   </span>
                 </span>
               </button>
