@@ -1540,6 +1540,10 @@ export function ChatSidebar({
 
         {showSessionSections && (
           <div className="shrink-0 px-2 pb-1 pt-1">
+            <Button onClick={() => onNewSessionInWorkspace(null)} size="sm" variant="ghost">
+              <Codicon name="add" size="0.75rem" />
+              {s.newSideChat}
+            </Button>
             <SearchField
               aria-label={s.searchAria}
               inputRef={searchInputRef}
@@ -1585,7 +1589,7 @@ export function ChatSidebar({
               />
             )}
 
-            {!trimmedQuery && (
+            {!trimmedQuery && pinnedSessions.length > 0 && (
               <SidebarSessionsSection
                 activeSessionId={activeSidebarSessionId}
                 contentClassName="flex flex-col gap-px rounded-lg pb-2 pt-1"
@@ -1735,7 +1739,7 @@ export function ChatSidebar({
                             project dialog, and the created project starts at
                             the dropped spot. */}
                         <SidebarSectionAddButton
-                          ariaLabel={agentsGrouped ? s.projects.newButton : s.nav['new-session']}
+                          ariaLabel={agentsGrouped ? s.projects.newButton : s.newSideChat}
                           onNewProjectDrag={
                             agentsGrouped
                               ? {

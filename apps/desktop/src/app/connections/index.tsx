@@ -1,7 +1,8 @@
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useState } from 'react'
 
-import { setGlobalModel } from '@/api/models'
+import { listOAuthProviders } from '@/api/config'
+import { getGlobalModelInfo, setGlobalModel } from '@/api/models'
 import { Button } from '@/components/ui/button'
 import type { JarvisOnboardingPermissionSnapshot, JarvisPermissionStatus } from '@/global'
 import {
@@ -94,12 +95,18 @@ export function ConnectionsView() {
   const [refreshing, setRefreshing] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [signedIn, setSignedIn] = useState(false)
 
   const refresh = useCallback(async () => {
     setRefreshing(true)
 
     try {
-      const snapshot = await window.hermesDesktop?.jarvisOnboarding?.getPermissions?.()
+      const [snapshot, accounts] = await Promise.all([
+        window.hermesDesktop?.jarvisOnboarding?.getPermissions?.(),
+        listOAuthProviders()
+      ])
+
+      setSignedIn(accounts.providers.some(provider => provider.id === 'openai-codex' && provider.status.logged_in))
 
       if (snapshot) {
         setPermissions(snapshot)
@@ -122,7 +129,6 @@ export function ConnectionsView() {
     return () => window.removeEventListener('focus', onFocus)
   }, [refresh])
 
-  const signedIn = currentProvider === 'openai-codex' && Boolean(currentModel)
   const fullDiskAllowed = permissions.fullDiskAccess === 'granted'
   const microphoneAllowed = permissions.microphone === 'granted'
 
@@ -166,6 +172,11 @@ export function ConnectionsView() {
                         }
 
                         await setGlobalModel('openai-codex', 'gpt-5.6-sol')
+                        const model = await getGlobalModelInfo()
+
+                        $currentProvider.set(model.provider)
+                        $currentModel.set(model.model)
+                        await refresh()
                       } catch (cause) {
                         setError(cause instanceof Error ? cause.message : 'ChatGPT sign-in did not finish.')
                       } finally {
@@ -178,7 +189,11 @@ export function ConnectionsView() {
                   </Button>
                 )
               }
-              detail={signedIn ? currentModel : 'Use your ChatGPT or Codex subscription. No API key required.'}
+              detail={
+                signedIn && currentProvider === 'openai-codex'
+                  ? currentModel
+                  : 'Use your ChatGPT or Codex subscription. No API key required.'
+              }
               icon={KeyRound}
               label="ChatGPT / Codex"
               status={<Status active={signedIn}>{signedIn ? 'Connected' : 'Not connected'}</Status>}
