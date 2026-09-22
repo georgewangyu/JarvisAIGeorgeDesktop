@@ -370,17 +370,15 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
         </div>
 
         {!artifacts ? (
-          <div className="grid min-h-72 place-items-center rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
+          <div className="grid min-h-64 place-items-center">
             <PageLoader label={a.indexing} />
           </div>
         ) : visibleArtifacts.length === 0 ? (
-          <div className="grid min-h-72 place-items-center rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-6 text-center">
+          <div className="grid min-h-64 place-items-center px-6 text-center">
             <div>
-              <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-(--ui-bg-tertiary)">
-                <FolderOpen className="size-5 text-(--ui-text-secondary)" />
-              </div>
-              <div className="mt-5 text-lg font-semibold">{a.noArtifactsTitle}</div>
-              <div className="mx-auto mt-2 max-w-md text-sm leading-6 text-(--ui-text-tertiary)">
+              <FolderOpen className="mx-auto size-5 text-(--ui-text-tertiary)" />
+              <div className="mt-4 text-base font-semibold">{a.noArtifactsTitle}</div>
+              <div className="mx-auto mt-1 max-w-sm text-sm leading-6 text-(--ui-text-tertiary)">
                 {a.noArtifactsDesc}
               </div>
             </div>

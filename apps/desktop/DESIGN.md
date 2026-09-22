@@ -39,6 +39,10 @@ compact category navigation, one content scroller, utility-sized headings,
 and a horizontal navigation fallback on narrow windows. Categories only expose
 implemented controls; advanced runtime settings remain an explicit destination.
 
+Consumer Library empty and loading states stay borderless and quiet. Artifact
+filters provide the active-state accent; an empty index must not become a large
+tinted card that dominates the page.
+
 The ordinary Jarvis composer discloses model/reasoning controls in Chat options
 and folds voice configuration into the existing live-state voice menu. The
 model-picker shortcut opens options when closed; HUD, pop-out, guided-chat and
