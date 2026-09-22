@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import { $desktopVersion } from '@/store/updates'
+
 import { PreferencesView } from './index'
 
 const { setMode, setTheme } = vi.hoisted(() => ({ setMode: vi.fn(), setTheme: vi.fn() }))
@@ -13,6 +15,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   Reflect.deleteProperty(window, 'hermesDesktop')
+  $desktopVersion.set(null)
 })
 
 it('uses the shared appearance authority for mode and theme choices', () => {
@@ -46,6 +49,21 @@ it('opens connections without confusing the settings route with a chat', () => {
   )
   fireEvent.click(screen.getByRole('button', { name: 'Manage connections' }))
   expect(screen.getByText('Connection destination')).toBeTruthy()
+})
+
+it('shows the running app version from the desktop bridge without offering an updater', async () => {
+  const getVersion = vi.fn().mockResolvedValue({
+    appVersion: '0.17.6', electronVersion: '40', nodeVersion: '24', platform: 'darwin', hermesRoot: '/synthetic'
+  })
+
+  Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { getVersion } })
+
+  render(<MemoryRouter><PreferencesView /></MemoryRouter>)
+
+  expect(await screen.findByText('0.17.6')).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'App version' })).toBeTruthy()
+  expect(getVersion).toHaveBeenCalledOnce()
+  expect(screen.queryByRole('button', { name: /check for updates/i })).toBeNull()
 })
 
 it('shows the real macOS quick-chat registration and saves its setting through the desktop bridge', async () => {

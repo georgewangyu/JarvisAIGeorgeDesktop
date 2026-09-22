@@ -1,3 +1,5 @@
+import { useStore } from '@nanostores/react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router'
 
 import { LanguageSwitcher } from '@/components/language-switcher'
@@ -6,6 +8,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { useI18n } from '@/i18n'
 import { useJarvisCopy } from '@/i18n/jarvis'
 import { canUseQuickEntry } from '@/store/quick-entry'
+import { $desktopVersion, refreshDesktopVersion } from '@/store/updates'
 import { useTheme } from '@/themes'
 import type { ThemeMode } from '@/themes/context'
 
@@ -19,6 +22,11 @@ export function PreferencesView() {
   const { t } = useI18n()
   const s = useJarvisCopy()
   const { mode, setMode, setTheme, themeName } = useTheme()
+  const version = useStore($desktopVersion)
+
+  useEffect(() => {
+    void refreshDesktopVersion()
+  }, [])
 
   return (
     <ConsumerSettingsLayout section="general">
@@ -71,6 +79,10 @@ export function PreferencesView() {
           Jarvis keeps provider, safety, and runtime details managed automatically in this preview.
         </p>
       </details>
+      <section className="mt-10 flex items-center justify-between gap-4 border-t border-(--ui-stroke-tertiary) pt-8">
+        <h2 className="text-sm font-medium">{s.appVersion}</h2>
+        <span className="text-sm text-muted-foreground">{version?.appVersion ?? '—'}</span>
+      </section>
       <p className="mt-12 text-xs leading-5 text-muted-foreground">{s.local}</p>
     </ConsumerSettingsLayout>
   )
