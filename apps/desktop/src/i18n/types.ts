@@ -2316,6 +2316,7 @@ export interface Translations {
     tabAudio: string
     tabFiles: string
     tabLinks: string
+    createWithJarvis: string
     sortLabel: string
     sortNewest: string
     sortOldest: string

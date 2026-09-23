@@ -39,7 +39,7 @@ import { fmtDayTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 
-import { ConsumerPage } from '../consumer-pages'
+import { ConsumerPage, startConsumerDraft } from '../consumer-pages'
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { openSession } from '../open-session'
@@ -289,6 +289,12 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     link: a.tabLinks
   }
 
+  const createPrompts: Partial<Record<ArtifactFilter, string>> = {
+    all: 'Help me create a file. Ask what I want to make, what format I need, and where to save it before writing anything.',
+    document: 'Help me create a document. Ask about its purpose, content, format, and save location before writing anything.',
+    web: 'Help me create a web page. Ask what it should do, what content it needs, and where to save it before writing anything.'
+  }
+
   const openArtifact = useCallback(
     async (artifact: ArtifactRecord) => {
       const { href } = artifact
@@ -390,6 +396,13 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
           ))}
         </nav>
         <div className="min-w-0 space-y-6">
+          {createPrompts[kindFilter] && (
+            <div className="flex justify-end">
+              <Button onClick={() => startConsumerDraft(createPrompts[kindFilter]!, navigate)} size="sm">
+                {a.createWithJarvis}
+              </Button>
+            </div>
+          )}
           <div className="grid grid-cols-[minmax(7rem,1fr)_minmax(10rem,1.35fr)_auto] items-center gap-2">
               <Select onValueChange={value => setSortOrder(value as ArtifactSort)} value={sortOrder}>
                 <SelectTrigger aria-label={a.sortLabel} className="w-full" size="sm">

@@ -2209,6 +2209,7 @@ export const ja = defineLocale({
     tabAudio: '音声',
     tabFiles: 'ファイル',
     tabLinks: 'リンク',
+    createWithJarvis: 'Jarvisと作成',
     sortLabel: 'ライブラリを並べ替え',
     sortNewest: '新しい順',
     sortOldest: '古い順',

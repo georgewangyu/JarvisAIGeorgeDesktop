@@ -241,7 +241,7 @@ const IDEA_GROUPS = [
   }
 ] as const
 
-function startConsumerDraft(prompt: string, navigate: ReturnType<typeof useNavigate>): void {
+export function startConsumerDraft(prompt: string, navigate: ReturnType<typeof useNavigate>): void {
   const current = takeSessionDraft(null)
   const text = current.text.trim() ? `${current.text.trimEnd()}\n\n${prompt}` : prompt
   stashSessionDraft(null, text, current.attachments)

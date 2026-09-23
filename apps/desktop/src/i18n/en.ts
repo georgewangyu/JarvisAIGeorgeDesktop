@@ -2704,6 +2704,7 @@ export const en: Translations = {
     tabAudio: 'Audio',
     tabFiles: 'Files',
     tabLinks: 'Links',
+    createWithJarvis: 'Create with Jarvis',
     sortLabel: 'Sort Library',
     sortNewest: 'Newest',
     sortOldest: 'Oldest',

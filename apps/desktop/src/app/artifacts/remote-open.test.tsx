@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import { clearSessionDraft, takeSessionDraft } from '@/store/composer'
+import { $freshSessionRequest } from '@/store/profile'
 import { $connection } from '@/store/session'
 
 import { ArtifactsView } from './index'
@@ -36,6 +38,8 @@ vi.mock('@/hermes', async () => ({
 afterEach(() => {
   cleanup()
   $connection.set(null)
+  clearSessionDraft(null)
+  $freshSessionRequest.set(0)
   vi.unstubAllGlobals()
 })
 
@@ -106,4 +110,22 @@ it('filters real indexed documents and gives empty web files a truthful state', 
   fireEvent.click(screen.getByRole('button', { name: 'Web files' }))
   expect(screen.getByText('No web files yet')).toBeTruthy()
   expect(screen.getByRole('textbox', { name: 'Search artifacts...' })).toBeTruthy()
+})
+
+it('starts an editable creation draft only for file categories, without sending it', async () => {
+  render(
+    <MemoryRouter>
+      <ArtifactsView />
+    </MemoryRouter>
+  )
+
+  expect(await screen.findByRole('button', { name: 'USER.md' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /^Documents/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Create with Jarvis' }))
+
+  expect(takeSessionDraft(null).text).toContain('Help me create a document.')
+  expect($freshSessionRequest.get()).toBe(1)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Images' }))
+  expect(screen.queryByRole('button', { name: 'Create with Jarvis' })).toBeNull()
 })

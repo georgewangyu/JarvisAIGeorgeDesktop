@@ -2845,6 +2845,7 @@ export const zh = defineLocale({
     tabAudio: '音频',
     tabFiles: '文件',
     tabLinks: '链接',
+    createWithJarvis: '与 Jarvis 一起创建',
     sortLabel: '排列资料库',
     sortNewest: '最新优先',
     sortOldest: '最早优先',

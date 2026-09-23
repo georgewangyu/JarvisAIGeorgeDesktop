@@ -1868,6 +1868,7 @@ export const ar = defineLocale({
     tabAudio: 'الصوت',
     tabFiles: 'الملفات',
     tabLinks: 'الروابط',
+    createWithJarvis: 'أنشئ مع جارفس',
     sortLabel: 'ترتيب المكتبة',
     sortNewest: 'الأحدث أولاً',
     sortOldest: 'الأقدم أولاً',

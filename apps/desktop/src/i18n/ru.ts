@@ -2467,6 +2467,7 @@ export const ru = defineLocale({
     tabAudio: 'Аудио',
     tabFiles: 'Файлы',
     tabLinks: 'Ссылки',
+    createWithJarvis: 'Создать с Jarvis',
     sortLabel: 'Сортировка библиотеки',
     sortNewest: 'Сначала новые',
     sortOldest: 'Сначала старые',

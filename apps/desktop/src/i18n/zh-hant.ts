@@ -2198,6 +2198,7 @@ export const zhHant = defineLocale({
     tabAudio: '音訊',
     tabFiles: '檔案',
     tabLinks: '連結',
+    createWithJarvis: '與 Jarvis 一起建立',
     sortLabel: '排序資料庫',
     sortNewest: '最新優先',
     sortOldest: '最舊優先',
