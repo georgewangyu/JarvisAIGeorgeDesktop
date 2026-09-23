@@ -15,6 +15,13 @@ import { type AppView, ROUTES_AREA, SIDEBAR_NAV_AREA } from '../../routes'
 
 import { ChatSidebar, OPEN_CONSUMER_CHATS_EVENT, OPEN_CONSUMER_SEARCH_EVENT } from './index'
 
+const searchSessionsMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/hermes', async importOriginal => ({
+  ...(await importOriginal() as object),
+  searchSessions: searchSessionsMock
+}))
+
 const noop = () => {}
 
 const noopAsync = async () => {}
@@ -52,6 +59,8 @@ function renderSidebar(
 
 describe('consumer chat navigation', () => {
   beforeEach(() => {
+    searchSessionsMock.mockReset()
+    searchSessionsMock.mockResolvedValue({ results: [] })
     $sessions.set(sessions)
     $cronJobs.set([])
     $removedSessionIds.set(new Set())
@@ -162,6 +171,25 @@ describe('consumer chat navigation', () => {
 
   it('describes a no-match result without implying only chats were searched', () => {
     expect(en.sidebar.noMatch('zz-example-no-match')).toBe('No results for “zz-example-no-match”.')
+  })
+
+  it('does not call a failed full-text chat search an empty result and can retry it', async () => {
+    $sessions.set([])
+    searchSessionsMock.mockRejectedValueOnce(new Error('synthetic offline'))
+    searchSessionsMock.mockResolvedValueOnce({ results: [] })
+    renderSidebar()
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), {
+      target: { value: 'missing-side-chat' }
+    })
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Couldn’t search all chats')
+    expect(screen.queryByText('No results for “missing-side-chat”.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => expect(searchSessionsMock).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('No results for “missing-side-chat”.')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('shows the real permanent main chat preview in Search recents', async () => {

@@ -24,6 +24,7 @@ import {
 import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
 import { searchSessions, type SessionInfo, type SessionSearchResult } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
@@ -359,6 +360,7 @@ export function ChatSidebar({
   onManageCronJob
 }: ChatSidebarProps) {
   const { t } = useI18n()
+  const jarvisCopy = useJarvisCopy()
   const s = t.sidebar
   const { pathname } = useLocation()
   const panesFlipped = useStore($panesFlipped)
@@ -455,6 +457,8 @@ export function ChatSidebar({
   const [drawerMode, setDrawerMode] = useState<'chats' | 'search'>('chats')
   const [serverMatches, setServerMatches] = useState<SessionSearchResult[]>([])
   const [searchPending, setSearchPending] = useState(false)
+  const [searchError, setSearchError] = useState(false)
+  const [searchAttempt, setSearchAttempt] = useState(0)
   const [messagingLoadMorePending, setMessagingLoadMorePending] = useState<Record<string, boolean>>({})
   const [recentsLoadMorePending, setRecentsLoadMorePending] = useState(false)
   const messagingOpenIds = useStore($sidebarMessagingOpenIds)
@@ -688,13 +692,16 @@ export function ChatSidebar({
     if (!trimmedQuery) {
       setServerMatches([])
       setSearchPending(false)
+      setSearchError(false)
 
       return
     }
 
     let cancelled = false
 
+    setServerMatches([])
     setSearchPending(true)
+    setSearchError(false)
 
     const id = window.setTimeout(() => {
       void searchSessions(trimmedQuery)
@@ -703,7 +710,11 @@ export function ChatSidebar({
             setServerMatches(res.results)
           }
         })
-        .catch(() => undefined)
+        .catch(() => {
+          if (!cancelled) {
+            setSearchError(true)
+          }
+        })
         .finally(() => {
           if (!cancelled) {
             setSearchPending(false)
@@ -715,7 +726,7 @@ export function ChatSidebar({
       cancelled = true
       window.clearTimeout(id)
     }
-  }, [trimmedQuery])
+  }, [trimmedQuery, searchAttempt])
 
   const searchResults = useMemo(() => {
     if (!trimmedQuery) {
@@ -1785,12 +1796,20 @@ export function ChatSidebar({
                       ))}
                     </div>
                   )}
+                  {trimmedQuery && searchError && (
+                    <div className="flex items-center justify-between gap-3 px-4 pb-3 text-xs text-(--ui-text-secondary)" role="alert">
+                      <span>{jarvisCopy.searchUnavailable}</span>
+                      <Button onClick={() => setSearchAttempt(attempt => attempt + 1)} size="sm" variant="ghost">
+                        {t.common.retry}
+                      </Button>
+                    </div>
+                  )}
                   {trimmedQuery && (
                     <SidebarSessionsSection
                       activeSessionId={activeSidebarSessionId}
                       contentClassName={cn('flex min-h-0 flex-1 flex-col gap-px pb-1.75', SCROLL_Y)}
                       emptyState={
-                        matchingPages.length > 0 || matchingAutomationJobs.length > 0 ? null : searchPending ? (
+                        matchingPages.length > 0 || matchingAutomationJobs.length > 0 || searchError ? null : searchPending ? (
                           <SidebarSessionSkeletons />
                         ) : (
                           <div className="wrap-anywhere grid min-h-24 place-items-center rounded-lg px-2 text-center text-xs text-(--ui-text-tertiary)">

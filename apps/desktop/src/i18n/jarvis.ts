@@ -21,6 +21,7 @@ const copy = {
     runResult: 'Automation result',
     runEmpty: 'No new update from this run.',
     runError: 'Could not load this result. Try again.',
+    searchUnavailable: 'Couldn’t search all chats. Local matches may still appear.',
     runDelivery: {
       delivered: 'Notification delivered',
       queued: 'Notification queued',
@@ -65,6 +66,7 @@ const copy = {
     runResult: '自動化の結果',
     runEmpty: '今回の実行に新しい報告はありません。',
     runError: '結果を読み込めませんでした。もう一度お試しください。',
+    searchUnavailable: 'すべてのチャットを検索できませんでした。ローカルの結果は表示される場合があります。',
     runDelivery: {
       delivered: '通知を配信しました',
       queued: '通知を配信待ちにしました',
@@ -108,6 +110,7 @@ const copy = {
     runResult: '自动化结果',
     runEmpty: '此次运行没有新消息。',
     runError: '无法加载结果，请重试。',
+    searchUnavailable: '无法搜索所有聊天。本地结果仍可能显示。',
     runDelivery: {
       delivered: '通知已送达',
       queued: '通知等待发送',
@@ -151,6 +154,7 @@ const copy = {
     runResult: '自動化結果',
     runEmpty: '此次執行沒有新消息。',
     runError: '無法載入結果，請重試。',
+    searchUnavailable: '無法搜尋所有聊天。本機結果仍可能顯示。',
     runDelivery: {
       delivered: '通知已送達',
       queued: '通知等待傳送',
