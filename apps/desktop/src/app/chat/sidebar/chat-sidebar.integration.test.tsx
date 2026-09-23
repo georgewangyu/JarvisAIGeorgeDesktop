@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { registry } from '@/contrib/registry'
+import { $cronJobs } from '@/store/cron'
 import { $sessions } from '@/store/session'
 import { $removedSessionIds } from '@/store/session-removal'
 import { makeSessionInfo } from '@/test/session-info'
@@ -22,7 +23,9 @@ const sessions = [
   makeSessionInfo({ id: 'side-two', last_active: 3, profile: 'default', started_at: 1, title: 'Side chat two' })
 ]
 
-function renderSidebar(pathname = '/', currentView: AppView = 'chat', onResumeSession = vi.fn(), onNavigate = vi.fn()) {
+function renderSidebar(
+  pathname = '/', currentView: AppView = 'chat', onResumeSession = vi.fn(), onNavigate = vi.fn(), onManageCronJob = vi.fn()
+) {
   const result = render(
     <MemoryRouter initialEntries={[pathname]}>
       <SidebarProvider>
@@ -32,7 +35,7 @@ function renderSidebar(pathname = '/', currentView: AppView = 'chat', onResumeSe
           onBranchSession={noop}
           onDeleteSession={noop}
           onLoadMoreSessions={noop}
-          onManageCronJob={noop}
+          onManageCronJob={onManageCronJob}
           onNavigate={onNavigate}
           onNewSessionInWorkspace={noop}
           onNewSessionSplit={noop}
@@ -43,18 +46,20 @@ function renderSidebar(pathname = '/', currentView: AppView = 'chat', onResumeSe
     </MemoryRouter>
   )
 
-  return { ...result, onResumeSession, onNavigate }
+  return { ...result, onResumeSession, onNavigate, onManageCronJob }
 }
 
 describe('consumer chat navigation', () => {
   beforeEach(() => {
     $sessions.set(sessions)
+    $cronJobs.set([])
     $removedSessionIds.set(new Set())
   })
 
   afterEach(() => {
     cleanup()
     $sessions.set([])
+    $cronJobs.set([])
     $removedSessionIds.set(new Set())
   })
 
@@ -132,6 +137,24 @@ describe('consumer chat navigation', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Goals' }))
     expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({ id: 'goals' }))
+    expect(onResumeSession).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull())
+  })
+
+  it('opens a matching scheduled automation through its real focus action', async () => {
+    $cronJobs.set([{ id: 'morning-check', enabled: true, name: 'Morning check-in' }])
+    const onManageCronJob = vi.fn()
+    const onResumeSession = vi.fn()
+    renderSidebar('/', 'chat', onResumeSession, vi.fn(), onManageCronJob)
+
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+    const dialog = await screen.findByRole('dialog', { name: 'Search' })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats and pages' }), {
+      target: { value: 'morning' }
+    })
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Morning check-in' }))
+    expect(onManageCronJob).toHaveBeenCalledWith('morning-check')
     expect(onResumeSession).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull())
   })

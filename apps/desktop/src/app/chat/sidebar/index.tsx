@@ -28,6 +28,7 @@ import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
 import { $activeConnectionId } from '@/store/connections'
+import { $cronJobs } from '@/store/cron'
 import {
   $dismissedAutoProjectIds,
   $panesFlipped,
@@ -127,6 +128,7 @@ import { markSessionUnread } from '@/store/session-unread-remote'
 import { $archivedSessions, loadArchivedSessions } from '@/store/sidebar-archive'
 import { $sidebarSessionRankIds } from '@/store/sidebar-sort'
 
+import { jobTitle } from '../../cron/job-state'
 import {
   type AppView,
   ARTIFACTS_ROUTE,
@@ -353,7 +355,8 @@ export function ChatSidebar({
   onArchiveSession,
   onBranchSession,
   onNewSessionInWorkspace,
-  onNewSessionSplit
+  onNewSessionSplit,
+  onManageCronJob
 }: ChatSidebarProps) {
   const { t } = useI18n()
   const s = t.sidebar
@@ -388,6 +391,7 @@ export function ChatSidebar({
   const focusedSessionIsTile = useStore($focusedSessionIsTile)
   const currentView = focusedSessionIsTile ? 'chat' : routeView
   const sessions = useStore($sessions)
+  const cronJobs = useStore($cronJobs)
   const cronSessions = useStore($cronSessions)
   const messagingSessions = useStore($messagingSessions)
   const messagingPlatformTotals = useStore($messagingPlatformTotals)
@@ -740,6 +744,10 @@ export function ChatSidebar({
 
   const matchingPages = trimmedQuery
     ? SIDEBAR_NAV.filter(item => item.route && item.label.toLowerCase().includes(trimmedQuery.toLowerCase()))
+    : []
+
+  const matchingAutomationJobs = trimmedQuery
+    ? cronJobs.filter(job => jobTitle(job).toLowerCase().includes(trimmedQuery.toLowerCase())).slice(0, 5)
     : []
 
   const unpinnedAgentSessions = useMemo(
@@ -1755,12 +1763,34 @@ export function ChatSidebar({
                       </div>
                     ) : null
                   )}
+                  {trimmedQuery && matchingAutomationJobs.length > 0 && (
+                    <div className="px-2 pb-3 pt-1">
+                      <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wider text-(--ui-text-tertiary)">
+                        Automations
+                      </div>
+                      {matchingAutomationJobs.map(job => (
+                        <Button
+                          className="w-full justify-start truncate"
+                          key={job.id}
+                          onClick={() => {
+                            setChatsOpen(false)
+                            onManageCronJob(job.id)
+                          }}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          <Codicon name="watch" size="0.75rem" />
+                          <span className="truncate">{jobTitle(job)}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                   {trimmedQuery && (
                     <SidebarSessionsSection
                       activeSessionId={activeSidebarSessionId}
                       contentClassName={cn('flex min-h-0 flex-1 flex-col gap-px pb-1.75', SCROLL_Y)}
                       emptyState={
-                        matchingPages.length > 0 ? null : searchPending ? (
+                        matchingPages.length > 0 || matchingAutomationJobs.length > 0 ? null : searchPending ? (
                           <SidebarSessionSkeletons />
                         ) : (
                           <div className="wrap-anywhere grid min-h-24 place-items-center rounded-lg px-2 text-center text-xs text-(--ui-text-tertiary)">
