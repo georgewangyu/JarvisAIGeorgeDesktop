@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { getCronJobRuns, type SessionInfo } from '@/hermes'
+import { type CronExecution, getCronJobExecutions, getCronJobRuns, type SessionInfo } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { $changeEventsAvailable, $cronChangeTick } from '@/store/live-sync'
 
@@ -28,12 +28,40 @@ function formatRunTime(seconds?: null | number): string {
   return Number.isNaN(date.valueOf()) ? '—' : date.toLocaleString()
 }
 
-export function CronJobRuns({ c, jobId }: { c: Translations['cron']; jobId: string }) {
+interface SessionHistoryItem {
+  kind: 'session'
+  run: SessionInfo
+}
+
+interface ExecutionHistoryItem {
+  kind: 'execution'
+  run: CronExecution
+}
+
+type HistoryItem = ExecutionHistoryItem | SessionHistoryItem
+
+function executionLabel(status: CronExecution['status'], c: Translations['cron'], unknown: string): string {
+  if (status === 'failed') {
+    return c.states.error
+  }
+
+  if (status === 'claimed' || status === 'running') {
+    return c.states.running
+  }
+
+  if (status === 'completed') {
+    return c.states.completed
+  }
+
+  return unknown
+}
+
+export function CronJobRuns({ c, jobId, noAgent = false }: { c: Translations['cron']; jobId: string; noAgent?: boolean }) {
   const { t } = useI18n()
-  const [runs, setRuns] = useState<null | SessionInfo[]>(null)
+  const [runs, setRuns] = useState<HistoryItem[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [retryTick, setRetryTick] = useState(0)
-  const [selectedRun, setSelectedRun] = useState<SessionInfo | null>(null)
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const changeEventsAvailable = useStore($changeEventsAvailable)
   const cronChangeTick = useStore($cronChangeTick)
 
@@ -44,7 +72,11 @@ export function CronJobRuns({ c, jobId }: { c: Translations['cron']; jobId: stri
     const load = () => {
       const request = ++requestSequence
 
-      return getCronJobRuns(jobId)
+      const requestRuns: Promise<HistoryItem[]> = noAgent
+        ? getCronJobExecutions(jobId).then(result => result.map(run => ({ kind: 'execution', run })))
+        : getCronJobRuns(jobId).then(result => result.map(run => ({ kind: 'session', run })))
+
+      return requestRuns
         .then(result => {
           if (!cancelled && request === requestSequence) {
             setRuns(result)
@@ -84,7 +116,7 @@ export function CronJobRuns({ c, jobId }: { c: Translations['cron']; jobId: stri
       document.removeEventListener('visibilitychange', onVisible)
     }
     // cronChangeTick: a fired run moves jobs.json bookkeeping → reload now.
-  }, [changeEventsAvailable, cronChangeTick, jobId, retryTick])
+  }, [changeEventsAvailable, cronChangeTick, jobId, noAgent, retryTick])
 
   const retry = () => {
     // Keep any previously loaded runs visible while the effect retries.
@@ -119,22 +151,28 @@ export function CronJobRuns({ c, jobId }: { c: Translations['cron']; jobId: stri
         )
       ) : (
         <div className="flex flex-col gap-px">
-          {runs.map(run => (
-            <div key={run.id}>
+          {runs.map(item => (
+            <div key={item.run.id}>
               <button
-                aria-expanded={selectedRun?.id === run.id}
+                aria-expanded={selectedRunId === item.run.id}
                 className="row-hover flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                onClick={() => setSelectedRun(current => (current?.id === run.id ? null : run))}
+                onClick={() => setSelectedRunId(current => (current === item.run.id ? null : item.run.id))}
                 type="button"
               >
                 <span className="truncate text-foreground/85">
-                  {run.title?.trim() || run.preview?.trim() || run.id}
+                  {item.kind === 'session'
+                    ? item.run.title?.trim() || item.run.preview?.trim() || item.run.id
+                    : executionLabel(item.run.status, c, t.messaging.unknown)}
                 </span>
                 <span className="shrink-0 text-[0.62rem] text-muted-foreground/55 tabular-nums">
-                  {formatRunTime(run.last_active || run.started_at)}
+                  {item.kind === 'session'
+                    ? formatRunTime(item.run.last_active || item.run.started_at)
+                    : new Date(item.run.claimed_at).toLocaleString()}
                 </span>
               </button>
-              {selectedRun?.id === run.id && <AutomationRunResult key={run.id} run={run} />}
+              {selectedRunId === item.run.id && (item.kind === 'session'
+                ? <AutomationRunResult key={item.run.id} run={item.run} />
+                : <div className="px-2 py-2 text-xs text-muted-foreground">{executionLabel(item.run.status, c, t.messaging.unknown)}</div>)}
             </div>
           ))}
         </div>

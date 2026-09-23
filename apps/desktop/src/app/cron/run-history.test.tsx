@@ -1,14 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
-import { getCronJobRuns } from '@/hermes'
+import { getCronJobExecutions, getCronJobRuns } from '@/hermes'
 import { I18nProvider } from '@/i18n'
 import { en } from '@/i18n/en'
 import type { SessionInfo } from '@/types/hermes'
 
 import { CronJobRuns } from './run-history'
 
-vi.mock('@/hermes', () => ({ getCronJobRuns: vi.fn() }))
+vi.mock('@/hermes', () => ({ getCronJobExecutions: vi.fn(), getCronJobRuns: vi.fn() }))
 vi.mock('./run-result', () => ({ AutomationRunResult: () => null }))
 
 afterEach(() => {
@@ -87,4 +87,24 @@ it('keeps cached runs visible when a refresh fails and while retrying', async ()
   await screen.findByText('Earlier result')
   expect(screen.queryByText('Failed to load automations')).toBeNull()
   expect(getCronJobRuns).toHaveBeenCalledTimes(3)
+})
+
+it('shows script-only execution history without opening a nonexistent chat session', async () => {
+  vi.mocked(getCronJobExecutions).mockResolvedValueOnce([{
+    id: 'execution-one',
+    status: 'completed',
+    claimed_at: '2026-09-23T06:00:00+00:00',
+    finished_at: '2026-09-23T06:00:01+00:00'
+  }])
+
+  render(
+    <I18nProvider configClient={null} initialLocale="en">
+      <CronJobRuns c={en.cron} jobId="script-job" noAgent />
+    </I18nProvider>
+  )
+
+  await screen.findByRole('button', { name: /completed/i })
+  expect(screen.queryByText('No runs yet')).toBeNull()
+  expect(getCronJobRuns).not.toHaveBeenCalled()
+  expect(getCronJobExecutions).toHaveBeenCalledWith('script-job')
 })

@@ -879,7 +879,7 @@ function CronJobDetail({ busy, c, job, onEdit, onPauseResume, onTrigger }: CronJ
         </section>
       ) : null}
 
-      <CronJobRuns c={c} jobId={job.id} key={job.id} />
+      <CronJobRuns c={c} jobId={job.id} key={job.id} noAgent={job.no_agent} />
     </PanelDetail>
   )
 }

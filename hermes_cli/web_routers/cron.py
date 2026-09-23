@@ -137,6 +137,34 @@ def _list_cron_job_runs_sync(job_id: str, profile: Optional[str] = None, limit: 
         db.close()
 
 
+def _list_cron_job_executions_sync(job_id: str, profile: Optional[str] = None, limit: int = 20):
+    """Read the durable ledger for a script-only job without inventing chat sessions."""
+    selected = _job_profile(job_id, profile)
+    job = _found(_call_cron_for_profile(selected, "get_job", job_id))
+    if not job.get("no_agent"):
+        return {"executions": []}
+
+    from cron.executions import list_executions
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+
+    _, home = _cron_profile_home(selected)
+    try:
+        limit_n = max(1, min(int(limit), 100))
+    except (TypeError, ValueError):
+        limit_n = 20
+    token = set_hermes_home_override(str(home))
+    try:
+        rows = list_executions(job_id=str(job["id"]), limit=limit_n)
+    finally:
+        reset_hermes_home_override(token)
+    # The ledger's error may contain script stdout or secrets. This consumer
+    # view needs only the outcome and timing, not raw process diagnostics.
+    return {"executions": [
+        {key: row.get(key) for key in ("id", "status", "claimed_at", "finished_at")}
+        for row in rows
+    ]}
+
+
 _EXECUTION_FIELDS = {"prompt", "skill", "skills", "script", "no_agent"}
 
 
@@ -221,6 +249,11 @@ async def get_cron_job(job_id: str, profile: Optional[str] = None):
 @router.get("/api/cron/jobs/{job_id}/runs")
 async def list_cron_job_runs(job_id: str, profile: Optional[str] = None, limit: int = 20):
     return await _run_cron_dashboard_io(_list_cron_job_runs_sync, job_id, profile, limit)
+
+
+@router.get("/api/cron/jobs/{job_id}/executions")
+async def list_cron_job_executions(job_id: str, profile: Optional[str] = None, limit: int = 20):
+    return await _run_cron_dashboard_io(_list_cron_job_executions_sync, job_id, profile, limit)
 
 
 @router.post("/api/cron/jobs")
