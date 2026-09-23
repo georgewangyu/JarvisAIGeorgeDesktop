@@ -65,8 +65,20 @@ it('turns an Idea into an editable chat draft without sending it', () => {
   fireEvent.click(screen.getByRole('button', { name: /Plan my day/ }))
   expect(takeSessionDraft(null).text).toBe('Help me plan today around my calendar, priorities, and energy.')
   expect($freshSessionRequest.get()).toBe(1)
-  expect(screen.getByRole('heading', { name: 'For today' })).toBeTruthy()
-  expect(screen.getByRole('heading', { name: 'Make progress' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Featured ideas' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Shopping' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Productivity' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Relationships' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Financial planning' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Health & fitness' })).toBeTruthy()
+})
+
+it('keeps a shopping idea as an editable draft without taking action', () => {
+  render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+
+  fireEvent.click(screen.getByRole('button', { name: /Compare a purchase/ }))
+  expect(takeSessionDraft(null).text).toContain('Do not buy anything.')
+  expect($freshSessionRequest.get()).toBe(1)
 })
 
 it('preserves an existing unsent draft when starting a goal', async () => {
