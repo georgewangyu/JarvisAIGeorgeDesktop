@@ -1,6 +1,6 @@
 import type { SessionGoalCreateResult, SessionGoalSetCompletedResult, SessionGoalsListResult } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { Button } from '@/components/ui/button'
@@ -334,6 +334,52 @@ export function ConsumerGoalsView() {
   const [newGoalTitle, setNewGoalTitle] = useState('')
   const [savingGoal, setSavingGoal] = useState(false)
   const [saveGoalError, setSaveGoalError] = useState(false)
+  const goalDialogRef = useRef<HTMLElement>(null)
+  const goalChatButtonRef = useRef<HTMLButtonElement>(null)
+  const goalTriggerRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (selectedStarter) {
+      goalChatButtonRef.current?.focus()
+    }
+  }, [selectedStarter])
+
+  const closeGoalSetup = () => {
+    if (savingGoal) {
+      return
+    }
+
+    setSelectedStarter(null)
+    setNewGoalTitle('')
+    setSaveGoalError(false)
+    goalTriggerRef.current?.focus()
+  }
+
+  const onGoalDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeGoalSetup()
+    } else if (event.key === 'Tab') {
+      const focusable = [...(goalDialogRef.current?.querySelectorAll<HTMLElement>('button, input') ?? [])]
+        .filter(element => !element.hasAttribute('disabled'))
+
+      if (!focusable.length) {
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -449,6 +495,7 @@ export function ConsumerGoalsView() {
         : current)
       setSelectedStarter(null)
       setNewGoalTitle('')
+      goalTriggerRef.current?.focus()
     } catch {
       if ($gateway.get() === gateway && $activeGatewayProfile.get() === profile) {
         setSaveGoalError(true)
@@ -539,55 +586,67 @@ export function ConsumerGoalsView() {
                     selectedStarter?.[0] === starter[0] && 'bg-(--ui-bg-secondary) text-(--ui-accent)'
                   )}
                   key={starter[0]}
-                  onClick={() => { setSelectedStarter(starter); setNewGoalTitle(''); setSaveGoalError(false) }}
+                  onClick={event => {
+                    goalTriggerRef.current = event.currentTarget
+                    setSelectedStarter(starter)
+                    setNewGoalTitle('')
+                    setSaveGoalError(false)
+                  }}
                   type="button"
                 >
                   <span className="block font-medium">{starter[0]}</span>
                 </button>
               ))}
             </div>
-            {selectedStarter ? (
-              <section
-                aria-label={selectedStarter[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter[0].toLowerCase()} goal`}
-                className="mt-5 space-y-4 rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-base font-semibold">
-                      {selectedStarter[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter[0].toLowerCase()} goal`}
-                    </h3>
-                    <p className="mt-1 text-sm leading-6 text-(--ui-text-secondary)">
-                      Give this goal a name to track it here, or talk it through with Jarvis first. Saving a goal does not start background work.
-                    </p>
-                  </div>
-                  <Button
-                    aria-label="Close goal setup"
-                    disabled={savingGoal}
-                    onClick={() => setSelectedStarter(null)}
-                    size="sm"
-                    variant="ghost"
-                  >Close</Button>
-                </div>
-                <Input aria-label="Goal name" autoCapitalize="sentences" maxLength={200} onChange={event => setNewGoalTitle(event.target.value)} placeholder="What would you like to work toward?" value={newGoalTitle} />
-                {saveGoalError ? <p className="text-sm text-(--ui-text-danger)" role="alert">The goal could not be saved. Try again.</p> : null}
-                <div className="flex flex-wrap gap-2">
-                  <Button disabled={!newGoalTitle.trim() || savingGoal} onClick={() => void saveGoal()}>Save goal</Button>
-                  <Button disabled={savingGoal} onClick={() => {
-                    const title = newGoalTitle.trim()
-
-                    const prompt = title
-                      ? `I want to work toward: ${title}\n\n${selectedStarter[1]}`
-                      : selectedStarter[1]
-
-                    startConsumerDraft(prompt, navigate)
-                    setSelectedStarter(null)
-                  }} variant="secondary">Continue to chat</Button>
-                </div>
-              </section>
-            ) : null}
           </section>
         </div>
       )}
+      {selectedStarter ? (
+        <div className="fixed inset-0 z-(--z-modal) grid place-items-center bg-black/22 p-4 backdrop-blur-[0.125rem]">
+          <section
+            aria-describedby="goal-setup-description"
+            aria-label={selectedStarter[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter[0].toLowerCase()} goal`}
+            aria-modal="true"
+            className="w-full max-w-lg space-y-5 rounded-xl border border-(--stroke-nous) bg-(--ui-chat-bubble-background) p-6 shadow-nous"
+            onKeyDown={onGoalDialogKeyDown}
+            ref={goalDialogRef}
+            role="dialog"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">
+                  {selectedStarter[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter[0].toLowerCase()} goal`}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-(--ui-text-secondary)" id="goal-setup-description">
+                  Jarvis can help you shape this goal in chat. The message stays editable until you send it.
+                </p>
+              </div>
+              <Button aria-label="Close goal setup" disabled={savingGoal} onClick={closeGoalSetup} size="sm" variant="ghost">Close</Button>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium" htmlFor="consumer-goal-name">Already have a name for it? (optional)</label>
+              <Input autoCapitalize="sentences" id="consumer-goal-name" maxLength={200} onChange={event => setNewGoalTitle(event.target.value)} placeholder="What would you like to work toward?" value={newGoalTitle} />
+            </div>
+            {saveGoalError ? <p className="text-sm text-(--ui-text-danger)" role="alert">The goal could not be saved. Try again.</p> : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button disabled={savingGoal} onClick={() => {
+                const title = newGoalTitle.trim()
+
+                const prompt = title
+                  ? `I want to work toward: ${title}\n\n${selectedStarter[1]}`
+                  : selectedStarter[1]
+
+                startConsumerDraft(prompt, navigate)
+                setSelectedStarter(null)
+              }} ref={goalChatButtonRef}>Talk it through</Button>
+              <Button disabled={!newGoalTitle.trim() || savingGoal} onClick={() => void saveGoal()} variant="secondary">Save goal</Button>
+            </div>
+            <p className="text-xs leading-5 text-(--ui-text-tertiary)">
+              Saving a name adds it to Tracking without starting a chat or background work.
+            </p>
+          </section>
+        </div>
+      ) : null}
     </ConsumerPage>
   )
 }

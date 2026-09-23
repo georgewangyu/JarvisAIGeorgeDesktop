@@ -114,8 +114,8 @@ it('requires an explicit choice before adding a goal to an existing unsent draft
   )
 
   fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
-  expect(screen.getByRole('region', { name: 'Create a health goal' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
+  expect(screen.getByRole('dialog', { name: 'Create a health goal' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Talk it through' }))
   expect(takeSessionDraft(null).text).toBe('Existing thought')
   expect($freshSessionRequest.get()).toBe(0)
   expect($notifications.get()[0]?.message).toContain('Nothing was added')
@@ -133,13 +133,14 @@ it('clarifies a goal category before creating an editable draft, without claimin
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
   fireEvent.click(await screen.findByRole('button', { name: 'Productivity' }))
-  expect(screen.getByRole('region', { name: 'Create a productivity goal' })).toBeTruthy()
+  expect(screen.getByRole('dialog', { name: 'Create a productivity goal' })).toBeTruthy()
   expect($freshSessionRequest.get()).toBe(0)
-  fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Talk it through' }))
   expect(takeSessionDraft(null).text).toBe(
     'Help me clarify a productivity goal. Ask what outcome matters and what is getting in the way.'
   )
   expect($freshSessionRequest.get()).toBe(1)
+  expect(screen.queryByRole('heading', { name: 'Tracking' })).toBeNull()
   expect(screen.getByRole('heading', { name: 'Create a goal' })).toBeTruthy()
 })
 
@@ -150,8 +151,8 @@ it('carries the typed goal into an editable clarification draft without saving i
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
   fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
-  fireEvent.change(screen.getByRole('textbox', { name: 'Goal name' }), { target: { value: '  Walk three times a week  ' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Already have a name for it? (optional)' }), { target: { value: '  Walk three times a week  ' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Talk it through' }))
 
   expect(takeSessionDraft(null).text).toBe(
     'I want to work toward: Walk three times a week\n\nHelp me clarify a health-related goal. Ask what outcome I want and what constraints matter before making a plan.'
@@ -169,7 +170,7 @@ it('saves a passive goal and shows it in Tracking without sending a prompt', asy
 
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
   fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
-  fireEvent.change(screen.getByRole('textbox', { name: 'Goal name' }), { target: { value: 'Walk three times a week' } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Already have a name for it? (optional)' }), { target: { value: 'Walk three times a week' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
 
   expect(await screen.findByRole('button', { name: /Walk three times a week/ })).toBeTruthy()
@@ -191,11 +192,11 @@ it('keeps the goal form open when saving fails', async () => {
 
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
   fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
-  fireEvent.change(screen.getByRole('textbox', { name: 'Goal name' }), { target: { value: 'Keep in touch' } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Already have a name for it? (optional)' }), { target: { value: 'Keep in touch' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
 
   expect((await screen.findByRole('alert')).textContent).toContain('could not be saved')
-  expect(screen.getByRole('textbox', { name: 'Goal name' })).toHaveProperty('value', 'Keep in touch')
+  expect(screen.getByRole('textbox', { name: 'Already have a name for it? (optional)' })).toHaveProperty('value', 'Keep in touch')
   expect(screen.queryByRole('button', { name: /Keep in touch/ })).toBeNull()
 })
 
@@ -205,10 +206,35 @@ it('closes goal clarification without preparing a chat draft', async () => {
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
   fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
-  expect(screen.getByRole('region', { name: 'Create a health goal' })).toBeTruthy()
+  expect(screen.getByRole('dialog', { name: 'Create a health goal' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Close goal setup' }))
 
-  expect(screen.queryByRole('region', { name: 'Create a health goal' })).toBeNull()
+  expect(screen.queryByRole('dialog', { name: 'Create a health goal' })).toBeNull()
+  expect($freshSessionRequest.get()).toBe(0)
+})
+
+it('keeps focus in goal clarification and restores the category after Escape', async () => {
+  $gateway.set({ request: async () => ({ goals: [] }) } as never)
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+
+  const health = await screen.findByRole('button', { name: 'Health' })
+  fireEvent.click(health)
+  const dialog = screen.getByRole('dialog', { name: 'Create a health goal' })
+  const chat = screen.getByRole('button', { name: 'Talk it through' })
+  const save = screen.getByRole('button', { name: 'Save goal' })
+  const close = screen.getByRole('button', { name: 'Close goal setup' })
+  expect(globalThis.document.activeElement).toBe(chat)
+
+  fireEvent.change(screen.getByRole('textbox', { name: 'Already have a name for it? (optional)' }), { target: { value: 'Walk more' } })
+  close.focus()
+  fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true })
+  expect(globalThis.document.activeElement).toBe(save)
+  fireEvent.keyDown(dialog, { key: 'Tab' })
+  expect(globalThis.document.activeElement).toBe(close)
+  fireEvent.keyDown(dialog, { key: 'Escape' })
+
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(globalThis.document.activeElement).toBe(health)
   expect($freshSessionRequest.get()).toBe(0)
 })
 

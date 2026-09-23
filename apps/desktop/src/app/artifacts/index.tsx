@@ -1,3 +1,4 @@
+import { useStore } from '@nanostores/react'
 import type * as React from 'react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -38,6 +39,7 @@ import { normalize } from '@/lib/text'
 import { fmtDayTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
+import { $activeGatewayProfile } from '@/store/profile'
 
 import { ConsumerPage, startConsumerDraft } from '../consumer-pages'
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
@@ -64,6 +66,26 @@ const SESSION_INDEX_PAGE_SIZE = 30
 
 function sessionKey(session: { id: string; profile?: string }): string {
   return `${session.profile || 'default'}:${session.id}`
+}
+
+function artifactKey(artifact: ArtifactRecord): string {
+  return `${artifact.profile || 'default'}:${artifact.id}`
+}
+
+function discussionPrompt(artifacts: readonly ArtifactRecord[]): string {
+  const references = artifacts.map(artifact => {
+    const location = artifact.kind === 'link'
+      ? /^https?:\/\//i.test(artifact.value) ? artifact.value : null
+      : isArtifactFilePath(artifact.value) ? artifact.value : null
+
+    return `- ${JSON.stringify(artifact.label)}${location ? ` — ${JSON.stringify(location)}` : ''}`
+  })
+
+  return [
+    'Help me discuss these Library entries from earlier chats. These are references, not attached files. Confirm access before reading a file, and ask me for missing context.',
+    '',
+    ...references
+  ].join('\n')
 }
 
 function pageRangeLabel(total: number, page: number, pageSize: number, a: Translations['artifacts']): string {
@@ -133,6 +155,9 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const [sortOrder, setSortOrder] = useState<ArtifactSort>('newest')
   const [failedOpen, setFailedOpen] = useState<ArtifactRecord | null>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
+  const activeProfile = useStore($activeGatewayProfile)
+  const [selecting, setSelecting] = useState(false)
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set())
 
   const [kindFilter, setKindFilter] = useRouteEnumParam('tab', ARTIFACT_FILTERS, 'all')
 
@@ -189,6 +214,8 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       }
 
       setArtifacts(nextArtifacts)
+      setSelectedKeys(new Set())
+      setSelecting(false)
       indexedSessionsRef.current = new Set(sessions.map(sessionKey))
       setOlderOffset(page.total > SESSION_INDEX_PAGE_SIZE ? SESSION_INDEX_PAGE_SIZE : null)
       setOlderLoadError(false)
@@ -242,6 +269,8 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
           ...olderArtifacts.filter(artifact => !existingIds.has(`${artifact.profile || 'default'}:${artifact.id}`))
         ]
       })
+      setSelectedKeys(new Set())
+      setSelecting(false)
 
       const nextOffset = olderOffset + SESSION_INDEX_PAGE_SIZE
       setOlderOffset(page.sessions.length > 0 && page.total > nextOffset ? nextOffset : null)
@@ -264,6 +293,11 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     setImagePage(1)
     setFilePage(1)
   }, [artifacts, kindFilter, query, sortOrder])
+
+  useEffect(() => {
+    setSelectedKeys(new Set())
+    setSelecting(false)
+  }, [activeProfile, kindFilter, query, sortOrder])
 
   const visibleArtifacts = useMemo(() => {
     if (!artifacts) {
@@ -316,6 +350,50 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     () => visibleFileArtifacts.slice((currentFilePage - 1) * 100, currentFilePage * 100),
     [currentFilePage, visibleFileArtifacts]
   )
+
+  const currentPageArtifacts = useMemo(
+    () => [...pagedImageArtifacts, ...pagedFileArtifacts],
+    [pagedImageArtifacts, pagedFileArtifacts]
+  )
+
+  const selectedArtifacts = useMemo(
+    () => visibleArtifacts.filter(artifact => selectedKeys.has(artifactKey(artifact))),
+    [selectedKeys, visibleArtifacts]
+  )
+
+  const allCurrentPageSelected = currentPageArtifacts.length > 0 &&
+    currentPageArtifacts.every(artifact => selectedKeys.has(artifactKey(artifact)))
+
+  const toggleSelected = useCallback((artifact: ArtifactRecord) => {
+    setSelectedKeys(current => {
+      const next = new Set(current)
+      const key = artifactKey(artifact)
+
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+
+      return next
+    })
+  }, [])
+
+  const toggleCurrentPage = useCallback(() => {
+    setSelectedKeys(current => {
+      const next = new Set(current)
+
+      for (const artifact of currentPageArtifacts) {
+        if (allCurrentPageSelected) {
+          next.delete(artifactKey(artifact))
+        } else {
+          next.add(artifactKey(artifact))
+        }
+      }
+
+      return next
+    })
+  }, [allCurrentPageSelected, currentPageArtifacts])
 
   // Rotating placeholder nudges from real data — search matches file paths and
   // session titles, not just labels; show it.
@@ -513,6 +591,25 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
               </Tip>
           </div>
 
+          <div aria-label="Library selection" className="flex min-h-8 flex-wrap items-center justify-end gap-2">
+            {selecting ? (
+              <>
+                <span className="mr-auto text-xs text-(--ui-text-tertiary)">{selectedArtifacts.length} selected</span>
+                <Button disabled={currentPageArtifacts.length === 0} onClick={toggleCurrentPage} size="sm" variant="ghost">
+                  {allCurrentPageSelected ? 'Clear page' : 'Select all on page'}
+                </Button>
+                <Button disabled={selectedArtifacts.length === 0} onClick={() => startConsumerDraft(discussionPrompt(selectedArtifacts), navigate)} size="sm" variant="secondary">
+                  Discuss selected
+                </Button>
+                <Button onClick={() => { setSelectedKeys(new Set()); setSelecting(false) }} size="sm" variant="ghost">
+                  Exit selection
+                </Button>
+              </>
+            ) : (
+              <Button onClick={() => setSelecting(true)} size="sm" variant="ghost">Select</Button>
+            )}
+          </div>
+
           {failedOpen ? (
             <div className="flex items-center justify-between gap-3 rounded-xl bg-(--ui-bg-secondary) px-4 py-3 text-sm" role="alert">
               <span>{a.openFailed}: {failedOpen.label}</span>
@@ -574,6 +671,9 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                         key={artifact.id}
                         onImageError={markImageFailed}
                         onOpenChat={sessionId => openSession(sessionId, navigate)}
+                        onSelect={toggleSelected}
+                        selected={selectedKeys.has(artifactKey(artifact))}
+                        selecting={selecting}
                       />
                     ))}
                   </div>
@@ -593,7 +693,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                     />
                   </div>
                   <div className="overflow-x-auto rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background)">
-                    <ArtifactTable artifacts={pagedFileArtifacts} ctx={cellCtx} filter={kindFilter} />
+                    <ArtifactTable artifacts={pagedFileArtifacts} ctx={cellCtx} filter={kindFilter} onSelect={toggleSelected} selectedKeys={selectedKeys} selecting={selecting} />
                   </div>
                 </section>
               )}
@@ -671,9 +771,12 @@ interface ArtifactImageCardProps {
   failedImage: boolean
   onImageError: (id: string) => void
   onOpenChat: (sessionId: string) => void
+  onSelect: (artifact: ArtifactRecord) => void
+  selected: boolean
+  selecting: boolean
 }
 
-function ArtifactImageCard({ artifact, failedImage, onImageError, onOpenChat }: ArtifactImageCardProps) {
+function ArtifactImageCard({ artifact, failedImage, onImageError, onOpenChat, onSelect, selected, selecting }: ArtifactImageCardProps) {
   const { t } = useI18n()
   const a = t.artifacts
   const kindLabel = artifact.kind === 'image' ? a.kindImage : artifact.kind === 'file' ? a.kindFile : a.kindLink
@@ -726,6 +829,12 @@ function ArtifactImageCard({ artifact, failedImage, onImageError, onOpenChat }: 
       </div>
 
       <div className="space-y-1.5 p-2">
+        {selecting ? (
+          <label className="flex items-center gap-2 text-xs">
+            <input aria-label={`Select ${artifact.label}`} checked={selected} onChange={() => onSelect(artifact)} type="checkbox" />
+            Select
+          </label>
+        ) : null}
         <div className="min-w-0">
           <div className="mb-0.5 flex items-center gap-1 text-[0.625rem] uppercase tracking-[0.08em] text-(--ui-text-tertiary)">
             <FileImage className="size-3" />
@@ -886,11 +995,17 @@ const ARTIFACT_COLUMNS: readonly ArtifactColumn[] = [
 function ArtifactTable({
   artifacts,
   ctx,
-  filter
+  filter,
+  onSelect,
+  selectedKeys,
+  selecting
 }: {
   artifacts: readonly ArtifactRecord[]
   ctx: CellCtx
   filter: ArtifactFilter
+  onSelect: (artifact: ArtifactRecord) => void
+  selectedKeys: ReadonlySet<string>
+  selecting: boolean
 }) {
   const { t } = useI18n()
 
@@ -898,6 +1013,7 @@ function ArtifactTable({
     <table className="w-full min-w-176 table-fixed text-left text-[length:var(--conversation-caption-font-size)]">
       <thead className="border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) text-[0.625rem] uppercase tracking-[0.08em] text-(--ui-text-tertiary)">
         <tr>
+          {selecting ? <th className="w-10 px-2 py-1.5" scope="col"><span className="sr-only">Select</span></th> : null}
           {ARTIFACT_COLUMNS.map(col => (
             <th className={cn(col.width(filter), 'px-2.5 py-1.5 font-medium')} key={col.id}>
               {col.header(filter, t.artifacts)}
@@ -908,6 +1024,11 @@ function ArtifactTable({
       <tbody>
         {artifacts.map(artifact => (
           <tr className="group/artifact" key={artifact.id}>
+            {selecting ? (
+              <td className="px-2 py-1.5 align-middle">
+                <input aria-label={`Select ${artifact.label}`} checked={selectedKeys.has(artifactKey(artifact))} onChange={() => onSelect(artifact)} type="checkbox" />
+              </td>
+            ) : null}
             {ARTIFACT_COLUMNS.map(col => {
               const Cell = col.Cell
 
