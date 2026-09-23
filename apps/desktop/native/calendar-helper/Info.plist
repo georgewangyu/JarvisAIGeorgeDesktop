@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.georgewangyu.jarvisaigeorge.calendar-helper</string>
+    <key>CFBundleName</key>
+    <string>Jarvis Calendar Helper</string>
+    <key>CFBundleExecutable</key>
+    <string>jarvis-calendar-helper</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Allow Jarvis to show and create calendar events when you choose to use Calendar.</string>
+</dict>
+</plist>
