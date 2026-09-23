@@ -12,6 +12,7 @@ import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
 import { $goalsBySession, setSessionGoal } from '@/store/goals'
+import { notify } from '@/store/notifications'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $sessions } from '@/store/session'
 
@@ -242,11 +243,28 @@ const IDEA_GROUPS = [
 ] as const
 
 export function startConsumerDraft(prompt: string, navigate: ReturnType<typeof useNavigate>): void {
-  const current = takeSessionDraft(null)
-  const text = current.text.trim() ? `${current.text.trimEnd()}\n\n${prompt}` : prompt
-  stashSessionDraft(null, text, current.attachments)
-  requestFreshSession()
-  navigate(NEW_CHAT_ROUTE)
+  const addToDraft = () => {
+    const current = takeSessionDraft(null)
+    const text = current.text.trim() ? `${current.text.trimEnd()}\n\n${prompt}` : prompt
+
+    stashSessionDraft(null, text, current.attachments)
+    requestFreshSession()
+    navigate(NEW_CHAT_ROUTE)
+  }
+
+  if (takeSessionDraft(null).text.trim()) {
+    notify({
+      id: 'consumer-draft-already-open',
+      kind: 'info',
+      message: 'You have an unfinished chat draft. Nothing was added to it.',
+      action: { label: 'Add to draft', onClick: addToDraft },
+      durationMs: 0
+    })
+
+    return
+  }
+
+  addToDraft()
 }
 
 export function ConsumerIdeasView() {

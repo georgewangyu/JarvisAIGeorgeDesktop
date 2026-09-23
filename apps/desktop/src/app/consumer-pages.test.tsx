@@ -6,6 +6,7 @@ import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/
 import { $cronJobs } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
 import { $goalsBySession } from '@/store/goals'
+import { $notifications, clearNotifications } from '@/store/notifications'
 import { $activeGatewayProfile, $freshSessionRequest } from '@/store/profile'
 import { $sessions } from '@/store/session'
 import { makeSessionInfo } from '@/test/session-info'
@@ -15,6 +16,7 @@ import { ConsumerFeedView, ConsumerGoalsView, ConsumerIdeasView } from './consum
 afterEach(() => {
   cleanup()
   clearSessionDraft(null)
+  clearNotifications()
   $cronJobs.set([])
   $goalsBySession.set({})
   $gateway.set(null as never)
@@ -101,7 +103,7 @@ it('keeps a shopping idea as an editable draft without taking action', () => {
   expect($freshSessionRequest.get()).toBe(1)
 })
 
-it('preserves an existing unsent draft when starting a goal', async () => {
+it('requires an explicit choice before adding a goal to an existing unsent draft', async () => {
   stashSessionDraft(null, 'Existing thought', [])
   $gateway.set({ request: async () => ({ goals: [] }) } as never)
 
@@ -114,9 +116,15 @@ it('preserves an existing unsent draft when starting a goal', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
   expect(screen.getByRole('dialog', { name: 'Create a health goal' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
+  expect(takeSessionDraft(null).text).toBe('Existing thought')
+  expect($freshSessionRequest.get()).toBe(0)
+  expect($notifications.get()[0]?.message).toContain('Nothing was added')
+
+  $notifications.get()[0]?.action?.onClick()
   expect(takeSessionDraft(null).text).toBe(
     'Existing thought\n\nHelp me clarify a health-related goal. Ask what outcome I want and what constraints matter before making a plan.'
   )
+  expect($freshSessionRequest.get()).toBe(1)
 })
 
 it('clarifies a goal category before creating an editable draft, without claiming a saved goal', async () => {
