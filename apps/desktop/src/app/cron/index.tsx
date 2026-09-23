@@ -302,6 +302,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
   // immediately. `loading` only gates the first paint before the atom is filled.
   const jobs = useStore($cronJobs)
   const [loading, setLoading] = useState(jobs.length === 0)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [query, setQuery] = useState('')
   const [blueprintsExpanded, setBlueprintsExpanded] = useState(false)
   const [busyJobTokens, setBusyJobTokens] = useState<ReadonlyMap<string, symbol>>(() => new Map())
@@ -359,7 +360,10 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
     }
 
     if (refreshError) {
+      setLoadFailed(true)
       notifyError(refreshError, c.failedLoad)
+    } else {
+      setLoadFailed(false)
     }
 
     setLoading(false)
@@ -639,6 +643,16 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
 
       {loading && jobs.length === 0 ? (
         <PageLoader label={c.loading} />
+      ) : loadFailed && jobs.length === 0 ? (
+        <PanelEmpty
+          action={
+            <Button onClick={() => void refresh()} size="sm">
+              {t.common.retry}
+            </Button>
+          }
+          icon="warning"
+          title={c.failedLoad}
+        />
       ) : totalCount === 0 && visibleBlueprints.length === 0 ? (
         <PanelEmpty
           action={
