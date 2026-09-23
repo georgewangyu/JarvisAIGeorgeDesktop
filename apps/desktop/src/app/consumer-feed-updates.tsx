@@ -29,6 +29,7 @@ type FeedUpdateState =
   | { items: FeedUpdate[]; kind: 'ready'; partialFailure: boolean }
 
 const FEED_JOB_LIMIT = 4
+const FEED_RUN_LIMIT = 3
 
 function recentFeedJobs(jobs: CronJob[]): CronJob[] {
   const runTime = (job: CronJob) => {
@@ -75,29 +76,32 @@ export function ConsumerFeedUpdates() {
 
     setState({ kind: 'loading' })
     void Promise.all(selectedJobs.map(async job => {
-      const runs = await getCronJobRuns(job.id, 1)
-      const run = runs[0]
+      const runs = await getCronJobRuns(job.id, FEED_RUN_LIMIT)
 
-      if (!run || run.is_active) {
-        return null
-      }
+      const outcomes = await Promise.all(runs.filter(run => !run.is_active).map(async run => {
+        try {
+          const owner = { profile: run.profile || profile, connectionId: connection?.connectionId }
+          const result = await getSessionMessages(run.id, owner, { limit: 100, order: 'latest' }, { passive: true })
+          const answer = automationAnswer(result.messages)
 
-      const owner = { profile: run.profile || profile, connectionId: connection?.connectionId }
-      const result = await getSessionMessages(run.id, owner, { limit: 100, order: 'latest' }, { passive: true })
-      const answer = automationAnswer(result.messages)
+          return { item: answer ? { answer, job, runId: run.id, time: run.last_active || run.started_at } : null, failed: false }
+        } catch {
+          return { item: null, failed: true }
+        }
+      }))
 
-      return answer ? { answer, job, runId: run.id, time: run.last_active || run.started_at } : null
-    }).map(promise => promise.then(value => ({ value, failed: false })).catch(() => ({ value: null, failed: true }))))
+      return { items: outcomes.flatMap(outcome => outcome.item ? [outcome.item] : []), failed: outcomes.some(outcome => outcome.failed) }
+    }).map(promise => promise.catch(() => ({ items: [] as FeedUpdate[], failed: true }))))
       .then(results => {
         if (cancelled) {
           return
         }
 
-        const items = results.flatMap(result => result.value ? [result.value] : [])
+        const items = results.flatMap(result => result.items)
           .sort((a, b) => b.time - a.time)
 
         const partialFailure = results.some(result => result.failed)
-        setState(items.length === 0 && partialFailure && results.every(result => result.failed)
+        setState(items.length === 0 && partialFailure
           ? { kind: 'error' }
           : { items, kind: 'ready', partialFailure })
       })

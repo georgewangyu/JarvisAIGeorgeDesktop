@@ -46,7 +46,7 @@ it('renders a saved automation answer and opens its owning job', async () => {
   )
 
   expect(await screen.findByText('Your saved briefing is ready.')).toBeTruthy()
-  expect(getCronJobRuns).toHaveBeenCalledWith('briefing', 1)
+  expect(getCronJobRuns).toHaveBeenCalledWith('briefing', 3)
   expect(getSessionMessages).toHaveBeenCalledWith(
     'cron-briefing-1',
     { profile: 'work', connectionId: undefined },
@@ -83,8 +83,8 @@ it('checks recently run automations even when they appear after older jobs in th
   render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
 
   expect(await screen.findByText('The newest saved answer.')).toBeTruthy()
-  expect(getCronJobRuns).toHaveBeenCalledWith('recent', 1)
-  expect(getCronJobRuns).not.toHaveBeenCalledWith('old-4', 1)
+  expect(getCronJobRuns).toHaveBeenCalledWith('recent', 3)
+  expect(getCronJobRuns).not.toHaveBeenCalledWith('old-4', 3)
 })
 
 it('refreshes a saved update when the same automation runs again', async () => {
@@ -96,6 +96,48 @@ it('refreshes a saved update when the same automation runs again', async () => {
   await waitFor(() => expect(getCronJobRuns).toHaveBeenCalledTimes(1))
   $cronJobs.set([{ id: 'routine', name: 'Routine', enabled: true, last_run_at: '2026-09-22T00:00:00Z' }])
   await waitFor(() => expect(getCronJobRuns).toHaveBeenCalledTimes(2))
+})
+
+it('keeps earlier completed editions when the newest run has no answer', async () => {
+  $cronJobs.set([{ id: 'briefing', name: 'Morning briefing', enabled: true }])
+  vi.mocked(getCronJobRuns).mockResolvedValue([
+    makeSessionInfo({ id: 'latest-run', is_active: false, last_active: 200 }),
+    makeSessionInfo({ id: 'earlier-run', is_active: false, last_active: 100 })
+  ])
+  vi.mocked(getSessionMessages).mockImplementation(async id => ({
+    messages: id === 'earlier-run' ? [{ role: 'assistant', content: 'Earlier saved answer.' }] : []
+  }) as never)
+
+  render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+
+  expect(await screen.findByText('Earlier saved answer.')).toBeTruthy()
+  expect(getSessionMessages).toHaveBeenCalledTimes(2)
+})
+
+it('shows a saved edition and retry when another run transcript fails', async () => {
+  $cronJobs.set([{ id: 'briefing', name: 'Morning briefing', enabled: true }])
+  vi.mocked(getCronJobRuns).mockResolvedValue([
+    makeSessionInfo({ id: 'failed-run', is_active: false, last_active: 200 }),
+    makeSessionInfo({ id: 'saved-run', is_active: false, last_active: 100 })
+  ])
+  vi.mocked(getSessionMessages).mockImplementation(async id => {
+    if (id === 'failed-run') {
+      throw new Error('offline')
+    }
+
+    return { messages: [{ role: 'assistant', content: 'Still available.' }] } as never
+  })
+
+  render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+
+  expect(await screen.findByText('Still available.')).toBeTruthy()
+  expect(screen.getByRole('alert').textContent).toContain('Some updates couldn’t load.')
+  vi.mocked(getSessionMessages).mockImplementation(async id => ({
+    messages: [{ role: 'assistant', content: id === 'failed-run' ? 'Recovered edition.' : 'Still available.' }]
+  }) as never)
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  expect(await screen.findByText('Recovered edition.')).toBeTruthy()
+  await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
 })
 
 it('opens an editable side-chat draft to discuss a saved update without sending', async () => {
