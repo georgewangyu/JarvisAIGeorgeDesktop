@@ -16,10 +16,14 @@ import { type AppView, ROUTES_AREA, SIDEBAR_NAV_AREA } from '../../routes'
 import { ChatSidebar, OPEN_CONSUMER_CHATS_EVENT, OPEN_CONSUMER_SEARCH_EVENT } from './index'
 
 const searchSessionsMock = vi.hoisted(() => vi.fn())
+const listLibrarySessionsMock = vi.hoisted(() => vi.fn())
+const getLibraryMessagesMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hermes', async importOriginal => ({
   ...(await importOriginal() as object),
-  searchSessions: searchSessionsMock
+  searchSessions: searchSessionsMock,
+  listAllProfileSessions: listLibrarySessionsMock,
+  getAllSessionMessages: getLibraryMessagesMock
 }))
 
 const noop = () => {}
@@ -61,6 +65,9 @@ describe('consumer chat navigation', () => {
   beforeEach(() => {
     searchSessionsMock.mockReset()
     searchSessionsMock.mockResolvedValue({ results: [] })
+    listLibrarySessionsMock.mockReset()
+    listLibrarySessionsMock.mockResolvedValue({ sessions: [], total: 0 })
+    getLibraryMessagesMock.mockReset()
     $sessions.set(sessions)
     $cronJobs.set([])
     $removedSessionIds.set(new Set())
@@ -167,6 +174,84 @@ describe('consumer chat navigation', () => {
     expect(onManageCronJob).toHaveBeenCalledWith('morning-check')
     expect(onResumeSession).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull())
+  })
+
+  it('finds a real saved Library artifact and resumes its owning profile', async () => {
+    const owner = makeSessionInfo({ id: 'saved-artifact', profile: 'writer', connection_id: 'remote-1', title: 'Report work' })
+    listLibrarySessionsMock.mockResolvedValue({ sessions: [owner], total: 1 })
+    getLibraryMessagesMock.mockResolvedValue({ messages: [
+      { role: 'assistant', timestamp: 1000, content: 'Saved /tmp/quarterly-report.pdf' }
+    ] })
+    const onResumeSession = vi.fn()
+    renderSidebar('/', 'chat', onResumeSession)
+
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), {
+      target: { value: 'quarterly-report' }
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: /quarterly-report\.pdf/ }))
+    expect(onResumeSession).toHaveBeenCalledWith('saved-artifact', owner)
+    expect(getLibraryMessagesMock).toHaveBeenCalledWith('saved-artifact', 'writer')
+  })
+
+  it('does not index or reveal hidden worker artifacts in consumer Search', async () => {
+    const worker = makeSessionInfo({ id: 'hidden-worker', source: 'subagent', title: 'Internal result' })
+    listLibrarySessionsMock.mockResolvedValue({ sessions: [worker], total: 1 })
+    getLibraryMessagesMock.mockResolvedValue({ messages: [
+      { role: 'assistant', timestamp: 1000, content: 'Saved /tmp/hidden-worker-report.pdf' }
+    ] })
+    renderSidebar()
+
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), {
+      target: { value: 'hidden-worker-report' }
+    })
+
+    await waitFor(() => expect(listLibrarySessionsMock).toHaveBeenCalledOnce())
+    expect(getLibraryMessagesMock).not.toHaveBeenCalled()
+    expect(screen.queryByText('hidden-worker-report.pdf')).toBeNull()
+  })
+
+  it('continues the Library search into older saved sessions', async () => {
+    listLibrarySessionsMock
+      .mockResolvedValueOnce({
+        sessions: Array.from({ length: 30 }, (_, index) => makeSessionInfo({ id: `recent-${index}`, profile: 'default' })),
+        total: 31
+      })
+      .mockResolvedValueOnce({
+        sessions: [makeSessionInfo({ id: 'older-artifact', profile: 'default', title: 'Older work' })],
+        total: 31
+      })
+    getLibraryMessagesMock.mockImplementation(async (id: string) => ({
+      messages: id === 'older-artifact'
+        ? [{ role: 'assistant', timestamp: 1000, content: 'Saved /tmp/older-report.pdf' }]
+        : []
+    }))
+    renderSidebar()
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), {
+      target: { value: 'older-report' }
+    })
+
+    expect(await screen.findByRole('button', { name: /older-report\.pdf/ })).toBeTruthy()
+    expect(listLibrarySessionsMock.mock.calls[1][6]).toBe(30)
+  })
+
+  it('keeps a Library indexing failure distinct from no results and retries', async () => {
+    $sessions.set([])
+    listLibrarySessionsMock.mockRejectedValueOnce(new Error('offline'))
+    renderSidebar()
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), {
+      target: { value: 'unknown-artifact' }
+    })
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Library')
+    expect(screen.queryByText('No results for “unknown-artifact”.')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(listLibrarySessionsMock).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('No results for “unknown-artifact”.')).toBeTruthy()
   })
 
   it('describes a no-match result without implying only chats were searched', () => {

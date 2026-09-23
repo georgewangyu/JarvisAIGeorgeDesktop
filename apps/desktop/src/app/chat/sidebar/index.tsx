@@ -148,6 +148,7 @@ import { SidebarSectionAddButton } from './chrome'
 import { ConsumerActivity } from './consumer-activity'
 import { SidebarFilterMenu } from './filter-menu'
 import { useGatewaySessionGroups } from './gateway-group-model'
+import { type LibrarySearchHit, matchingLibraryHits, scanLibrary } from './library-search'
 import { SidebarLoadMoreRow } from './load-more-row'
 import { orderByIds, reconcileOrderIds, resolveManualSessionOrderIds, sameIds } from './order'
 import { filterSessionsByProfileScope } from './profile-scope'
@@ -459,6 +460,11 @@ export function ChatSidebar({
   const [searchPending, setSearchPending] = useState(false)
   const [searchError, setSearchError] = useState(false)
   const [searchAttempt, setSearchAttempt] = useState(0)
+  const [libraryHits, setLibraryHits] = useState<LibrarySearchHit[]>([])
+  const [libraryPending, setLibraryPending] = useState(false)
+  const [libraryError, setLibraryError] = useState(false)
+  const [libraryFailedReads, setLibraryFailedReads] = useState(0)
+  const [libraryAttempt, setLibraryAttempt] = useState(0)
   const [messagingLoadMorePending, setMessagingLoadMorePending] = useState<Record<string, boolean>>({})
   const [recentsLoadMorePending, setRecentsLoadMorePending] = useState(false)
   const messagingOpenIds = useStore($sidebarMessagingOpenIds)
@@ -727,6 +733,45 @@ export function ChatSidebar({
       window.clearTimeout(id)
     }
   }, [trimmedQuery, searchAttempt])
+
+  // Library's artifacts are derived from saved transcripts, not from session
+  // titles or an invented file index. Keep one scan alive while the drawer is
+  // open so changing the query only filters the already discovered records.
+  useEffect(() => {
+    if (!chatsOpen || drawerMode !== 'search' || !trimmedQuery) {
+      return
+    }
+
+    let cancelled = false
+    setLibraryHits([])
+    setLibraryPending(true)
+    setLibraryError(false)
+    setLibraryFailedReads(0)
+
+    void scanLibrary(
+      () => cancelled,
+      (pageHits, failedReads) => {
+        setLibraryHits(current => [...current, ...pageHits])
+        setLibraryFailedReads(failedReads)
+      }
+    )
+      .catch(() => {
+        if (!cancelled) {
+          setLibraryError(true)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLibraryPending(false)
+        }
+      })
+
+    return () => { cancelled = true }
+  // The scan is query-independent after the first nonempty query.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatsOpen, drawerMode, Boolean(trimmedQuery), activeConnectionId, libraryAttempt])
+
+  const matchingLibrary = useMemo(() => matchingLibraryHits(libraryHits, trimmedQuery), [libraryHits, trimmedQuery])
 
   const searchResults = useMemo(() => {
     if (!trimmedQuery) {
@@ -1681,7 +1726,7 @@ export function ChatSidebar({
             <SheetHeader className="border-b border-(--ui-stroke-secondary) px-4 pb-3 pt-12">
               <SheetTitle className="text-lg tracking-tight">{drawerMode === 'search' ? 'Search' : 'Chats'}</SheetTitle>
               <SheetDescription className="sr-only">
-                {drawerMode === 'search' ? 'Find chats, pages, and automations' : 'Jarvis conversation and side chats'}
+                {drawerMode === 'search' ? 'Find chats, Library files, pages, and automations' : 'Jarvis conversation and side chats'}
               </SheetDescription>
             </SheetHeader>
 
@@ -1796,6 +1841,39 @@ export function ChatSidebar({
                       ))}
                     </div>
                   )}
+                  {trimmedQuery && matchingLibrary.length > 0 && (
+                    <div className="px-2 pb-3 pt-1">
+                      <div className="px-2 pb-1 text-xs font-medium uppercase tracking-wider text-(--ui-text-tertiary)">
+                        Library
+                      </div>
+                      {matchingLibrary.map(({ artifact, session }) => (
+                        <Button
+                          className="w-full justify-start gap-2"
+                          key={`${session.profile || 'default'}:${artifact.id}`}
+                          onClick={() => resumeFromDrawer(session.id, session)}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          <Codicon name={artifact.kind === 'image' ? 'file-media' : artifact.kind === 'link' ? 'link' : 'file'} size="0.75rem" />
+                          <span className="min-w-0 text-left">
+                            <span className="block truncate">{artifact.label}</span>
+                            <span className="block truncate text-xs text-(--ui-text-tertiary)">{artifact.sessionTitle}</span>
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                  {trimmedQuery && libraryPending && (
+                    <div className="px-4 pb-2 text-xs text-(--ui-text-tertiary)" role="status">Searching Library…</div>
+                  )}
+                  {trimmedQuery && (libraryError || libraryFailedReads > 0) && (
+                    <div className="flex items-center justify-between gap-3 px-4 pb-3 text-xs text-(--ui-text-secondary)" role="alert">
+                      <span>{libraryError ? 'Couldn’t finish searching Library.' : 'Some Library items couldn’t be searched.'}</span>
+                      <Button onClick={() => setLibraryAttempt(attempt => attempt + 1)} size="sm" variant="ghost">
+                        {t.common.retry}
+                      </Button>
+                    </div>
+                  )}
                   {trimmedQuery && searchError && (
                     <div className="flex items-center justify-between gap-3 px-4 pb-3 text-xs text-(--ui-text-secondary)" role="alert">
                       <span>{jarvisCopy.searchUnavailable}</span>
@@ -1809,7 +1887,7 @@ export function ChatSidebar({
                       activeSessionId={activeSidebarSessionId}
                       contentClassName={cn('flex min-h-0 flex-1 flex-col gap-px pb-1.75', SCROLL_Y)}
                       emptyState={
-                        matchingPages.length > 0 || matchingAutomationJobs.length > 0 || searchError ? null : searchPending ? (
+                        matchingPages.length > 0 || matchingAutomationJobs.length > 0 || matchingLibrary.length > 0 || searchError || libraryError || libraryFailedReads > 0 ? null : searchPending || libraryPending ? (
                           <SidebarSessionSkeletons />
                         ) : (
                           <div className="wrap-anywhere grid min-h-24 place-items-center rounded-lg px-2 text-center text-xs text-(--ui-text-tertiary)">
