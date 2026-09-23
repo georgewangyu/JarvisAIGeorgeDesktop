@@ -8,19 +8,22 @@ import { $gateway } from '@/store/gateway'
 import { $goalsBySession } from '@/store/goals'
 import { $notifications, clearNotifications } from '@/store/notifications'
 import { $activeGatewayProfile, $freshSessionRequest } from '@/store/profile'
-import { $sessions } from '@/store/session'
+import { $connection, $sessions } from '@/store/session'
 import { makeSessionInfo } from '@/test/session-info'
 
 import { ConsumerFeedView, ConsumerGoalsView, ConsumerIdeasView } from './consumer-pages'
+import { readIdeaFeedback } from './ideas/feedback'
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   clearSessionDraft(null)
   clearNotifications()
   $cronJobs.set([])
   $goalsBySession.set({})
   $gateway.set(null as never)
   $activeGatewayProfile.set('default')
+  $connection.set(null)
   $freshSessionRequest.set(0)
   $sessions.set([])
 })
@@ -84,7 +87,7 @@ it('turns an Idea into an editable chat draft without sending it', () => {
     </MemoryRouter>
   )
 
-  fireEvent.click(screen.getByRole('button', { name: /Plan my day/ }))
+  fireEvent.click(screen.getByRole('button', { name: /^Plan my day/ }))
   expect(takeSessionDraft(null).text).toBe('Help me plan today around my calendar, priorities, and energy.')
   expect($freshSessionRequest.get()).toBe(1)
   expect(screen.getByRole('heading', { name: 'Featured ideas' })).toBeTruthy()
@@ -98,9 +101,28 @@ it('turns an Idea into an editable chat draft without sending it', () => {
 it('keeps a shopping idea as an editable draft without taking action', () => {
   render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
 
-  fireEvent.click(screen.getByRole('button', { name: /Compare a purchase/ }))
+  fireEvent.click(screen.getByRole('button', { name: /^Compare a purchase/ }))
   expect(takeSessionDraft(null).text).toContain('Do not buy anything.')
   expect($freshSessionRequest.get()).toBe(1)
+})
+
+it('saves and clears Idea feedback without opening a chat or sending a prompt', async () => {
+  const view = render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Feedback for Plan my day' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Save for later' }))
+  expect(readIdeaFeedback('default', null)['plan-day']).toBe('saved')
+  expect($notifications.get()).toEqual([])
+  expect(screen.getByRole('button', { name: /^Plan my day/ }).textContent).toContain('Saved for later')
+  expect($freshSessionRequest.get()).toBe(0)
+  expect(takeSessionDraft(null).text).toBe('')
+
+  view.unmount()
+  render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+  expect(screen.getByText('Saved for later')).toBeTruthy()
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Feedback for Plan my day' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Clear choice' }))
+  expect(readIdeaFeedback('default', null)['plan-day']).toBeUndefined()
 })
 
 it('requires an explicit choice before adding a goal to an existing unsent draft', async () => {

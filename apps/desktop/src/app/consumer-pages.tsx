@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
@@ -14,9 +15,11 @@ import { $gateway } from '@/store/gateway'
 import { $goalsBySession, setSessionGoal } from '@/store/goals'
 import { notify } from '@/store/notifications'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
-import { $sessions } from '@/store/session'
+import { $connection, $sessions } from '@/store/session'
 
 import { ConsumerFeedUpdates } from './consumer-feed-updates'
+import { IDEA_GROUPS } from './ideas/catalog'
+import { type IdeaFeedback, type IdeaFeedbackById, ideaFeedbackKey, readIdeaFeedback, setIdeaFeedback } from './ideas/feedback'
 import { NEW_CHAT_ROUTE, sessionRoute } from './routes'
 
 export function ConsumerPage({
@@ -139,109 +142,6 @@ export function ConsumerFeedView() {
   )
 }
 
-const IDEA_GROUPS = [
-  {
-    title: 'Featured ideas',
-    ideas: [
-      {
-        title: 'Plan my day',
-        description: 'Turn today’s priorities into a realistic plan.',
-        prompt: 'Help me plan today around my calendar, priorities, and energy.'
-      },
-      {
-        title: 'Catch me up',
-        description: 'Find the important things to pick up next.',
-        prompt: 'Give me a concise catch-up on what needs my attention today.'
-      }
-    ]
-  },
-  {
-    title: 'Shopping',
-    ideas: [
-      {
-        title: 'Compare a purchase',
-        description: 'Set the criteria before deciding what to buy.',
-        prompt: 'Help me compare a purchase. First ask what I am considering, what matters to me, and my budget. Do not buy anything.'
-      },
-      {
-        title: 'Find the tradeoffs',
-        description: 'Sort through competing options in one conversation.',
-        prompt: 'Help me compare the options I am considering and surface the tradeoffs. Ask what I value before recommending anything.'
-      }
-    ]
-  },
-  {
-    title: 'Productivity',
-    ideas: [
-      {
-        title: 'Prepare for a meeting',
-        description: 'Walk in knowing the context and decisions to make.',
-        prompt: 'Help me prepare for an upcoming meeting and identify the decisions I need to make.'
-      },
-      {
-        title: 'Organize a project',
-        description: 'Break an idea into milestones and next actions.',
-        prompt: 'Turn a project I have in mind into a clear plan with milestones and next actions.'
-      },
-      {
-        title: 'Build a routine',
-        description: 'Design a repeatable rhythm before automating it.',
-        prompt: 'Help me create a realistic recurring routine and decide what Jarvis should automate.'
-      }
-    ]
-  },
-  {
-    title: 'Relationships',
-    ideas: [
-      {
-        title: 'Draft a thoughtful message',
-        description: 'Find the right words without sending anything yet.',
-        prompt: 'Help me draft a thoughtful message. Ask who it is for and what I want to say. Do not send it.'
-      },
-      {
-        title: 'Make time to reconnect',
-        description: 'Plan a simple way to catch up with someone.',
-        prompt: 'Help me plan a low-pressure way to reconnect with someone. Ask about our relationship and what would feel natural.'
-      }
-    ]
-  },
-  {
-    title: 'Financial planning',
-    ideas: [
-      {
-        title: 'Map a savings goal',
-        description: 'Define a target and the questions needed for a plan.',
-        prompt: 'Help me clarify a savings goal. Ask about the target, timeline, and constraints before suggesting a plan. Do not move money or open accounts.'
-      }
-    ]
-  },
-  {
-    title: 'Health & fitness',
-    ideas: [
-      {
-        title: 'Set an activity goal',
-        description: 'Start with an outcome and a pace you can sustain.',
-        prompt: 'Help me clarify a general activity goal and a realistic pace. Ask about my current routine and constraints before suggesting a plan.'
-      },
-      {
-        title: 'Plan a workout',
-        description: 'Shape a session around your time and available gear.',
-        prompt: 'Help me plan a general workout. Ask about my time, available equipment, experience, and any limitations first.'
-      }
-    ]
-  },
-  {
-    title: 'Explore',
-    ideas: [
-      {
-        title: 'Research a decision',
-        description: 'Get clear on the options before choosing a path.',
-        prompt: 'Help me research a decision, compare the options, and surface the tradeoffs.'
-      }
-    ]
-  }
-] as const
-
 export function startConsumerDraft(prompt: string, navigate: ReturnType<typeof useNavigate>): void {
   const addToDraft = () => {
     const current = takeSessionDraft(null)
@@ -269,28 +169,74 @@ export function startConsumerDraft(prompt: string, navigate: ReturnType<typeof u
 
 export function ConsumerIdeasView() {
   const navigate = useNavigate()
+  const profile = useStore($activeGatewayProfile)
+  const connection = useStore($connection)
+  const connectionId = connection?.mode === 'remote' ? (connection.connectionId || connection.baseUrl) : null
+  const scope = ideaFeedbackKey(profile, connectionId)
+
+  const [feedbackSnapshot, setFeedbackSnapshot] = useState<{ scope: string; values: IdeaFeedbackById }>(() => ({
+    scope,
+    values: readIdeaFeedback(profile, connectionId)
+  }))
+
+  const feedback = feedbackSnapshot.scope === scope ? feedbackSnapshot.values : readIdeaFeedback(profile, connectionId)
 
   const startIdea = (prompt: string) => {
     startConsumerDraft(prompt, navigate)
   }
 
+  const chooseFeedback = (ideaId: string, value: IdeaFeedback | null) => {
+    if (setIdeaFeedback(profile, connectionId, ideaId, value)) {
+      const next = { ...feedback }
+
+      if (value === null) {
+        delete next[ideaId]
+      } else {
+        next[ideaId] = value
+      }
+
+      setFeedbackSnapshot({ scope, values: next })
+
+      return
+    }
+
+    notify({ id: 'idea-feedback-save-failed', kind: 'error', message: 'Could not save that choice on this Mac. Please try again.' })
+  }
+
+  const feedbackLabel: Record<IdeaFeedback, string> = {
+    saved: 'Saved for later',
+    done: 'Marked done',
+    'not-interested': 'Not interested'
+  }
+
   return (
-    <ConsumerPage description="Starting points for a chat. Nothing is sent until you choose to send it." title="Ideas">
+    <ConsumerPage description="Starting points for a chat. Choices are saved on this Mac for this profile; nothing is sent until you choose to send it." title="Ideas">
       <div className="space-y-10">
         {IDEA_GROUPS.map(group => (
           <section key={group.title}>
             <h2 className="mb-3 text-xl font-semibold tracking-tight">{group.title}</h2>
             <div className="space-y-1">
               {group.ideas.map(idea => (
-                <button
-                  className="block w-full rounded-2xl px-4 py-3 text-left transition-colors hover:bg-(--ui-control-hover-background)"
-                  key={idea.title}
-                  onClick={() => startIdea(idea.prompt)}
-                  type="button"
-                >
-                  <span className="block font-medium">{idea.title}</span>
-                  <span className="mt-1 block text-sm leading-6 text-(--ui-text-tertiary)">{idea.description}</span>
-                </button>
+                <div className="flex items-start gap-2 rounded-2xl transition-colors hover:bg-(--ui-control-hover-background)" key={idea.id}>
+                  <button className="min-w-0 flex-1 px-4 py-3 text-left" onClick={() => startIdea(idea.prompt)} type="button">
+                    <span className="block font-medium">{idea.title}</span>
+                    <span className="mt-1 block text-sm leading-6 text-(--ui-text-tertiary)">{idea.description}</span>
+                    {feedback[idea.id] && <span className="mt-1 block text-xs text-(--ui-text-secondary)">{feedbackLabel[feedback[idea.id]]}</span>}
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button aria-label={`Feedback for ${idea.title}`} className="mr-2 mt-2 grid size-9 shrink-0 place-items-center rounded-full text-(--ui-text-secondary) hover:bg-(--ui-control-hover-background)" type="button">
+                        <Codicon name="ellipsis" size="1rem" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => chooseFeedback(idea.id, 'saved')}>Save for later</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => chooseFeedback(idea.id, 'done')}>Mark done</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => chooseFeedback(idea.id, 'not-interested')}>Not interested</DropdownMenuItem>
+                      {feedback[idea.id] && <DropdownMenuItem onSelect={() => chooseFeedback(idea.id, null)}>Clear choice</DropdownMenuItem>}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               ))}
             </div>
           </section>
