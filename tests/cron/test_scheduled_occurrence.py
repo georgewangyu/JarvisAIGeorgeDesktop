@@ -85,6 +85,21 @@ def test_completed_occurrence_survives_restart_and_prestamp_rollback(tmp_path, m
     store.write_text(json.dumps({'jobs': [job]}))
     _fire(home, mode)
     assert len(effect.read_text().splitlines()) == 2
+    # Each successful script occurrence must retain its own readable result
+    # through the profile-local ledger, including when a worker process exits.
+    from cron.executions import list_executions, read_execution_result
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+
+    token = set_hermes_home_override(str(home))
+    try:
+        completed = [row for row in list_executions(job_id='occurrence', limit=10)
+                     if row['status'] == 'completed']
+        assert len(completed) == 2
+        assert len({row['output_file'] for row in completed}) == 2
+        assert all('done' in read_execution_result('occurrence', row['id'])
+                   for row in completed)
+    finally:
+        reset_hermes_home_override(token)
     # Manual force is not a completion of the pending scheduled slot.
     job['next_run_at'] = (now() - timedelta(minutes=5)).isoformat()
     pending = json.dumps({'jobs': [job]})
