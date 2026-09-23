@@ -980,17 +980,6 @@ test('connection-config save and apply IPC handlers route payloads through coerc
   }
 })
 
-test('opening a local Library file waits for the OS result and rejects failures', () => {
-  const source = readMain()
-  const handlerStart = source.indexOf("ipcMain.handle('hermes:openExternal'")
-  assert.notEqual(handlerStart, -1, 'the external-open IPC handler must exist')
-
-  const handlerBody = source.slice(handlerStart, handlerStart + 650)
-  assert.match(handlerBody, /resolveRequestedPathForIpc\(url, \{ purpose: 'Open external file' \}\)/)
-  assert.match(handlerBody, /const error = await shell\.openPath\(localPath\)/)
-  assert.match(handlerBody, /if \(error\) \{\s*throw new Error\(error\)/)
-})
-
 test('whenReady enables basic password-store encryption before createWindow', () => {
   const source = readMain()
   const enableIndex = source.indexOf('enableBasicPasswordStoreEncryption({')

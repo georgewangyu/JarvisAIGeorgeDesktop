@@ -260,6 +260,7 @@ import { registerJarvisCodexOAuth } from './jarvis-codex-oauth'
 import { registerJarvisOnboardingPermissions } from './jarvis-onboarding-permissions'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
 import { notifyLauncherWindowRevealed } from './linux-launcher-ready'
+import { openLocalArtifact } from './local-artifact-open'
 import { createLocalBackendLifecycle, waitForTeardown } from './local-backend-lifecycle'
 import { ensureMainWindow } from './main-window-lifecycle'
 import {
@@ -17441,12 +17442,7 @@ ipcMain.handle('hermes:openExternal', async (_event, url) => {
   // report the result instead of acknowledging the request while openPath is
   // still pending; the renderer can then show its existing failure notice.
   if (typeof url === 'string' && /^file:/i.test(url)) {
-    const localPath = resolveRequestedPathForIpc(url, { purpose: 'Open external file' })
-    const error = await shell.openPath(localPath)
-
-    if (error) {
-      throw new Error(error)
-    }
+    await openLocalArtifact(url, { resolvePath: resolveRequestedPathForIpc, openPath: filePath => shell.openPath(filePath) })
 
     return
   }
