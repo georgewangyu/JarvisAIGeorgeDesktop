@@ -17,6 +17,7 @@ vi.mock('@/api/sessions', () => ({ getSessionMessages: vi.fn() }))
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   vi.resetAllMocks()
   $cronJobs.set([])
   setCronFocusJobId(null)
@@ -24,6 +25,24 @@ afterEach(() => {
   $freshSessionRequest.set(0)
   $connection.set(null)
   clearSessionDraft(null)
+})
+
+it('reversibly saves Love for a real saved edition without sending a prompt', async () => {
+  $cronJobs.set([{ id: 'briefing', name: 'Morning briefing', enabled: true }])
+  vi.mocked(getCronJobRuns).mockResolvedValue([makeSessionInfo({ id: 'saved-edition', is_active: false, last_active: 100 })])
+  vi.mocked(getSessionMessages).mockResolvedValue({ messages: [{ role: 'assistant', content: 'A saved answer.' }] } as never)
+
+  const view = render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Love' }))
+  expect(screen.getByRole('button', { name: 'Loved' }).getAttribute('aria-pressed')).toBe('true')
+  expect($freshSessionRequest.get()).toBe(0)
+  expect(takeSessionDraft(null).text).toBe('')
+
+  view.unmount()
+  render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+  expect(await screen.findByRole('button', { name: 'Loved' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Loved' }))
+  expect(screen.getByRole('button', { name: 'Love' }).getAttribute('aria-pressed')).toBe('false')
 })
 
 it('renders a saved automation answer and opens its owning job', async () => {

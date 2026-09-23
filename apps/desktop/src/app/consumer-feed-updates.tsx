@@ -9,11 +9,13 @@ import { Button } from '@/components/ui/button'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $cronChangeTick } from '@/store/live-sync'
+import { notify } from '@/store/notifications'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $connection } from '@/store/session'
 import type { CronJob } from '@/types/hermes'
 
 import { automationAnswer } from './cron/run-result'
+import { feedLovedKey, readLovedFeedRuns, setFeedRunLoved } from './feed/feedback'
 import { CRON_ROUTE, NEW_CHAT_ROUTE } from './routes'
 
 interface FeedUpdate {
@@ -51,8 +53,29 @@ export function ConsumerFeedUpdates() {
   const changeTick = useStore($cronChangeTick)
   const [retry, setRetry] = useState(0)
   const [state, setState] = useState<FeedUpdateState>({ kind: 'loading' })
+  const connectionId = connection?.mode === 'remote' ? (connection.connectionId || connection.baseUrl) : null
+  const feedbackScope = feedLovedKey(profile, connectionId)
+
+  const [lovedSnapshot, setLovedSnapshot] = useState<{ scope: string; ids: string[] }>(() => ({
+    scope: feedbackScope,
+    ids: readLovedFeedRuns(profile, connectionId)
+  }))
+
+  const lovedRuns = lovedSnapshot.scope === feedbackScope ? lovedSnapshot.ids : readLovedFeedRuns(profile, connectionId)
   const selectedJobs = recentFeedJobs(jobs)
   const jobSignature = selectedJobs.map(job => `${job.id}:${job.last_run_at ?? ''}`).join('\u0000')
+
+  const toggleLove = (runId: string) => {
+    const loved = !lovedRuns.includes(runId)
+
+    if (!setFeedRunLoved(profile, connectionId, runId, loved)) {
+      notify({ id: 'feed-feedback-save-failed', kind: 'error', message: 'Could not save that choice on this Mac. Please try again.' })
+
+      return
+    }
+
+    setLovedSnapshot({ scope: feedbackScope, ids: readLovedFeedRuns(profile, connectionId) })
+  }
 
   const discuss = (item: FeedUpdate) => {
     const current = takeSessionDraft(null)
@@ -127,6 +150,7 @@ export function ConsumerFeedUpdates() {
           View automations
         </Button>
       </div>
+      <p className="mt-1 text-xs text-(--ui-text-tertiary)">Love is saved on this Mac only; it does not change future updates.</p>
       {state.kind === 'loading' ? (
         <p className="mt-4 text-sm text-(--ui-text-tertiary)" role="status">Loading saved updates…</p>
       ) : state.kind === 'error' ? (
@@ -164,6 +188,9 @@ export function ConsumerFeedUpdates() {
                 <MarkdownTextContent isRunning={false} previewOnly text={item.answer} />
               </div>
               <div className="mt-3 flex items-center gap-5">
+                <Button aria-pressed={lovedRuns.includes(item.runId)} onClick={() => toggleLove(item.runId)} size="sm" variant="text">
+                  {lovedRuns.includes(item.runId) ? 'Loved' : 'Love'}
+                </Button>
                 <Button onClick={() => discuss(item)} size="sm" variant="textStrong">Discuss</Button>
                 <Button
                   onClick={() => {
