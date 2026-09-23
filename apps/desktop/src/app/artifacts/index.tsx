@@ -60,6 +60,12 @@ function formatArtifactTime(timestamp: number): string {
   return fmtDayTime.format(new Date(timestamp))
 }
 
+const SESSION_INDEX_PAGE_SIZE = 30
+
+function sessionKey(session: { id: string; profile?: string }): string {
+  return `${session.profile || 'default'}:${session.id}`
+}
+
 function pageRangeLabel(total: number, page: number, pageSize: number, a: Translations['artifacts']): string {
   if (total === 0) {
     return a.zero
@@ -133,7 +139,11 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const [filePage, setFilePage] = useState(1)
 
   const [refreshing, setRefreshing] = useState(false)
+  const [olderOffset, setOlderOffset] = useState<number | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [olderLoadError, setOlderLoadError] = useState(false)
   const refreshInFlightRef = useRef(false)
+  const indexedSessionsRef = useRef(new Set<string>())
 
   const refreshArtifacts = useCallback(async () => {
     if (refreshInFlightRef.current) {
@@ -144,7 +154,8 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     setRefreshing(true)
 
     try {
-      const sessions = (await listAllProfileSessions(30, 1)).sessions
+      const page = await listAllProfileSessions(SESSION_INDEX_PAGE_SIZE, 1)
+      const sessions = page.sessions
 
       const { artifacts: nextArtifacts, failures } = await loadArtifactsForSessions(
         sessions,
@@ -176,6 +187,9 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       }
 
       setArtifacts(nextArtifacts)
+      indexedSessionsRef.current = new Set(sessions.map(sessionKey))
+      setOlderOffset(page.total > SESSION_INDEX_PAGE_SIZE ? SESSION_INDEX_PAGE_SIZE : null)
+      setOlderLoadError(false)
       setLoadError(false)
     } catch (err) {
       notifyError(err, a.failedLoad)
@@ -185,6 +199,58 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       setRefreshing(false)
     }
   }, [a])
+
+  const loadOlderArtifacts = useCallback(async () => {
+    if (olderOffset === null || refreshInFlightRef.current) {
+      return
+    }
+
+    refreshInFlightRef.current = true
+    setLoadingOlder(true)
+    setOlderLoadError(false)
+
+    try {
+      const page = await listAllProfileSessions(SESSION_INDEX_PAGE_SIZE, 1, 'exclude', 'recent', 'all', {}, olderOffset)
+      const unseenSessions = page.sessions.filter(session => !indexedSessionsRef.current.has(sessionKey(session)))
+
+      const { artifacts: olderArtifacts, failures } = await loadArtifactsForSessions(
+        unseenSessions,
+        async session => (await getAllSessionMessages(session.id, session.profile)).messages
+      )
+
+      if (failures.length > 0) {
+        notify({
+          id: 'artifacts-older-partial-load',
+          kind: 'warning',
+          title: a.failedLoad,
+          message: `Skipped ${failures.length} older chats while indexing Library.`,
+          durationMs: 10_000
+        })
+      }
+
+      for (const session of page.sessions) {
+        indexedSessionsRef.current.add(sessionKey(session))
+      }
+
+      setArtifacts(current => {
+        const existingIds = new Set(current?.map(artifact => `${artifact.profile || 'default'}:${artifact.id}`))
+
+        return [
+          ...(current || []),
+          ...olderArtifacts.filter(artifact => !existingIds.has(`${artifact.profile || 'default'}:${artifact.id}`))
+        ]
+      })
+
+      const nextOffset = olderOffset + SESSION_INDEX_PAGE_SIZE
+      setOlderOffset(page.sessions.length > 0 && page.total > nextOffset ? nextOffset : null)
+    } catch (err) {
+      notifyError(err, a.failedLoad)
+      setOlderLoadError(true)
+    } finally {
+      refreshInFlightRef.current = false
+      setLoadingOlder(false)
+    }
+  }, [a, olderOffset])
 
   useRefreshHotkey(refreshArtifacts)
 
@@ -514,6 +580,14 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
               )}
             </div>
           )}
+          {artifacts && olderOffset !== null ? (
+            <div className="flex items-center justify-center gap-3 border-t border-(--ui-stroke-tertiary) pt-4">
+              {olderLoadError ? <span className="text-xs text-(--ui-text-tertiary)">{a.olderLoadFailed}</span> : null}
+              <Button disabled={loadingOlder || refreshing} onClick={() => void loadOlderArtifacts()} size="sm" variant="ghost">
+                {loadingOlder ? a.loadingOlder : a.loadOlder}
+              </Button>
+            </div>
+          ) : null}
         </div>
       </section>
     </ConsumerPage>

@@ -84,6 +84,16 @@ describe('Hermes REST helpers', () => {
     )
   })
 
+  it('requests an older all-profile session page without changing the default window', async () => {
+    await listAllProfileSessions(30, 1, 'exclude', 'recent', 'all', {}, 30)
+
+    expect(api).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/api/profiles/sessions?limit=30&offset=30&min_messages=1&archived=exclude&order=recent&profile=all'
+      })
+    )
+  })
+
   it('batches the sidebar slices into a single request with per-slice limits + excludes', async () => {
     api.mockResolvedValue({ recents: { sessions: [] }, cron: { sessions: [] }, messaging: { sessions: [] } })
 

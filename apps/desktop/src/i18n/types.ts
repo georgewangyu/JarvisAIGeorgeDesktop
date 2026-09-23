@@ -2305,6 +2305,9 @@ export interface Translations {
     refresh: string
     refreshing: string
     indexing: string
+    loadOlder: string
+    loadingOlder: string
+    olderLoadFailed: string
     tabAll: string
     groupArtifacts: string
     groupMedia: string
