@@ -41,6 +41,26 @@ it('opens a real recent conversation from Feed', () => {
   expect(screen.getByText('Opened recent chat')).toBeTruthy()
 })
 
+it('never exposes background or messaging sessions as recent chats', () => {
+  $sessions.set([
+    makeSessionInfo({ id: 'main', source: 'desktop', title: 'My main chat', last_active: 1 }),
+    makeSessionInfo({ id: 'side', source: 'desktop', parent_session_id: 'main', title: 'Trip planning', last_active: 2 }),
+    makeSessionInfo({ id: 'worker', source: 'subagent', title: 'Hidden worker', last_active: 7 }),
+    makeSessionInfo({ id: 'cron', source: 'cron', title: 'Background run', last_active: 6 }),
+    makeSessionInfo({ id: 'message', source: 'telegram', title: 'Private message', last_active: 5 }),
+    makeSessionInfo({ id: 'archived', source: 'desktop', title: 'Old chat', archived: true, last_active: 4 })
+  ])
+
+  render(<MemoryRouter><ConsumerFeedView /></MemoryRouter>)
+
+  expect(screen.getByRole('button', { name: /My main chat/ })).toBeTruthy()
+  expect(screen.getByRole('button', { name: /Trip planning/ })).toBeTruthy()
+  expect(screen.queryByText('Hidden worker')).toBeNull()
+  expect(screen.queryByText('Background run')).toBeNull()
+  expect(screen.queryByText('Private message')).toBeNull()
+  expect(screen.queryByText('Old chat')).toBeNull()
+})
+
 it('keeps automation status cards on Automations rather than duplicating them in Feed', () => {
   $cronJobs.set([{ id: 'finished', name: 'Morning briefing', enabled: true, state: 'completed', schedule_display: 'once in 1 minute' }])
 

@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
@@ -80,7 +81,14 @@ export function ConsumerFeedView() {
   const jobs = useStore($cronJobs)
 
   const recentSessions = [...sessions]
-    .filter(session => !session.archived)
+    .filter(session => {
+      const source = normalizeSessionSource(session.source)
+
+      // The recents fetch excludes these sources, but an optimistic row can
+      // temporarily enter the shared store before the next server refresh.
+      return !session.archived && !isMessagingSource(source) &&
+        !['cron', 'kanban', 'oneshot', 'subagent', 'tool'].includes(source ?? '')
+    })
     .sort((a, b) => b.last_active - a.last_active)
     .slice(0, 8)
 
