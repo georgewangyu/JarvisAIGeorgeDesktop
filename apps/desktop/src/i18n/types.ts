@@ -3582,6 +3582,9 @@ export interface Translations {
       errorGenericProvider: string
       /** Global toast title for a mid-turn gateway `error` event. */
       errorToastTitle: string
+      errorProviderSetupTitle: string
+      errorProviderSetup: string
+      errorOpenProviders: string
       errorRetry: string
       errorLimitResets: (time: string) => string
       /** Arms ONE client-side retry of this turn at the 429's `resets_at` (#98852). */

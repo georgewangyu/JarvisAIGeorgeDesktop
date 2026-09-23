@@ -16,6 +16,7 @@ import { isDiskFullErrorMessage, notify, notifyError } from '@/store/notificatio
 import { requestDesktopOnboarding } from '@/store/onboarding'
 import { flashPetActivity, setPetActivity } from '@/store/pet'
 import { clearAllPrompts } from '@/store/prompts'
+import { requestRoute } from '@/store/recovery-requests'
 import { setTurnStartedAt } from '@/store/session'
 import { clearActiveSessionTodos } from '@/store/todos'
 
@@ -193,7 +194,12 @@ export function handleStatusEvent(ctx: GatewayEventContext): boolean {
     // burying it under a generic "couldn't finish" gloss would hide the one
     // instruction the user needs.
     const card = surface ? errorCardText(TRANSLATIONS[getRuntimeI18nLocale()].assistant.thread, surface) : null
-    const toastMessage = card ? `${card.title}. ${card.body}` : errorMessage
+
+    const toastMessage = looksLikeProviderSetup
+      ? translateNow('assistant.thread.errorProviderSetup')
+      : card
+        ? `${card.title}. ${card.body}`
+        : errorMessage
 
     // A turn that errors out has also ended — drop any open blocking prompt
     // for this session so an approval/sudo/secret overlay can't linger past
@@ -220,6 +226,19 @@ export function handleStatusEvent(ctx: GatewayEventContext): boolean {
 
     if (looksLikeProviderSetup) {
       requestDesktopOnboarding(errorMessage)
+      // A user who explicitly skipped first-run setup does not get the picker
+      // forced over their chat. Give them a direct recovery path instead of
+      // showing the backend's CLI and local-path instructions in a toast.
+      notify({
+        action: {
+          label: translateNow('assistant.thread.errorOpenProviders'),
+          onClick: () => requestRoute('/settings?tab=providers')
+        },
+        id: 'gateway-error:provider-setup',
+        kind: 'error',
+        message: toastMessage,
+        title: translateNow('assistant.thread.errorProviderSetupTitle')
+      })
     } else if (surface?.code === 'disk_full') {
       notifyError(new Error(errorMessage), translateNow('notifications.errors.diskFull'))
     } else {

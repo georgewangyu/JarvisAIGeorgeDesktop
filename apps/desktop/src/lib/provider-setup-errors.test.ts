@@ -9,6 +9,7 @@ describe('isProviderSetupErrorMessage', () => {
     )
     expect(isProviderSetupErrorMessage('No inference provider is configured.')).toBe(true)
     expect(isProviderSetupErrorMessage('No Hermes provider is configured.')).toBe(true)
+    expect(isProviderSetupErrorMessage('Hermes is not connected to any AI provider yet. Run `hermes model` to pick one.')).toBe(true)
     expect(isProviderSetupErrorMessage('set an API key (OPENROUTER_API_KEY) in ~/.hermes/.env')).toBe(true)
   })
 

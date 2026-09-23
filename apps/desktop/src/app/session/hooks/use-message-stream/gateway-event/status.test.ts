@@ -5,13 +5,17 @@
 // where retrying reproduces the failure.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { dispatchNativeNotification } from '@/store/native-notifications'
 import { $notifications } from '@/store/notifications'
+import { requestDesktopOnboarding } from '@/store/onboarding'
+import { requestRoute } from '@/store/recovery-requests'
 
 import { handleStatusEvent } from './status'
 import type { GatewayEventContext } from './types'
 
 vi.mock('@/store/native-notifications', () => ({ dispatchNativeNotification: vi.fn() }))
 vi.mock('@/store/onboarding', () => ({ requestDesktopOnboarding: vi.fn() }))
+vi.mock('@/store/recovery-requests', () => ({ requestRoute: vi.fn() }))
 
 const OWNED_REFUSAL =
   'Session 20260909_095312_6b93f5 already has a live owner (tui, pid 32977, lease age 22m). ' +
@@ -88,5 +92,26 @@ describe('gateway `error` event → error card + toast', () => {
     const toast = $notifications.get()[0]
     expect(toast.message).toBe(serverCopy)
     expect(toast.detail).toBeUndefined()
+  })
+
+  it('offers in-app provider recovery without showing backend commands or local paths in a toast', () => {
+    const raw = 'Hermes is not connected to any AI provider yet. Run `hermes model` or edit .env.'
+    const { ctx, failAssistantMessage } = errorContext(raw)
+
+    handleStatusEvent(ctx)
+
+    expect(requestDesktopOnboarding).toHaveBeenCalledWith(raw)
+    expect(failAssistantMessage).toHaveBeenCalledWith('sess-1', raw, 1_700_000_100, null)
+    const toast = $notifications.get()[0]
+    expect(toast.title).toBe('Jarvis needs an AI provider')
+    expect(toast.message).toMatch(/Connect an AI provider in Settings/)
+    expect(toast.message).not.toMatch(/hermes model|\.env/)
+    expect(toast.detail).toBeUndefined()
+    expect(toast.action?.label).toBe('Open Providers')
+    expect(dispatchNativeNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ body: toast.message, kind: 'turnError' })
+    )
+    toast.action?.onClick()
+    expect(requestRoute).toHaveBeenCalledWith('/settings?tab=providers')
   })
 })
