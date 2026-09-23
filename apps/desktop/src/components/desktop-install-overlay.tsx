@@ -19,7 +19,8 @@ import { useI18n } from '@/i18n'
 import { ChevronDown, ChevronRight, Globe, iconSize } from '@/lib/icons'
 import { capitalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
-import { $desktopOnboarding, completeDesktopOnboarding, dismissFirstRunOnboarding } from '@/store/onboarding'
+import { $consumerSetupReview, closeConsumerSetupReview } from '@/store/consumer-setup-review'
+import { $desktopOnboarding, completeDesktopOnboarding, dismissFirstRunOnboarding, startManualOnboarding } from '@/store/onboarding'
 import { setOnboardingSurfaceActive } from '@/store/onboarding-presence'
 
 import { FirstRunRemoteForm } from './first-run-remote-form'
@@ -299,6 +300,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   const [stateLoaded, setStateLoaded] = useState(false)
   const [standardPicker, setStandardPicker] = useState(false)
   const onboarding = useStore($desktopOnboarding)
+  const setupReviewRequested = useStore($consumerSetupReview)
   const [logOpen, setLogOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -393,11 +395,15 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth
   )
 
+  const reviewReady = Boolean(
+    setupReviewRequested && stateLoaded && !state.active && !state.error && !state.unsupportedPlatform && !state.setupChoice
+  )
+
   useEffect(() => {
-    setOnboardingSurfaceActive('setup', Boolean(enabled && (state.setupChoice || guidedSetup || installedFirstRun)))
+    setOnboardingSurfaceActive('setup', Boolean(enabled && (state.setupChoice || guidedSetup || installedFirstRun || reviewReady)))
 
     return () => setOnboardingSurfaceActive('setup', false)
-  }, [enabled, guidedSetup, installedFirstRun, state.setupChoice])
+  }, [enabled, guidedSetup, installedFirstRun, reviewReady, state.setupChoice])
 
   // Mount logic: show whenever a bootstrap is in flight, completed-with-error,
   // or actively running with a manifest. Hide entirely after a successful
@@ -427,12 +433,12 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       return true
     }
 
-    if (installedFirstRun) {
+    if (installedFirstRun || reviewReady) {
       return true
     }
 
     return false
-  }, [enabled, guidedSetup, installedFirstRun, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
+  }, [enabled, guidedSetup, installedFirstRun, reviewReady, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
 
   if (!shouldShow) {
     return null
@@ -442,13 +448,14 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     return <FirstRunRemoteForm onBack={() => setRemoteOpen(false)} />
   }
 
-  if (state.setupChoice || guidedSetup || installedFirstRun) {
+  if (state.setupChoice || guidedSetup || installedFirstRun || reviewReady) {
     return (
       <JarvisSetupJourney
-        bootstrapComplete={installedFirstRun || Boolean(state.completedAt && !state.active && !state.error)}
+        alreadyConnected={reviewReady && onboarding.configured === true}
+        bootstrapComplete={installedFirstRun || reviewReady || Boolean(state.completedAt && !state.active && !state.error)}
         bootstrapError={state.error}
         onBeginSetup={async () => {
-          if (installedFirstRun) {
+          if (installedFirstRun || reviewReady) {
             return
           }
 
@@ -462,13 +469,22 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           await desktop.continueBootstrapLocal()
         }}
         onConnectOther={() => {
-          if (installedFirstRun) {
+          if (reviewReady) {
+            closeConsumerSetupReview()
+            startManualOnboarding()
+          } else if (installedFirstRun) {
             setStandardPicker(true)
           } else {
             setRemoteOpen(true)
           }
         }}
         onFinish={async () => {
+          if (reviewReady && onboarding.configured === true) {
+            closeConsumerSetupReview()
+
+            return
+          }
+
           const result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
 
           if (!result?.ok) {
@@ -476,10 +492,15 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           }
 
           completeDesktopOnboarding()
+          closeConsumerSetupReview()
           setGuidedSetup(false)
         }}
-        onShowInstallDetails={() => setGuidedSetup(false)}
-        onSkip={installedFirstRun ? dismissFirstRunOnboarding : undefined}
+        onShowInstallDetails={() => {
+          closeConsumerSetupReview()
+          setGuidedSetup(false)
+        }}
+        onSkip={reviewReady ? closeConsumerSetupReview : installedFirstRun ? dismissFirstRunOnboarding : undefined}
+        reviewMode={reviewReady}
       />
     )
   }

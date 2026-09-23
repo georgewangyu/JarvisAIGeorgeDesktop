@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import { $consumerSetupReview, closeConsumerSetupReview } from '@/store/consumer-setup-review'
 import { $desktopVersion } from '@/store/updates'
 
 import { PreferencesView } from './index'
@@ -16,6 +17,7 @@ afterEach(() => {
   vi.clearAllMocks()
   Reflect.deleteProperty(window, 'hermesDesktop')
   $desktopVersion.set(null)
+  closeConsumerSetupReview()
 })
 
 it('uses the shared appearance authority for mode and theme choices', () => {
@@ -49,6 +51,13 @@ it('opens connections without confusing the settings route with a chat', () => {
   )
   fireEvent.click(screen.getByRole('button', { name: 'Manage connections' }))
   expect(screen.getByText('Connection destination')).toBeTruthy()
+})
+
+it('reopens setup for review without resetting app state', () => {
+  render(<MemoryRouter><PreferencesView /></MemoryRouter>)
+  expect($consumerSetupReview.get()).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: 'Review setup steps' }))
+  expect($consumerSetupReview.get()).toBe(true)
 })
 
 it('shows the running app version from the desktop bridge without offering an updater', async () => {

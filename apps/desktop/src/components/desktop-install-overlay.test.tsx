@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DesktopBootstrapEvent, DesktopBootstrapState, DesktopConnectionProbeResult } from '@/global'
+import { $consumerSetupReview, closeConsumerSetupReview, openConsumerSetupReview } from '@/store/consumer-setup-review'
 import { $desktopOnboarding } from '@/store/onboarding'
 import { onboardingSurfaceActive, resetOnboardingPresenceForTests } from '@/store/onboarding-presence'
 
@@ -77,7 +78,7 @@ function whenPresent(text: string): Promise<HTMLElement> {
       }
     })
 
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    observer.observe(globalThis.document.body, { childList: true, subtree: true, characterData: true })
   })
 }
 
@@ -96,6 +97,7 @@ beforeEach(() => {
     freeTierReady: false
   })
   resetOnboardingPresenceForTests()
+  closeConsumerSetupReview()
 })
 
 afterEach(() => {
@@ -103,9 +105,59 @@ afterEach(() => {
   vi.useRealTimers()
   Reflect.deleteProperty(window, 'hermesDesktop')
   resetOnboardingPresenceForTests()
+  closeConsumerSetupReview()
 })
 
 describe('DesktopInstallOverlay first-run setup', () => {
+  it('reviews an existing setup without reauthenticating or clearing connected state', async () => {
+    $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: true })
+    const desktop = installDesktopMock(bootstrapState())
+    const startCodexOAuth = vi.fn()
+    Object.assign(desktop, {
+      jarvisOnboarding: {
+        getPermissions: vi.fn().mockResolvedValue({
+          apps: { mail: true, messages: true, notes: true, whatsapp: false },
+          fullDiskAccess: 'granted', microphone: 'granted', platform: 'darwin'
+        }),
+        startCodexOAuth
+      }
+    })
+    render(<DesktopInstallOverlay />)
+    expect(screen.queryByText('Set up Jarvis')).toBeNull()
+
+    act(openConsumerSetupReview)
+    expect(await screen.findByText('Set up Jarvis')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close setup' }))
+    await waitFor(() => expect(screen.queryByText('Set up Jarvis')).toBeNull())
+    expect($desktopOnboarding.get().configured).toBe(true)
+
+    act(openConsumerSetupReview)
+    fireEvent.click(await screen.findByRole('button', { name: 'Get started' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with 3 detected apps' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    expect(await screen.findByRole('heading', { name: 'Setup reviewed' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Return to Jarvis' }))
+    await waitFor(() => expect($consumerSetupReview.get()).toBe(false))
+    expect($desktopOnboarding.get().configured).toBe(true)
+    expect(startCodexOAuth).not.toHaveBeenCalled()
+  })
+
+  it('lets a providerless user close a setup review without changing their skip choice', async () => {
+    $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false, firstRunSkipped: true })
+    const desktop = installDesktopMock(bootstrapState())
+    const startCodexOAuth = vi.fn()
+    Object.assign(desktop, { jarvisOnboarding: { startCodexOAuth } })
+    render(<DesktopInstallOverlay />)
+
+    act(openConsumerSetupReview)
+    fireEvent.click(await screen.findByRole('button', { name: 'Close setup' }))
+    await waitFor(() => expect($consumerSetupReview.get()).toBe(false))
+    expect($desktopOnboarding.get().firstRunSkipped).toBe(true)
+    expect($desktopOnboarding.get().configured).toBe(false)
+    expect(startCodexOAuth).not.toHaveBeenCalled()
+  })
+
   it('shows the permission journey when the local engine was installed before first launch', async () => {
     $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
     const desktop = installDesktopMock(bootstrapState())

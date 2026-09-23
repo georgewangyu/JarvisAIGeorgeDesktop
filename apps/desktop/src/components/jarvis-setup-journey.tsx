@@ -11,6 +11,8 @@ type Step = 'connect' | 'files' | 'apps' | 'microphone' | 'ready'
 type AppId = keyof JarvisOnboardingPermissionSnapshot['apps']
 
 interface JarvisSetupJourneyProps {
+  alreadyConnected?: boolean
+  reviewMode?: boolean
   bootstrapComplete: boolean
   bootstrapError: string | null
   onBeginSetup: () => Promise<void>
@@ -58,7 +60,7 @@ function StepDots({ step }: { step: Step }) {
   )
 }
 
-function SetupShell({ children, onBack, step }: { children: React.ReactNode; onBack?: () => void; step: Step }) {
+function SetupShell({ children, onBack, onClose, step }: { children: React.ReactNode; onBack?: () => void; onClose?: () => void; step: Step }) {
   return (
     <div
       className="fixed inset-0 z-(--z-setup) grid grid-rows-[5.25rem_1fr_4rem] bg-(--ui-chat-surface-background) text-foreground"
@@ -81,9 +83,12 @@ function SetupShell({ children, onBack, step }: { children: React.ReactNode; onB
           )}
           <span className="text-sm font-medium tracking-tight">JarvisAIGeorge</span>
         </div>
-        <span className="text-xs font-medium text-(--ui-text-tertiary)">
-          Step {STEPS.indexOf(step) + 1} of {STEPS.length}
-        </span>
+        <div className="flex items-center gap-3 [-webkit-app-region:no-drag]">
+          <span className="text-xs font-medium text-(--ui-text-tertiary)">
+            Step {STEPS.indexOf(step) + 1} of {STEPS.length}
+          </span>
+          {onClose ? <Button onClick={onClose} size="sm" variant="ghost">Close setup</Button> : null}
+        </div>
       </header>
 
       <main className="flex min-h-0 items-center justify-center overflow-y-auto px-6 py-8">
@@ -106,6 +111,8 @@ function PermissionStatus({ granted }: { granted: boolean }) {
 }
 
 export function JarvisSetupJourney({
+  alreadyConnected = false,
+  reviewMode = false,
   bootstrapComplete,
   bootstrapError,
   onBeginSetup,
@@ -157,7 +164,7 @@ export function JarvisSetupJourney({
 
   if (step === 'connect') {
     return (
-      <SetupShell step={step}>
+      <SetupShell onClose={reviewMode ? onSkip : undefined} step={step}>
         <div className="mx-auto grid max-w-xl justify-items-center text-center">
           <BrandMark className="size-20" />
           <p className="mt-8 text-xs font-semibold uppercase tracking-[0.2em] text-(--ui-text-tertiary)">
@@ -194,7 +201,7 @@ export function JarvisSetupJourney({
             <Button onClick={onConnectOther} size="sm" variant="text">
               Other AI providers
             </Button>
-            {onSkip ? (
+            {onSkip && !reviewMode ? (
               <Button onClick={onSkip} size="sm" variant="text">
                 I'll choose a provider later
               </Button>
@@ -202,7 +209,9 @@ export function JarvisSetupJourney({
           </div>
 
           <p className="mt-6 text-xs leading-5 text-(--ui-text-tertiary)">
-            You’ll sign in securely with ChatGPT before setup finishes. No API key is required.
+            {alreadyConnected
+              ? 'Your existing connection and conversations will stay as they are.'
+              : 'You’ll sign in securely with ChatGPT before setup finishes. No API key is required.'}
           </p>
           {startError ? <p className="mt-4 text-sm text-destructive">{startError}</p> : null}
         </div>
@@ -214,7 +223,7 @@ export function JarvisSetupJourney({
     const granted = permissions.fullDiskAccess === 'granted'
 
     return (
-      <SetupShell onBack={back} step={step}>
+      <SetupShell onBack={back} onClose={reviewMode ? onSkip : undefined} step={step}>
         <div className="mx-auto max-w-2xl text-center">
           <FileText className="mx-auto size-14 text-(--ui-accent)" strokeWidth={1.5} />
           <h1 className="mt-5 text-3xl font-semibold tracking-[-0.035em]">Let Jarvis work with your files?</h1>
@@ -276,7 +285,7 @@ export function JarvisSetupJourney({
 
   if (step === 'apps') {
     return (
-      <SetupShell onBack={back} step={step}>
+      <SetupShell onBack={back} onClose={reviewMode ? onSkip : undefined} step={step}>
         <div className="mx-auto max-w-2xl">
           <div className="text-center">
             <ShieldLock className="mx-auto size-14 text-(--ui-accent)" strokeWidth={1.5} />
@@ -327,7 +336,7 @@ export function JarvisSetupJourney({
     const restricted = permissions.microphone === 'restricted'
 
     return (
-      <SetupShell onBack={back} step={step}>
+      <SetupShell onBack={back} onClose={reviewMode ? onSkip : undefined} step={step}>
         <div className="mx-auto max-w-2xl text-center">
           <Mic className="mx-auto size-14 text-(--ui-accent)" strokeWidth={1.5} />
           <h1 className="mt-5 text-3xl font-semibold tracking-[-0.035em]">Enable voice input?</h1>
@@ -397,16 +406,20 @@ export function JarvisSetupJourney({
   }
 
   return (
-    <SetupShell onBack={back} step="ready">
+    <SetupShell onBack={back} onClose={reviewMode ? onSkip : undefined} step="ready">
       <div className="mx-auto grid max-w-xl justify-items-center text-center">
         <div className="grid size-20 place-items-center rounded-[1.5rem] bg-(--ui-accent) text-(--ui-accent-foreground)">
           {bootstrapComplete ? <Check className="size-9" strokeWidth={2} /> : <BrandMark className="size-12" />}
         </div>
         <h1 className="mt-7 text-4xl font-semibold tracking-[-0.04em]">
-          {bootstrapComplete ? 'Finish connecting Jarvis' : bootstrapError ? 'Setup needs attention' : 'Preparing Jarvis'}
+          {alreadyConnected
+            ? 'Setup reviewed'
+            : bootstrapComplete ? 'Finish connecting Jarvis' : bootstrapError ? 'Setup needs attention' : 'Preparing Jarvis'}
         </h1>
         <p className="mt-4 max-w-lg text-base leading-7 text-(--ui-text-secondary)">
-          {bootstrapComplete
+          {alreadyConnected
+            ? 'Your account and conversations are unchanged. You can adjust access later in Connections.'
+            : bootstrapComplete
             ? 'One last step: sign in with ChatGPT to start using Jarvis.'
             : bootstrapError
               ? 'Jarvis could not finish setup. Your permission choices were saved.'
@@ -436,7 +449,7 @@ export function JarvisSetupJourney({
               }}
               size="lg"
             >
-              {signingIn ? 'Finish sign-in in your browser' : 'Continue with ChatGPT / Codex'}
+              {alreadyConnected ? 'Return to Jarvis' : signingIn ? 'Finish sign-in in your browser' : 'Continue with ChatGPT / Codex'}
             </Button>
           )}
           {signInError ? <p className="text-sm text-destructive">{signInError}</p> : null}
