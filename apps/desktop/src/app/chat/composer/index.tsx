@@ -1422,7 +1422,7 @@ export function ChatBar({
                     composerSurfaceGlass
                   )}
                 />
-                {!guidedChat && (
+                {!guidedChat && themeName !== 'jarvis' && (
                   <CodingStatusRow
                     onBranchOff={handleBranchOff}
                     onConvertBranch={handleConvertBranch}
