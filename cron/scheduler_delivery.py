@@ -1,4 +1,4 @@
-"""Cron delivery: target resolution (origin/home/explicit/bot-chat), transcript mirroring and
+"""Cron delivery: target resolution (origin/home/explicit/local assistant), transcript mirroring and
 session seeding, live-adapter / relay / standalone send lanes, and ``_deliver_result``.
 
 Split out of ``cron.scheduler``. Import names from this module directly (``cron.scheduler`` only
@@ -576,6 +576,9 @@ def cron_delivery_targets() -> list[dict]:
                 "home_env_var": None})
     except Exception:
         logger.debug("cron_delivery_targets: profile listing unavailable", exc_info=True)
+    # Explicit opt-in: delivery to the permanent chat of this local desktop profile.
+    targets.append({"id": JARVIS_MAIN_PLATFORM, "name": "Jarvis main chat (app open)",
+                    "home_target_set": True, "home_env_var": None})
     return targets
 
 
@@ -620,6 +623,8 @@ def _resolve_single_delivery_target(
     origin = _resolve_origin(job)
     if deliver_value == "local":
         return None
+    if deliver_value.lower() == JARVIS_MAIN_PLATFORM:
+        return {"platform": JARVIS_MAIN_PLATFORM, "chat_id": "", "thread_id": None}
     # Must precede the generic platform:chat_id split so the profile name isn't parsed as chat_id.
     bot_chat_profile = parse_bot_chat_deliver_token(deliver_value)
     if bot_chat_profile is not None:
@@ -978,6 +983,7 @@ _ROUTING_TOKENS = frozenset({"all"})
 # Pseudo-platform: deliver output as a real inbound turn into a profile's "Bot Chat" (not a mirror).
 # ``bot-chat`` = own profile; ``bot-chat:<name>`` = named profile on THIS machine.
 BOT_CHAT_PLATFORM = "bot-chat"
+JARVIS_MAIN_PLATFORM = "jarvis-main"
 # Bot Chat is the TUI/Desktop transcript, so its warning policy is display.platforms.tui.
 BOT_CHAT_POLICY_PLATFORM = "tui"
 
@@ -993,6 +999,44 @@ def parse_bot_chat_deliver_token(part: str) -> Optional[str]:
     if lowered.startswith(prefix):
         return raw[len(prefix):].strip()
     return None
+
+
+def _deliver_to_jarvis_main(job: dict, content: str, *, for_failure: bool = False) -> Optional[str]:
+    """Admit one explicit scheduled result into this profile's live Jarvis chat.
+
+    Never create a chat, wake a closed app, or use the Bot Chat CLI fallback. A
+    queued/claimed receipt is recorded as unverified until the owner settles it.
+    """
+    from hermes_constants import get_hermes_home
+    from tui_gateway.owner_event_inbox import admit_jarvis_event
+
+    execution_id = str(job.get("execution_id") or "").strip()
+    if not execution_id:
+        return "Jarvis delivery requires a durable execution id"
+    home = get_hermes_home().resolve()
+    if for_failure:
+        from gateway.warning_notifications import warning_notifications_enabled
+        from hermes_cli.config_effective import load_user_config_effective
+        if not warning_notifications_enabled(
+            BOT_CHAT_POLICY_PLATFORM, load_user_config_effective(home / "config.yaml")
+        ):
+            job["_notification_all_targets_suppressed"] = True
+            return None
+    title = _redact_cron_payload(job.get("name") or job.get("id") or "routine", "job name")
+    safe_content = _redact_cron_payload(content, "Jarvis scheduled result")
+    text = f'Scheduled routine "{title}" {"failed" if for_failure else "finished"}.\n{safe_content}'
+    try:
+        receipt = admit_jarvis_event(
+            home, source="cron", event_id=f"{job.get('id', '?')}:{execution_id}", text=text)
+    except (OSError, ValueError, RuntimeError) as exc:
+        return f"Jarvis main chat delivery failed: {exc}"
+    job.setdefault("_bot_chat_delivery_receipts", {})[JARVIS_MAIN_PLATFORM] = {
+        "status": receipt["status"], "delivery_id": receipt["id"]}
+    if receipt["status"] == "settled":
+        return None
+    if receipt["status"] in {"queued", "claimed"}:
+        return f"Jarvis main chat {receipt['status']} (receipt {receipt['id']}): completion unverified"
+    return f"Jarvis main chat {receipt['status']} (receipt {receipt['id']}): not completed"
 
 
 def _resolve_bot_chat_target(job: dict, profile_arg: str) -> Optional[dict]:
@@ -1972,7 +2016,7 @@ def _deliver_result(
         # A failure notice for a platform that hides warning notifications is a suppressed
         # disposition, not a send; requested (non-failure) results are never gated.
         from gateway.warning_notifications import warning_notifications_enabled
-        if (for_failure and target["platform"] != BOT_CHAT_PLATFORM
+        if (for_failure and target["platform"] not in {BOT_CHAT_PLATFORM, JARVIS_MAIN_PLATFORM}
                 and not warning_notifications_enabled(target["platform"], user_cfg)):
             suppressed_targets += 1
             continue
@@ -1987,6 +2031,14 @@ def _deliver_result(
                     delivery_errors.append(bot_chat_error)
                 if receipt and receipt["status"] == "ambiguous":
                     unverified_targets.append(bot_chat_error)
+            continue
+        if target["platform"] == JARVIS_MAIN_PLATFORM:
+            jarvis_error = _deliver_to_jarvis_main(job, content, for_failure=for_failure)
+            suppressed_targets += job.pop("_notification_all_targets_suppressed", False)
+            if jarvis_error:
+                receipt = job.get("_bot_chat_delivery_receipts", {}).get(JARVIS_MAIN_PLATFORM)
+                if not receipt or receipt["status"] not in ("queued", "claimed"):
+                    delivery_errors.append(jarvis_error)
             continue
 
         t = _prepare_target_delivery(

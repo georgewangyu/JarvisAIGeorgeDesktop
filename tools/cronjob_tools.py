@@ -172,8 +172,10 @@ def _manual_run_delivery_note(deliver: str, refreshed: Dict[str, Any]) -> str:
         return " (output saved locally only)"
     err = str(refreshed.get("last_delivery_error") or "").strip()
     if not err:
-        if refreshed.get("last_delivery_queued"):
-            return " (output queued for Bot Chat; completion unverified, do not resend)"
+        queued = refreshed.get("last_delivery_queued") or {}
+        if queued:
+            target = "Jarvis main chat" if "jarvis-main" in queued else "Bot Chat"
+            return f" (output queued for {target}; completion unverified, do not resend)"
         return " (output was delivered there by the job itself)"
     return f" (⚠ delivery FAILED: {err[:200]})"
 
