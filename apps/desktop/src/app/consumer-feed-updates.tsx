@@ -30,6 +30,18 @@ type FeedUpdateState =
 
 const FEED_JOB_LIMIT = 4
 
+function recentFeedJobs(jobs: CronJob[]): CronJob[] {
+  const runTime = (job: CronJob) => {
+    const parsed = job.last_run_at ? Date.parse(job.last_run_at) : NaN
+
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  // The server list is not guaranteed to be ordered by last run. Bound the
+  // transcript reads to the most recently active routines, not the first rows.
+  return [...jobs].sort((a, b) => runTime(b) - runTime(a)).slice(0, FEED_JOB_LIMIT)
+}
+
 export function ConsumerFeedUpdates() {
   const navigate = useNavigate()
   const jobs = useStore($cronJobs)
@@ -38,7 +50,8 @@ export function ConsumerFeedUpdates() {
   const changeTick = useStore($cronChangeTick)
   const [retry, setRetry] = useState(0)
   const [state, setState] = useState<FeedUpdateState>({ kind: 'loading' })
-  const jobIds = jobs.slice(0, FEED_JOB_LIMIT).map(job => job.id).join('\u0000')
+  const selectedJobs = recentFeedJobs(jobs)
+  const jobSignature = selectedJobs.map(job => `${job.id}:${job.last_run_at ?? ''}`).join('\u0000')
 
   const discuss = (item: FeedUpdate) => {
     const current = takeSessionDraft(null)
@@ -53,7 +66,6 @@ export function ConsumerFeedUpdates() {
 
   useEffect(() => {
     let cancelled = false
-    const selectedJobs = jobs.slice(0, FEED_JOB_LIMIT)
 
     if (selectedJobs.length === 0) {
       setState({ items: [], kind: 'ready' })
@@ -92,9 +104,9 @@ export function ConsumerFeedUpdates() {
     return () => {
       cancelled = true
     }
-    // A job's ID identifies the lookup; cron.changed refreshes its latest run.
+    // ID and run time identify the lookup; cron.changed also refreshes it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobIds, profile, connection?.connectionId, changeTick, retry])
+  }, [jobSignature, profile, connection?.connectionId, changeTick, retry])
 
   if (jobs.length === 0) {
     return null

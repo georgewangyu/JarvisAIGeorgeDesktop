@@ -68,6 +68,36 @@ it('does not invent a Feed update when an automation has no completed answer', a
   expect(getSessionMessages).not.toHaveBeenCalled()
 })
 
+it('checks recently run automations even when they appear after older jobs in the list', async () => {
+  $cronJobs.set([
+    ...['old-1', 'old-2', 'old-3', 'old-4'].map(id => ({ id, name: id, enabled: true, last_run_at: '2026-09-01T00:00:00Z' })),
+    { id: 'recent', name: 'Recent update', enabled: true, last_run_at: '2026-09-22T00:00:00Z' }
+  ])
+  vi.mocked(getCronJobRuns).mockImplementation(async id => id === 'recent'
+    ? [makeSessionInfo({ id: 'recent-run', is_active: false, last_active: 100 })]
+    : [])
+  vi.mocked(getSessionMessages).mockResolvedValue({
+    messages: [{ role: 'assistant', content: 'The newest saved answer.' }]
+  } as never)
+
+  render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+
+  expect(await screen.findByText('The newest saved answer.')).toBeTruthy()
+  expect(getCronJobRuns).toHaveBeenCalledWith('recent', 1)
+  expect(getCronJobRuns).not.toHaveBeenCalledWith('old-4', 1)
+})
+
+it('refreshes a saved update when the same automation runs again', async () => {
+  $cronJobs.set([{ id: 'routine', name: 'Routine', enabled: true, last_run_at: '2026-09-21T00:00:00Z' }])
+  vi.mocked(getCronJobRuns).mockResolvedValue([])
+
+  render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+
+  await waitFor(() => expect(getCronJobRuns).toHaveBeenCalledTimes(1))
+  $cronJobs.set([{ id: 'routine', name: 'Routine', enabled: true, last_run_at: '2026-09-22T00:00:00Z' }])
+  await waitFor(() => expect(getCronJobRuns).toHaveBeenCalledTimes(2))
+})
+
 it('opens an editable side-chat draft to discuss a saved update without sending', async () => {
   $cronJobs.set([{ id: 'briefing', name: 'Morning briefing', enabled: true }])
   vi.mocked(getCronJobRuns).mockResolvedValue([
