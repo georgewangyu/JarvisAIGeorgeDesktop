@@ -118,10 +118,14 @@ export function JarvisSetupJourney({
   const [startError, setStartError] = useState<string | null>(null)
   const [signingIn, setSigningIn] = useState(false)
   const [signInError, setSignInError] = useState<string | null>(null)
+  const [permissionError, setPermissionError] = useState<string | null>(null)
+  const [permissionActionPending, setPermissionActionPending] = useState(false)
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS)
 
   const stepIndex = STEPS.indexOf(step)
   const back = stepIndex > 0 ? () => setStep(STEPS[stepIndex - 1]) : undefined
+
+  useEffect(() => setPermissionError(null), [step])
 
   useEffect(() => {
     if (step !== 'files' && step !== 'apps' && step !== 'microphone') {
@@ -224,11 +228,32 @@ export function JarvisSetupJourney({
             {granted ? (
               <PermissionStatus granted />
             ) : (
-              <Button onClick={() => void window.hermesDesktop?.jarvisOnboarding?.openFullDiskAccess?.()} size="sm">
-                Allow
+              <Button
+                disabled={permissionActionPending}
+                onClick={async () => {
+                  setPermissionActionPending(true)
+                  setPermissionError(null)
+
+                  try {
+                    const opened = await window.hermesDesktop?.jarvisOnboarding?.openFullDiskAccess?.()
+
+                    if (!opened) {
+                      throw new Error('System Settings could not open. Try again or continue without access.')
+                    }
+                  } catch {
+                    setPermissionError('System Settings could not open. Try again or continue without access.')
+                  } finally {
+                    setPermissionActionPending(false)
+                  }
+                }}
+                size="sm"
+              >
+                Open settings
               </Button>
             )}
           </div>
+
+          {permissionError ? <p className="mt-3 text-sm text-destructive" role="alert">{permissionError}</p> : null}
 
           <div className="mt-8 flex justify-center gap-3">
             <Button onClick={() => setStep('apps')} size="lg">
@@ -320,12 +345,28 @@ export function JarvisSetupJourney({
               <PermissionStatus granted />
             ) : restricted ? null : (
               <Button
+                disabled={permissionActionPending}
                 onClick={async () => {
-                  await window.hermesDesktop?.jarvisOnboarding?.requestMicrophone?.()
-                  const snapshot = await window.hermesDesktop?.jarvisOnboarding?.getPermissions?.()
+                  setPermissionActionPending(true)
+                  setPermissionError(null)
 
-                  if (snapshot) {
-                    setPermissions(snapshot)
+                  try {
+                    const request = window.hermesDesktop?.jarvisOnboarding?.requestMicrophone
+
+                    if (!request) {
+                      throw new Error('Microphone settings are unavailable.')
+                    }
+
+                    await request()
+                    const snapshot = await window.hermesDesktop?.jarvisOnboarding?.getPermissions?.()
+
+                    if (snapshot) {
+                      setPermissions(snapshot)
+                    }
+                  } catch {
+                    setPermissionError('Microphone settings could not open. Try again or skip for now.')
+                  } finally {
+                    setPermissionActionPending(false)
                   }
                 }}
                 size="sm"
@@ -334,6 +375,8 @@ export function JarvisSetupJourney({
               </Button>
             )}
           </div>
+
+          {permissionError ? <p className="mt-3 text-sm text-destructive" role="alert">{permissionError}</p> : null}
 
           <div className="mt-8 flex justify-center gap-3">
             <Button onClick={() => setStep('ready')} size="lg">

@@ -22,12 +22,53 @@ async function reachMicrophoneStep() {
   await screen.findByRole('heading', { name: 'Enable voice input?' })
 }
 
+function renderJourney() {
+  render(
+    <JarvisSetupJourney
+      bootstrapComplete={false}
+      bootstrapError={null}
+      onBeginSetup={vi.fn().mockResolvedValue(undefined)}
+      onConnectOther={vi.fn()}
+      onFinish={vi.fn().mockResolvedValue(undefined)}
+      onShowInstallDetails={vi.fn()}
+    />
+  )
+}
+
 afterEach(() => {
   cleanup()
   Reflect.deleteProperty(window, 'hermesDesktop')
 })
 
-describe('Jarvis microphone onboarding recovery', () => {
+describe('Jarvis permission onboarding recovery', () => {
+  it('explains that Full Disk Access opens Settings and allows retry after failure', async () => {
+    const openFullDiskAccess = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+
+    Object.defineProperty(window, 'hermesDesktop', {
+      configurable: true,
+      value: {
+        jarvisOnboarding: {
+          getPermissions: vi.fn().mockResolvedValue(permissionSnapshot('not-determined')),
+          openFullDiskAccess
+        }
+      }
+    })
+
+    renderJourney()
+    fireEvent.click(screen.getByRole('button', { name: 'Get started' }))
+    expect(await screen.findByRole('heading', { name: 'Let Jarvis work with your files?' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'System Settings could not open. Try again or continue without access.'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
+    await waitFor(() => expect(openFullDiskAccess).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+
   it('offers settings after denial and updates when permission is granted', async () => {
     let microphone: JarvisOnboardingPermissionSnapshot['microphone'] = 'denied'
 
