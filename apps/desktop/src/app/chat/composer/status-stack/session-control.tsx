@@ -4,11 +4,14 @@ import type { SubmitTextOptions } from '@/app/session/hooks/use-prompt-actions/u
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { useI18n } from '@/i18n'
-import type { SessionControlEntry } from '@/store/session-control'
+import type { SessionControlEntry, SessionControlGoal } from '@/store/session-control'
 
 import { SessionControlGoalSection } from './session-control-goal'
 import { SessionControlHeartbeatSection } from './session-control-heartbeat'
 import { SessionControlLoopSection } from './session-control-loop'
+
+export const isPassiveTrackingGoal = (goal: SessionControlGoal | null | undefined): boolean =>
+  goal?.paused_reason === 'consumer_tracking'
 
 export interface SessionControlSectionsProps {
   entry: SessionControlEntry
@@ -80,7 +83,7 @@ export const SessionControlSections = memo(function SessionControlSections({
           {feedbackSuccess}
         </div>
       )}
-      {snapshot?.goal && (
+      {snapshot?.goal && !isPassiveTrackingGoal(snapshot.goal) && (
         <SessionControlGoalSection
           goal={snapshot.goal}
           onFeedback={handleFeedback}

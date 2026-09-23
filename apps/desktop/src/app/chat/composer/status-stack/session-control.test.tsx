@@ -193,6 +193,20 @@ describe('ComposerStatusStack session-control UI', () => {
     expect(screen.queryByText('Legacy Goal Title')).toBeNull()
   })
 
+  it('keeps passive consumer tracking out of the chat status stack', () => {
+    $sessionControlBySession.set({
+      [SID]: mockEntry({
+        snapshot: sampleSnapshot({ goal: sampleGoal({ paused_reason: 'consumer_tracking', status: 'paused', turns_used: 0 }) })
+      })
+    })
+
+    const view = renderStack()
+
+    expect(view.container.querySelector('[data-slot="session-control-goal"]')).toBeNull()
+    expect(screen.queryByText('Goal paused')).toBeNull()
+    expect(screen.queryByText('consumer_tracking')).toBeNull()
+  })
+
   // 11. loop pause/resume/stop calls exact action
   it('calls loop.pause when pause loop is clicked', async () => {
     mockRunSessionControlAction.mockResolvedValue({

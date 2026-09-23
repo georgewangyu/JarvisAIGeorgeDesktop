@@ -35,7 +35,7 @@ import { $threadScrolledUpBySession } from '@/store/thread-scroll'
 import { openSessionInNewWindow } from '@/store/windows'
 
 import { PreviewStatusRow } from './preview-row'
-import { SessionControlSections } from './session-control'
+import { isPassiveTrackingGoal, SessionControlSections } from './session-control'
 import { useSessionValue } from './session-control-utils'
 import { StatusItemRow } from './status-row'
 import { SubagentSection } from './subagent-section'
@@ -208,7 +208,7 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
   const hasControlContent = Boolean(
     controlEntry &&
     (controlEntry.error ||
-      controlEntry.snapshot?.goal ||
+      (controlEntry.snapshot?.goal && !isPassiveTrackingGoal(controlEntry.snapshot.goal)) ||
       controlEntry.snapshot?.loop ||
       controlEntry.snapshot?.heartbeat)
   )
