@@ -137,3 +137,34 @@ def test_script_result_is_exact_profile_scoped_and_bounded(tmp_path, monkeypatch
     with pytest.raises(HTTPException) as error:
         router._get_cron_execution_result_sync("job", wanted, "a")
     assert error.value.status_code == 404
+
+
+def test_script_result_route_requires_dashboard_auth(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from hermes_cli import web_server
+    from hermes_cli.dashboard_auth import clear_providers, register_provider
+    from tests.hermes_cli.conftest_dashboard_auth import StubAuthProvider
+
+    called = []
+    monkeypatch.setattr(router, "_get_cron_execution_result_sync",
+                        lambda *_args: called.append(True) or {"result": "private"})
+    prior_host = getattr(web_server.app.state, "bound_host", None)
+    prior_port = getattr(web_server.app.state, "bound_port", None)
+    prior_required = getattr(web_server.app.state, "auth_required", None)
+    clear_providers()
+    register_provider(StubAuthProvider())
+    web_server.app.state.bound_host = "fly-app.fly.dev"
+    web_server.app.state.bound_port = 443
+    web_server.app.state.auth_required = True
+    try:
+        with TestClient(web_server.app, base_url="https://fly-app.fly.dev") as client:
+            response = client.get("/api/cron/jobs/job/executions/run/result")
+        assert response.status_code == 401
+        assert called == []
+        assert "private" not in response.text
+    finally:
+        clear_providers()
+        web_server.app.state.bound_host = prior_host
+        web_server.app.state.bound_port = prior_port
+        web_server.app.state.auth_required = prior_required
