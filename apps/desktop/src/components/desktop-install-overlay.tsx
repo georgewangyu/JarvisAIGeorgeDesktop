@@ -1,3 +1,4 @@
+import { useStore } from '@nanostores/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { BrandMark } from '@/components/brand-mark'
@@ -18,7 +19,8 @@ import { useI18n } from '@/i18n'
 import { ChevronDown, ChevronRight, Globe, iconSize } from '@/lib/icons'
 import { capitalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
-import { completeDesktopOnboarding } from '@/store/onboarding'
+import { $desktopOnboarding, completeDesktopOnboarding, dismissFirstRunOnboarding } from '@/store/onboarding'
+import { setOnboardingSurfaceActive } from '@/store/onboarding-presence'
 
 import { FirstRunRemoteForm } from './first-run-remote-form'
 import { JarvisSetupJourney } from './jarvis-setup-journey'
@@ -294,6 +296,9 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   const copy = t.install
 
   const [state, setState] = useState<DesktopBootstrapState>(EMPTY_STATE)
+  const [stateLoaded, setStateLoaded] = useState(false)
+  const [standardPicker, setStandardPicker] = useState(false)
+  const onboarding = useStore($desktopOnboarding)
   const [logOpen, setLogOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -334,10 +339,17 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
         if (!cancelled && snapshot) {
           setState(snapshot)
         }
+
+        if (!cancelled) {
+          setStateLoaded(true)
+        }
       })
       .catch(() => {
         // Older Electron build without the IPC handler -- bootstrap UI just
         // stays empty, app falls through to existing onboarding flow.
+        if (!cancelled) {
+          setStateLoaded(true)
+        }
       })
 
     const off = desktop.onBootstrapEvent(ev => setState(prev => applyEvent(prev, ev)))
@@ -364,6 +376,28 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       setLogOpen(true)
     }
   }, [state.error])
+
+  // A preinstalled local engine skips the bootstrap choice entirely. Keep the
+  // same consumer permission journey for that first launch, then hand off to
+  // the existing provider picker if the user chooses another provider.
+  const installedFirstRun = Boolean(
+    stateLoaded &&
+      !state.active &&
+      !state.error &&
+      !state.unsupportedPlatform &&
+      !state.setupChoice &&
+      onboarding.configured === false &&
+      !onboarding.firstRunSkipped &&
+      !onboarding.manual &&
+      !standardPicker &&
+      window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth
+  )
+
+  useEffect(() => {
+    setOnboardingSurfaceActive('setup', Boolean(enabled && (state.setupChoice || guidedSetup || installedFirstRun)))
+
+    return () => setOnboardingSurfaceActive('setup', false)
+  }, [enabled, guidedSetup, installedFirstRun, state.setupChoice])
 
   // Mount logic: show whenever a bootstrap is in flight, completed-with-error,
   // or actively running with a manifest. Hide entirely after a successful
@@ -393,8 +427,12 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       return true
     }
 
+    if (installedFirstRun) {
+      return true
+    }
+
     return false
-  }, [enabled, guidedSetup, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
+  }, [enabled, guidedSetup, installedFirstRun, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
 
   if (!shouldShow) {
     return null
@@ -404,12 +442,16 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     return <FirstRunRemoteForm onBack={() => setRemoteOpen(false)} />
   }
 
-  if (state.setupChoice || guidedSetup) {
+  if (state.setupChoice || guidedSetup || installedFirstRun) {
     return (
       <JarvisSetupJourney
-        bootstrapComplete={Boolean(state.completedAt && !state.active && !state.error)}
+        bootstrapComplete={installedFirstRun || Boolean(state.completedAt && !state.active && !state.error)}
         bootstrapError={state.error}
         onBeginSetup={async () => {
+          if (installedFirstRun) {
+            return
+          }
+
           const desktop = window.hermesDesktop
 
           if (!desktop || typeof desktop.continueBootstrapLocal !== 'function') {
@@ -419,7 +461,13 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           setGuidedSetup(true)
           await desktop.continueBootstrapLocal()
         }}
-        onConnectOther={() => setRemoteOpen(true)}
+        onConnectOther={() => {
+          if (installedFirstRun) {
+            setStandardPicker(true)
+          } else {
+            setRemoteOpen(true)
+          }
+        }}
         onFinish={async () => {
           const result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
 
@@ -431,6 +479,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           setGuidedSetup(false)
         }}
         onShowInstallDetails={() => setGuidedSetup(false)}
+        onSkip={installedFirstRun ? dismissFirstRunOnboarding : undefined}
       />
     )
   }

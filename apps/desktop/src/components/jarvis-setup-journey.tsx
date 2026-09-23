@@ -16,6 +16,7 @@ interface JarvisSetupJourneyProps {
   onBeginSetup: () => Promise<void>
   onConnectOther: () => void
   onFinish: () => Promise<void>
+  onSkip?: () => void
   onShowInstallDetails: () => void
 }
 
@@ -110,6 +111,7 @@ export function JarvisSetupJourney({
   onBeginSetup,
   onConnectOther,
   onFinish,
+  onSkip,
   onShowInstallDetails
 }: JarvisSetupJourneyProps) {
   const s = useJarvisCopy()
@@ -192,6 +194,11 @@ export function JarvisSetupJourney({
             <Button onClick={onConnectOther} size="sm" variant="text">
               Other AI providers
             </Button>
+            {onSkip ? (
+              <Button onClick={onSkip} size="sm" variant="text">
+                I'll choose a provider later
+              </Button>
+            ) : null}
           </div>
 
           <p className="mt-6 text-xs leading-5 text-(--ui-text-tertiary)">
@@ -212,7 +219,8 @@ export function JarvisSetupJourney({
           <FileText className="mx-auto size-14 text-(--ui-accent)" strokeWidth={1.5} />
           <h1 className="mt-5 text-3xl font-semibold tracking-[-0.035em]">Let Jarvis work with your files?</h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-(--ui-text-secondary)">
-            Full Disk Access lets Jarvis find information in local files and supported Mac apps when you ask.
+            Full Disk Access can help Jarvis read protected local files when you ask. App-specific access is separate and
+            not connected yet.
           </p>
 
           <div className="mt-8 flex items-center gap-4 rounded-2xl bg-(--ui-bg-quaternary) p-5 text-left">
@@ -222,7 +230,7 @@ export function JarvisSetupJourney({
             <div className="min-w-0 flex-1">
               <div className="font-medium">Full Disk Access</div>
               <div className="mt-1 text-sm text-(--ui-text-tertiary)">
-                Required to read protected app databases such as Messages.
+                Needed for some protected files. You can continue without it.
               </div>
             </div>
             {granted ? (
@@ -395,7 +403,7 @@ export function JarvisSetupJourney({
           {bootstrapComplete ? <Check className="size-9" strokeWidth={2} /> : <BrandMark className="size-12" />}
         </div>
         <h1 className="mt-7 text-4xl font-semibold tracking-[-0.04em]">
-          {bootstrapComplete ? 'Jarvis is ready' : bootstrapError ? 'Setup needs attention' : 'Preparing Jarvis'}
+          {bootstrapComplete ? 'Finish connecting Jarvis' : bootstrapError ? 'Setup needs attention' : 'Preparing Jarvis'}
         </h1>
         <p className="mt-4 max-w-lg text-base leading-7 text-(--ui-text-secondary)">
           {bootstrapComplete
