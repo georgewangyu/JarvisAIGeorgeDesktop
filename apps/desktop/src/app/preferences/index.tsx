@@ -18,6 +18,7 @@ import { CONNECTIONS_ROUTE } from '../routes'
 import { QuickEntrySettings } from '../settings/quick-entry-settings'
 
 import { ConsumerApprovalSettings } from './consumer-approval-settings'
+import { ConsumerBackupSettings } from './consumer-backup-settings'
 import { ConsumerSettingsLayout } from './settings-layout'
 
 export function PreferencesView() {
@@ -84,6 +85,7 @@ export function PreferencesView() {
         <Button onClick={openConsumerSetupReview} variant="secondary">Review setup steps</Button>
       </section>
       <ConsumerApprovalSettings key={profile} profile={profile} />
+      <ConsumerBackupSettings key={`backup-${profile}`} profile={profile} />
       <details className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
         <summary className="cursor-pointer text-base font-semibold">{t.settings.sections.advanced}</summary>
         <p className="mb-4 mt-3 text-sm text-muted-foreground">{s.advancedDetail}</p>

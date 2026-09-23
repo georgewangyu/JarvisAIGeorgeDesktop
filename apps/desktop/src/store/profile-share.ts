@@ -156,7 +156,7 @@ const ARCHIVE_FILTERS = [{ extensions: ['tar.gz', 'tgz'], name: 'Hermes profile'
 
 /** Pick a save location and export `profile` (default: the active one).
  *  Returns the archive path, or null when the user cancelled. */
-export async function runExportProfileFlow(profile?: string): Promise<null | string> {
+export async function runExportProfileFlow(profile?: string, options?: { consumer?: boolean }): Promise<null | string> {
   const target = normalizeProfileKey(profile ?? activeProfileKey())
   const pick = window.hermesDesktop?.selectSavePath
 
@@ -165,8 +165,8 @@ export async function runExportProfileFlow(profile?: string): Promise<null | str
   }
 
   const output = await pick({
-    title: translateNow('profiles.exportProfile'),
-    defaultPath: `${target}.tar.gz`,
+    title: options?.consumer ? 'Save assistant setup' : translateNow('profiles.exportProfile'),
+    defaultPath: options?.consumer && target === 'default' ? 'Jarvis-setup.tar.gz' : `${target}.tar.gz`,
     filters: ARCHIVE_FILTERS
   })
 
