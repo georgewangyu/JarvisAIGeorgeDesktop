@@ -131,6 +131,8 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const [loadError, setLoadError] = useState(false)
   const [query, setQuery] = useState('')
   const [sortOrder, setSortOrder] = useState<ArtifactSort>('newest')
+  const [failedOpen, setFailedOpen] = useState<ArtifactRecord | null>(null)
+  const [openingId, setOpeningId] = useState<string | null>(null)
 
   const [kindFilter, setKindFilter] = useRouteEnumParam('tab', ARTIFACT_FILTERS, 'all')
 
@@ -364,6 +366,8 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const openArtifact = useCallback(
     async (artifact: ArtifactRecord) => {
       const { href } = artifact
+      setOpeningId(artifact.id)
+      setFailedOpen(current => current?.id === artifact.id ? null : current)
 
       try {
         // A gateway-local file resolves to file:// in remote mode (the file
@@ -373,7 +377,11 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
         // Tilde/relative hrefs have no file URL form. Keep them gateway-owned:
         // expanding them on the client would target the wrong home or cwd.
         if (isRemoteGateway() && isArtifactFilePath(artifact.value)) {
-          await downloadGatewayMediaFile(artifact.value, { sessionId: artifact.sessionId, profile: artifact.profile })
+          const result = await downloadGatewayMediaFile(artifact.value, { sessionId: artifact.sessionId, profile: artifact.profile })
+
+          if (!result.saved && !result.canceled) {
+            throw new Error('Gateway file was not saved')
+          }
 
           return
         }
@@ -383,11 +391,13 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
         } else {
           window.open(href, '_blank', 'noopener,noreferrer')
         }
-      } catch (err) {
-        notifyError(err, a.openFailed)
+      } catch {
+        setFailedOpen(artifact)
+      } finally {
+        setOpeningId(null)
       }
     },
-    [a]
+    []
   )
 
   const markImageFailed = useCallback((id: string) => {
@@ -502,6 +512,15 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                 </Button>
               </Tip>
           </div>
+
+          {failedOpen ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-(--ui-bg-secondary) px-4 py-3 text-sm" role="alert">
+              <span>{a.openFailed}: {failedOpen.label}</span>
+              <Button disabled={openingId === failedOpen.id} onClick={() => void openArtifact(failedOpen)} size="sm" variant="secondary">
+                {t.common.retry}
+              </Button>
+            </div>
+          ) : null}
 
           {loadError && !artifacts ? (
             <div className="grid min-h-64 place-items-center">

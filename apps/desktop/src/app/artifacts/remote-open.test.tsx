@@ -95,6 +95,39 @@ it('keeps discovered file paths and originating session scope intact through rem
   expect(openExternal).not.toHaveBeenCalled()
 })
 
+it('keeps a failed remote file visible and retries the same scoped download', async () => {
+  const saveGatewayFile = vi.fn()
+    .mockRejectedValueOnce(new Error('private gateway diagnostic'))
+    .mockResolvedValueOnce({ saved: true })
+
+  vi.stubGlobal('hermesDesktop', { saveGatewayFile })
+  $connection.set({
+    isFullscreen: false,
+    nativeOverlayWidth: 0,
+    logs: [],
+    windowButtonPosition: null,
+    mode: 'remote',
+    connectionId: 'remote-fixture',
+    profile: 'writer',
+    baseUrl: 'http://localhost',
+    token: '',
+    wsUrl: ''
+  })
+  render(
+    <MemoryRouter>
+      <ArtifactsView />
+    </MemoryRouter>
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: 'report.md' }))
+  expect(await screen.findByRole('alert')).toHaveProperty('textContent', expect.stringContaining('report.md'))
+  expect(screen.queryByText('private gateway diagnostic')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  await waitFor(() => expect(saveGatewayFile).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  expect(saveGatewayFile.mock.calls[1]).toEqual(saveGatewayFile.mock.calls[0])
+})
+
 it('filters real indexed documents and gives empty web files a truthful state', async () => {
   render(
     <MemoryRouter>
