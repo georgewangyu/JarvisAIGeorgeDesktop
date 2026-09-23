@@ -7,6 +7,7 @@ import { ZoomableImage } from '@/components/chat/zoomable-image'
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
+import { ErrorState } from '@/components/ui/error-state'
 import {
   Pagination,
   PaginationButton,
@@ -121,6 +122,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const a = t.artifacts
   const navigate = useNavigate()
   const [artifacts, setArtifacts] = useState<ArtifactRecord[] | null>(null)
+  const [loadError, setLoadError] = useState(false)
   const [query, setQuery] = useState('')
   const [sortOrder, setSortOrder] = useState<ArtifactSort>('newest')
 
@@ -174,9 +176,10 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       }
 
       setArtifacts(nextArtifacts)
+      setLoadError(false)
     } catch (err) {
       notifyError(err, a.failedLoad)
-      setArtifacts([])
+      setLoadError(true)
     } finally {
       refreshInFlightRef.current = false
       setRefreshing(false)
@@ -421,7 +424,15 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
               </Tip>
           </div>
 
-          {!artifacts ? (
+          {loadError && !artifacts ? (
+            <div className="grid min-h-64 place-items-center">
+              <ErrorState title={a.failedLoad}>
+                <Button disabled={refreshing} onClick={() => void refreshArtifacts()} size="sm" variant="secondary">
+                  {t.common.retry}
+                </Button>
+              </ErrorState>
+            </div>
+          ) : !artifacts ? (
             <div className="grid min-h-64 place-items-center">
               <PageLoader label={a.indexing} />
             </div>
