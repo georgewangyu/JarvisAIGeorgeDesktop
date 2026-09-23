@@ -29,7 +29,7 @@ interface HarnessProps {
   runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>>
   selectedStoredSessionId: null | string
   selectedStoredSessionIdRef: MutableRefObject<null | string>
-  startFreshSessionDraft: (focus: boolean) => unknown
+  startFreshSessionDraft: (options: boolean | { intent: 'main' | 'side'; replaceRoute?: boolean }) => unknown
 }
 
 function RouteResumeHarness({
@@ -47,6 +47,29 @@ describe('useRouteResume', () => {
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
+  })
+
+  it('keeps the first new-chat route armed as the permanent main chat', () => {
+    const startFreshSessionDraft = vi.fn()
+    render(
+      <RouteResumeHarness
+        activeSessionId="old-runtime"
+        activeSessionIdRef={{ current: 'old-runtime' }}
+        creatingSessionRef={{ current: false }}
+        currentView="chat"
+        freshDraftReady={false}
+        gatewayState="open"
+        locationPathname="/"
+        resumeSession={vi.fn(async () => undefined)}
+        routedSessionId={null}
+        runtimeIdByStoredSessionIdRef={{ current: new Map() }}
+        selectedStoredSessionId="old-stored"
+        selectedStoredSessionIdRef={{ current: 'old-stored' }}
+        startFreshSessionDraft={startFreshSessionDraft}
+      />
+    )
+
+    expect(startFreshSessionDraft).toHaveBeenCalledWith({ intent: 'main', replaceRoute: true })
   })
 
   it('does not re-resume the old session during a /:sid -> /new transition', () => {

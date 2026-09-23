@@ -730,6 +730,37 @@ def _resume_response(
     return _ok(ctx.rid, _attach_todo_state(payload, record))
 
 
+def _resume_pin_jarvis_owner(ctx: _Resume, response: dict) -> dict:
+    """Keep the visible permanent desktop chat available to the idle event poller after restart.
+
+    Ordinary resumed chats still claim a scarce session slot on their first
+    turn. Jarvis is the sole exception: opening that already-persisted chat is
+    an explicit visible owner, and no idle model call is made here. A failed
+    lease remains a refusal for event producers, not a phantom wake promise.
+    """
+    if ctx.lazy or _str_param(ctx.params, "source").lower() != "desktop":
+        return response
+    result = response.get("result") if isinstance(response, dict) else None
+    sid = result.get("session_id") if isinstance(result, dict) else None
+    if not isinstance(sid, str) or not sid:
+        return response
+    try:
+        from tools.bot_live_delivery import JARVIS_MAIN_CHAT_TITLE
+        main = ctx.db.get_session_by_title(JARVIS_MAIN_CHAT_TITLE)
+        if (not main or main.get("archived") or (main.get("source") or "").lower() != "desktop"
+                or ctx.db.get_compression_tip(main["id"]) != ctx.target):
+            return response
+        with _sessions_lock:
+            session = _sessions.get(sid)
+        if session is None or session.get("source") != "desktop":
+            return response
+        if refusal := _ensure_active_session_slot(sid, session):
+            logger.info("Jarvis event owner unavailable after resume: %s", refusal)
+    except Exception:
+        logger.warning("Jarvis event owner could not be prepared after resume", exc_info=True)
+    return response
+
+
 def _resume_lazy(ctx: _Resume) -> dict:
     """Lazy/watch resume (desktop subagent windows): a live session WITHOUT an agent — the child runs
     inside the parent's turn, so the window needs stored history + a transport; prompt.submit upgrades it."""
@@ -873,12 +904,12 @@ def _(rid, params: dict) -> dict:
         with _session_resume_lock:
             live = _find_live_session_by_key(ctx.target, ctx.profile_home)
         if live is not None:
-            return _resume_reuse_live(ctx, *live)
+            return _resume_pin_jarvis_owner(ctx, _resume_reuse_live(ctx, *live))
         if ctx.lazy:
             return _resume_lazy(ctx)
         if ctx.eager_build:
-            return _resume_eager(ctx)
-        return _resume_deferred(ctx) if ctx.defer_history else _resume_cold(ctx)
+            return _resume_pin_jarvis_owner(ctx, _resume_eager(ctx))
+        return _resume_pin_jarvis_owner(ctx, _resume_deferred(ctx) if ctx.defer_history else _resume_cold(ctx))
     finally:
         # Refcounting alone does not release the sqlite fds: SessionDB pins ITSELF (atexit.register) once its
         # background token writer starts; only close() unregisters.

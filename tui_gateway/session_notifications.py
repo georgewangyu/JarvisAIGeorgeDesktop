@@ -590,11 +590,13 @@ def _poll_bot_live_delivery_once(sid: str, session: dict) -> bool:
         if lease is None or getattr(lease, "released", False):
             return False
         owner = find_canonical_live_owner(home)
+        jarvis_owner = False
         if (not owner or owner.get("lease_id") != lease.lease_id
                 or owner.get("live_session_id") != sid
                 or owner.get("session_id") != session.get("session_key")) and session.get("source") == "desktop":
             from tools.bot_live_delivery import find_jarvis_live_owner
             owner = find_jarvis_live_owner(home)
+            jarvis_owner = True
         if (not owner or owner.get("lease_id") != lease.lease_id
                 or owner.get("live_session_id") != sid
                 or owner.get("session_id") != session.get("session_key")):
@@ -622,6 +624,7 @@ def _poll_bot_live_delivery_once(sid: str, session: dict) -> bool:
     try:
         started = _run_prompt_submit(f"__bot_dm__{delivery_id}", sid, session, claimed["message"],
                                      image_paths=[], terminal_callback=terminal_receipt,
+                                     display_kind="hidden" if jarvis_owner else None,
                                      turn_author=claimed.get("author") or None,
                                      **({"display_metadata": {"notification_category": "diagnostic"}}
                                         if claimed.get("notification_category") == "diagnostic" else {}))

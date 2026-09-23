@@ -132,7 +132,7 @@ def test_desktop_jarvis_owner_claims_its_event_at_idle_boundary(monkeypatch, tmp
     submitted = []
 
     def submit(rid, sid, session, message, **kwargs):
-        submitted.append((sid, message))
+        submitted.append((sid, message, kwargs.get("display_kind")))
         kwargs["terminal_callback"]({"status": "settled", "text": "I found it"})
         return True
 
@@ -151,7 +151,7 @@ def test_desktop_jarvis_owner_claims_its_event_at_idle_boundary(monkeypatch, tmp
     assert pending and not submitted
     session.pop("queued_prompt")
     assert poll("jarvis-live", session) is True
-    assert submitted == [("jarvis-live", "[Event from calendar; id one]\nReview today")]
+    assert submitted == [("jarvis-live", "[Event from calendar; id one]\nReview today", "hidden")]
     assert settled == [{"status": "settled", "reply": "I found it", "error": "", "reason": ""}]
 
 

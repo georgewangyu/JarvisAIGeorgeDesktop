@@ -625,7 +625,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     }
 
     lastFreshRef.current = freshSessionRequest
-    startFreshSessionDraft()
+    startFreshSessionDraft({ intent: 'main' })
   }, [freshSessionRequest, startFreshSessionDraft])
 
   // Swapping the live gateway to another source or profile must re-pull that
@@ -940,7 +940,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
 
   useGatewayBoot({
     beforeConnectionSwitch: () => {
-      startFreshSessionDraft({ preserveRoute: true, workspaceTarget: null })
+      startFreshSessionDraft({ intent: 'main', preserveRoute: true, workspaceTarget: null })
       resetOverlayReturnRoute()
       resetProjectTreeState()
       closeAllTerminals()
