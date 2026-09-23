@@ -2770,7 +2770,7 @@ export const en: Translations = {
     searchAria: 'Search chats, pages, and automations',
     searchPlaceholder: 'Search chats, pages, and automations…',
     clearSearch: 'Clear search',
-    noMatch: query => `No sessions match “${query}”.`,
+    noMatch: query => `No results for “${query}”.`,
     results: 'Results',
     pinned: 'Pinned',
     sessions: 'Chats',

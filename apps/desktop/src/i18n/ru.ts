@@ -2531,7 +2531,7 @@ export const ru = defineLocale({
     searchAria: 'Поиск чатов, страниц и автоматизаций',
     searchPlaceholder: 'Поиск чатов, страниц и автоматизаций…',
     clearSearch: 'Очистить поиск',
-    noMatch: query => `Нет сеансов по запросу «${query}».`,
+    noMatch: query => `Нет результатов по запросу «${query}».`,
     results: 'Результаты',
     pinned: 'Закреплённые',
     sessions: 'Сеансы',

@@ -2911,7 +2911,7 @@ export const zh = defineLocale({
     searchAria: '搜索聊天、页面和自动化',
     searchPlaceholder: '搜索聊天、页面和自动化…',
     clearSearch: '清除搜索',
-    noMatch: query => `没有会话匹配"${query}"。`,
+    noMatch: query => `没有找到与“${query}”匹配的结果。`,
     results: '结果',
     pinned: '已置顶',
     sessions: '会话',

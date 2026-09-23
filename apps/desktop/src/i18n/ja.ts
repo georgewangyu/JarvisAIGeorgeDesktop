@@ -2274,7 +2274,7 @@ export const ja = defineLocale({
     searchAria: 'チャット、ページ、自動化を検索',
     searchPlaceholder: 'チャット、ページ、自動化を検索…',
     clearSearch: '検索をクリア',
-    noMatch: query => `"${query}" に一致するセッションがありません。`,
+    noMatch: query => `「${query}」に一致する結果はありません。`,
     results: '結果',
     pinned: 'ピン留め',
     sessions: 'セッション',

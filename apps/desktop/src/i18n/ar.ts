@@ -1935,7 +1935,7 @@ export const ar = defineLocale({
     searchAria: 'البحث في المحادثات والصفحات والأتمتة',
     searchPlaceholder: 'البحث في المحادثات والصفحات والأتمتة...',
     clearSearch: 'مسح البحث',
-    noMatch: query => `لا توجد جلسات تطابق "${query}"`,
+    noMatch: query => `لا توجد نتائج تطابق "${query}"`,
     results: 'النتائج',
     pinned: 'المثبتة',
     sessions: 'الجلسات',

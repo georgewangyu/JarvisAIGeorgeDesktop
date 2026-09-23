@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { registry } from '@/contrib/registry'
+import { en } from '@/i18n/en'
 import { $cronJobs } from '@/store/cron'
 import { $sessions } from '@/store/session'
 import { $removedSessionIds } from '@/store/session-removal'
@@ -157,6 +158,10 @@ describe('consumer chat navigation', () => {
     expect(onManageCronJob).toHaveBeenCalledWith('morning-check')
     expect(onResumeSession).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull())
+  })
+
+  it('describes a no-match result without implying only chats were searched', () => {
+    expect(en.sidebar.noMatch('zz-example-no-match')).toBe('No results for “zz-example-no-match”.')
   })
 
   it('shows the real permanent main chat preview in Search recents', async () => {

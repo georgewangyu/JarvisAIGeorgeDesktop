@@ -2263,7 +2263,7 @@ export const zhHant = defineLocale({
     searchAria: '搜尋聊天、頁面和自動化',
     searchPlaceholder: '搜尋聊天、頁面和自動化…',
     clearSearch: '清除搜尋',
-    noMatch: query => `沒有工作階段符合「${query}」。`,
+    noMatch: query => `找不到符合「${query}」的結果。`,
     results: '結果',
     pinned: '已釘選',
     sessions: '工作階段',
