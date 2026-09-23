@@ -26,7 +26,7 @@ interface FeedUpdate {
 type FeedUpdateState =
   | { kind: 'error' }
   | { kind: 'loading' }
-  | { items: FeedUpdate[]; kind: 'ready' }
+  | { items: FeedUpdate[]; kind: 'ready'; partialFailure: boolean }
 
 const FEED_JOB_LIMIT = 4
 
@@ -68,7 +68,7 @@ export function ConsumerFeedUpdates() {
     let cancelled = false
 
     if (selectedJobs.length === 0) {
-      setState({ items: [], kind: 'ready' })
+      setState({ items: [], kind: 'ready', partialFailure: false })
 
       return
     }
@@ -96,9 +96,10 @@ export function ConsumerFeedUpdates() {
         const items = results.flatMap(result => result.value ? [result.value] : [])
           .sort((a, b) => b.time - a.time)
 
-        setState(items.length === 0 && results.every(result => result.failed)
+        const partialFailure = results.some(result => result.failed)
+        setState(items.length === 0 && partialFailure && results.every(result => result.failed)
           ? { kind: 'error' }
-          : { items, kind: 'ready' })
+          : { items, kind: 'ready', partialFailure })
       })
 
     return () => {
@@ -130,13 +131,25 @@ export function ConsumerFeedUpdates() {
           <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">Retry</Button>
         </div>
       ) : state.items.length === 0 ? (
-        <p className="mt-4 text-sm text-(--ui-text-tertiary)">
-          Completed automations will appear here after they produce an answer.
-        </p>
+        <div className="mt-4 text-sm text-(--ui-text-tertiary)">
+          {state.partialFailure ? (
+            <div className="flex items-center gap-4" role="alert">
+              <span>Some updates couldn’t load.</span>
+              <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">Retry</Button>
+            </div>
+          ) : <p>Completed automations will appear here after they produce an answer.</p>}
+        </div>
       ) : (
-        <div className="mt-3 divide-y divide-(--ui-stroke-tertiary)">
-          {state.items.map(item => (
-            <article className="py-6 first:pt-2" key={item.runId}>
+        <div className="mt-3">
+          {state.partialFailure ? (
+            <div className="flex items-center gap-4 text-sm text-(--ui-text-secondary)" role="alert">
+              <span>Some updates couldn’t load.</span>
+              <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">Retry</Button>
+            </div>
+          ) : null}
+          <div className="divide-y divide-(--ui-stroke-tertiary)">
+            {state.items.map(item => (
+              <article className="py-6 first:pt-2" key={item.runId}>
               <div className="flex items-baseline justify-between gap-4">
                 <h3 className="font-semibold">{item.job.name || 'Scheduled task'}</h3>
                 <time className="shrink-0 text-xs text-(--ui-text-tertiary)" dateTime={new Date(item.time * 1000).toISOString()}>
@@ -159,8 +172,9 @@ export function ConsumerFeedUpdates() {
                   Open automation
                 </Button>
               </div>
-            </article>
-          ))}
+              </article>
+            ))}
+          </div>
         </div>
       )}
     </section>

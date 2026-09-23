@@ -133,3 +133,32 @@ it('offers a retry when saved automation reads fail', async () => {
   await waitFor(() => expect(getCronJobRuns).toHaveBeenCalledTimes(2))
   expect(await screen.findByText('Completed automations will appear here after they produce an answer.')).toBeTruthy()
 })
+
+it('keeps a saved update visible while exposing a failed sibling and recovering on retry', async () => {
+  $cronJobs.set([
+    { id: 'briefing', name: 'Morning briefing', enabled: true },
+    { id: 'offline', name: 'Offline briefing', enabled: true }
+  ])
+  vi.mocked(getCronJobRuns).mockImplementation(async id => {
+    if (id === 'offline') {
+      throw new Error('offline')
+    }
+
+    return [makeSessionInfo({ id: 'cron-briefing-1', is_active: false, last_active: 100 })]
+  })
+  vi.mocked(getSessionMessages).mockResolvedValue({
+    messages: [{ role: 'assistant', content: 'The saved briefing.' }]
+  } as never)
+
+  render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+
+  expect(await screen.findByText('The saved briefing.')).toBeTruthy()
+  expect(screen.getByRole('alert').textContent).toContain('Some updates couldn’t load.')
+  vi.mocked(getCronJobRuns).mockImplementation(async id => id === 'offline' ? [] : [
+    makeSessionInfo({ id: 'cron-briefing-1', is_active: false, last_active: 100 })
+  ])
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  await waitFor(() => expect(getCronJobRuns).toHaveBeenCalledTimes(4))
+  await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  expect(screen.getByText('The saved briefing.')).toBeTruthy()
+})
