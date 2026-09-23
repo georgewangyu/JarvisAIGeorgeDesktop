@@ -114,7 +114,7 @@ it('requires an explicit choice before adding a goal to an existing unsent draft
   )
 
   fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
-  expect(screen.getByRole('dialog', { name: 'Create a health goal' })).toBeTruthy()
+  expect(screen.getByRole('region', { name: 'Create a health goal' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
   expect(takeSessionDraft(null).text).toBe('Existing thought')
   expect($freshSessionRequest.get()).toBe(0)
@@ -133,7 +133,7 @@ it('clarifies a goal category before creating an editable draft, without claimin
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
   fireEvent.click(await screen.findByRole('button', { name: 'Productivity' }))
-  expect(screen.getByRole('dialog', { name: 'Create a productivity goal' })).toBeTruthy()
+  expect(screen.getByRole('region', { name: 'Create a productivity goal' })).toBeTruthy()
   expect($freshSessionRequest.get()).toBe(0)
   fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
   expect(takeSessionDraft(null).text).toBe(
@@ -161,7 +161,7 @@ it('saves a passive goal and shows it in Tracking without sending a prompt', asy
   expect($freshSessionRequest.get()).toBe(0)
 })
 
-it('keeps the goal dialog open when saving fails', async () => {
+it('keeps the goal form open when saving fails', async () => {
   const request = vi.fn(async (method: string) => {
     if (method === 'session.goals.list') {
       return { goals: [] }
@@ -188,10 +188,10 @@ it('closes goal clarification without preparing a chat draft', async () => {
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
   fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
-  expect(screen.getByRole('dialog', { name: 'Create a health goal' })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+  expect(screen.getByRole('region', { name: 'Create a health goal' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Close goal setup' }))
 
-  expect(screen.queryByRole('dialog', { name: 'Create a health goal' })).toBeNull()
+  expect(screen.queryByRole('region', { name: 'Create a health goal' })).toBeNull()
   expect($freshSessionRequest.get()).toBe(0)
 })
 

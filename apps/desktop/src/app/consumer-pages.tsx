@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
@@ -534,7 +533,11 @@ export function ConsumerGoalsView() {
             <div className="mt-6 space-y-1">
               {GOAL_STARTERS.map(starter => (
                 <button
-                  className="block w-full rounded-2xl px-4 py-3 text-left transition-colors hover:bg-(--ui-control-hover-background)"
+                  aria-pressed={selectedStarter?.[0] === starter[0]}
+                  className={cn(
+                    'block w-full rounded-2xl px-4 py-3 text-left transition-colors hover:bg-(--ui-control-hover-background)',
+                    selectedStarter?.[0] === starter[0] && 'bg-(--ui-bg-secondary) text-(--ui-accent)'
+                  )}
                   key={starter[0]}
                   onClick={() => { setSelectedStarter(starter); setNewGoalTitle(''); setSaveGoalError(false) }}
                   type="button"
@@ -543,28 +546,42 @@ export function ConsumerGoalsView() {
                 </button>
               ))}
             </div>
+            {selectedStarter ? (
+              <section
+                aria-label={selectedStarter[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter[0].toLowerCase()} goal`}
+                className="mt-5 space-y-4 rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-semibold">
+                      {selectedStarter[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter[0].toLowerCase()} goal`}
+                    </h3>
+                    <p className="mt-1 text-sm leading-6 text-(--ui-text-secondary)">
+                      Give this goal a name to track it here, or talk it through with Jarvis first. Saving a goal does not start background work.
+                    </p>
+                  </div>
+                  <Button
+                    aria-label="Close goal setup"
+                    disabled={savingGoal}
+                    onClick={() => setSelectedStarter(null)}
+                    size="sm"
+                    variant="ghost"
+                  >Close</Button>
+                </div>
+                <Input aria-label="Goal name" autoCapitalize="sentences" maxLength={200} onChange={event => setNewGoalTitle(event.target.value)} placeholder="What would you like to work toward?" value={newGoalTitle} />
+                {saveGoalError ? <p className="text-sm text-(--ui-text-danger)" role="alert">The goal could not be saved. Try again.</p> : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={!newGoalTitle.trim() || savingGoal} onClick={() => void saveGoal()}>Save goal</Button>
+                  <Button disabled={savingGoal} onClick={() => {
+                    startConsumerDraft(selectedStarter[1], navigate)
+                    setSelectedStarter(null)
+                  }} variant="secondary">Continue to chat</Button>
+                </div>
+              </section>
+            ) : null}
           </section>
         </div>
       )}
-      <Dialog onOpenChange={open => !open && !savingGoal && setSelectedStarter(null)} open={selectedStarter !== null}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{selectedStarter?.[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter?.[0]?.toLowerCase()} goal`}</DialogTitle>
-            <DialogDescription>
-              Give this goal a name to track it here, or talk it through with Jarvis first. Saving a goal does not start background work.
-            </DialogDescription>
-          </DialogHeader>
-          <Input aria-label="Goal name" autoCapitalize="sentences" maxLength={200} onChange={event => setNewGoalTitle(event.target.value)} placeholder="What would you like to work toward?" value={newGoalTitle} />
-          {saveGoalError ? <p className="text-sm text-(--ui-text-danger)" role="alert">The goal could not be saved. Try again.</p> : null}
-          <Button disabled={!newGoalTitle.trim() || savingGoal} onClick={() => void saveGoal()}>Save goal</Button>
-          <Button disabled={savingGoal} onClick={() => {
-            if (selectedStarter) {
-              startConsumerDraft(selectedStarter[1], navigate)
-              setSelectedStarter(null)
-            }
-          }}>Continue to chat</Button>
-        </DialogContent>
-      </Dialog>
     </ConsumerPage>
   )
 }
