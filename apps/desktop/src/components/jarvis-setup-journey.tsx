@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
@@ -160,7 +160,6 @@ export function JarvisSetupJourney({
     }
   }, [step])
 
-  const installedApps = useMemo(() => APPS.filter(app => permissions.apps[app.id]), [permissions.apps])
 
   if (step === 'connect') {
     return (
@@ -322,7 +321,7 @@ export function JarvisSetupJourney({
 
           <div className="mt-7 flex justify-center">
             <Button onClick={() => setStep('microphone')} size="lg">
-              Continue with {installedApps.length} detected app{installedApps.length === 1 ? '' : 's'}
+              Continue
             </Button>
           </div>
         </div>

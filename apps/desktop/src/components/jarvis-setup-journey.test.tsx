@@ -18,7 +18,7 @@ function permissionSnapshot(microphone: JarvisOnboardingPermissionSnapshot['micr
 async function reachMicrophoneStep() {
   fireEvent.click(screen.getByRole('button', { name: 'Get started' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Continue without access' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Continue with 0 detected apps' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
   await screen.findByRole('heading', { name: 'Enable voice input?' })
 }
 

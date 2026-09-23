@@ -32,7 +32,7 @@ const copy = {
     },
     appInventory: 'Apps on this Mac',
     appInventoryDetail:
-      'App detection is ready. Dedicated read and interact permissions are not connected in this prototype yet.',
+      'Jarvis can see which apps are installed, but cannot read or use them yet.',
     appPending: 'Not connected',
     title: 'Settings',
     intro: 'Make Jarvis feel at home on your Mac.',
@@ -76,7 +76,7 @@ const copy = {
       not_configured: '配信先が設定されていません'
     },
     appInventory: 'このMacのアプリ',
-    appInventoryDetail: 'アプリを検出しました。この試作版では、専用の読み取り・操作権限はまだ接続されていません。',
+    appInventoryDetail: 'インストール済みのアプリは確認できますが、Jarvisはまだその内容を読んだり操作したりできません。',
     appPending: '未接続',
     title: '設定',
     intro: 'Macで使いやすいJarvisに。',
@@ -120,7 +120,7 @@ const copy = {
       not_configured: '未设置发送目标'
     },
     appInventory: '这台 Mac 上的应用',
-    appInventoryDetail: '已检测应用。此原型尚未接入专用的读取和操作权限。',
+    appInventoryDetail: 'Jarvis 可以识别已安装的应用，但目前还不能读取或操作这些应用。',
     appPending: '未连接',
     title: '设置',
     intro: '让 Jarvis 更适合你的 Mac。',
@@ -164,7 +164,7 @@ const copy = {
       not_configured: '未設定傳送目標'
     },
     appInventory: '這台 Mac 上的應用程式',
-    appInventoryDetail: '已偵測應用程式。此原型尚未接入專用的讀取和操作權限。',
+    appInventoryDetail: 'Jarvis 可以辨識已安裝的應用程式，但目前還不能讀取或操作這些應用程式。',
     appPending: '未連線',
     title: '設定',
     intro: '讓 Jarvis 更適合你的 Mac。',

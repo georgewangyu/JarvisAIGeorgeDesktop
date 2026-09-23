@@ -134,7 +134,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     act(openConsumerSetupReview)
     fireEvent.click(await screen.findByRole('button', { name: 'Get started' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue with 3 detected apps' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
     expect(await screen.findByRole('heading', { name: 'Setup reviewed' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Return to Jarvis' }))
