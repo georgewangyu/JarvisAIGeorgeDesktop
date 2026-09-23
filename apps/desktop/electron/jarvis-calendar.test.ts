@@ -6,7 +6,7 @@ import type { IpcMain } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { runCalendarHelper } from './jarvis-calendar';
-import { registerJarvisCalendar } from './jarvis-calendar'
+import { calendarRendererMatches, registerJarvisCalendar } from './jarvis-calendar'
 
 const roots: string[] = []
 
@@ -14,9 +14,19 @@ function bridge(run: typeof runCalendarHelper, userData: string) {
   const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
   const ipcMain = { handle: (name: string, fn: (...args: unknown[]) => Promise<unknown>) => handlers.set(name, fn) } as unknown as IpcMain
 
-  registerJarvisCalendar({ appPath: '/tmp/Jarvis.app/Contents/Resources/app.asar', ipcMain, platform: 'darwin', run, userData })
+  registerJarvisCalendar({
+    appPath: '/tmp/Jarvis.app/Contents/Resources/app.asar',
+    ipcMain,
+    platform: 'darwin',
+    run,
+    trustedSender: event => calendarRendererMatches(event, 'file:///tmp/Jarvis.app/Contents/Resources/app.asar.unpacked/dist/index.html'),
+    userData
+  })
 
-  return (name: string, ...args: unknown[]) => handlers.get(`jarvis:calendar:${name}`)?.({}, ...args)
+  const frame = { url: 'file:///tmp/Jarvis.app/Contents/Resources/app.asar.unpacked/dist/index.html#/connections' }
+  const event = { sender: { mainFrame: frame }, senderFrame: frame }
+
+  return (name: string, ...args: unknown[]) => handlers.get(`jarvis:calendar:${name}`)?.(event, ...args)
 }
 
 function testHome() {
@@ -31,6 +41,33 @@ afterEach(() => {
 })
 
 describe('Jarvis Calendar connection boundary', () => {
+  it('rejects untrusted or nested renderer frames before reading status or changing access', async () => {
+    const run = vi.fn()
+    const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
+    const ipcMain = { handle: (name: string, fn: (...args: unknown[]) => Promise<unknown>) => handlers.set(name, fn) } as unknown as IpcMain
+
+    registerJarvisCalendar({
+      appPath: '/tmp/Jarvis.app/Contents/Resources/app.asar',
+      ipcMain,
+      platform: 'darwin',
+      run: run as typeof runCalendarHelper,
+      trustedSender: event => calendarRendererMatches(event, 'file:///tmp/Jarvis.app/Contents/Resources/app.asar.unpacked/dist/index.html'),
+      userData: testHome()
+    })
+
+    const mainFrame = { url: 'file:///tmp/Jarvis.app/Contents/Resources/app.asar.unpacked/dist/index.html' }
+    const sender = { mainFrame }
+    const foreign = { sender, senderFrame: { url: 'https://example.org/' } }
+    const nested = { sender, senderFrame: { url: mainFrame.url } }
+
+    for (const event of [foreign, nested]) {
+      for (const channel of ['status', 'connect', 'disconnect', 'list', 'create']) {
+        await expect(handlers.get(`jarvis:calendar:${channel}`)?.(event)).rejects.toThrow('Untrusted Calendar renderer')
+      }
+    }
+
+    expect(run).not.toHaveBeenCalled()
+  })
   it('never asks for permission or reads events from a status check', async () => {
     const run = vi.fn().mockResolvedValue({ ok: true, command: 'status', authorization: 'notDetermined' })
     const call = bridge(run, testHome())

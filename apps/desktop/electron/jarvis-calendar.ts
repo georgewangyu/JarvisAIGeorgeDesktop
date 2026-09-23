@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { IpcMain } from 'electron'
+import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 
 export type CalendarAuthorization = 'notDetermined' | 'restricted' | 'denied' | 'writeOnly' | 'fullAccess' | 'unknown'
 
@@ -34,6 +34,21 @@ const AUTHORIZATIONS = new Set<CalendarAuthorization>([
 
 export function calendarHelperPath(appPath: string): string {
   return path.resolve(appPath, 'dist/native/jarvis-calendar-helper').replace(/\.asar(?=[/\\])/g, '.asar.unpacked')
+}
+
+export function calendarRendererMatches(event: IpcMainInvokeEvent, rendererUrl: string): boolean {
+  if (!event.senderFrame || event.senderFrame !== event.sender.mainFrame) {
+    return false
+  }
+
+  try {
+    const expected = new URL(rendererUrl)
+    const actual = new URL(event.senderFrame.url)
+
+    return actual.protocol === expected.protocol && actual.host === expected.host && actual.pathname === expected.pathname
+  } catch {
+    return false
+  }
 }
 
 function enabled(configPath: string): boolean {
@@ -129,10 +144,11 @@ interface CalendarBridgeDeps {
   ipcMain: IpcMain
   platform?: NodeJS.Platform
   run?: typeof runCalendarHelper
+  trustedSender: (event: IpcMainInvokeEvent) => boolean
   userData: string
 }
 
-export function registerJarvisCalendar({ appPath, ipcMain, platform = process.platform, run = runCalendarHelper, userData }: CalendarBridgeDeps): void {
+export function registerJarvisCalendar({ appPath, ipcMain, platform = process.platform, run = runCalendarHelper, trustedSender, userData }: CalendarBridgeDeps): void {
   const configPath = path.join(userData, CONFIG_FILE)
   const helper = calendarHelperPath(appPath)
 
@@ -151,8 +167,19 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     return { authorization, connected: enabled(configPath) && authorization === 'fullAccess', supported: platform === 'darwin' && response.ok }
   }
 
-  ipcMain.handle('jarvis:calendar:status', status)
-  ipcMain.handle('jarvis:calendar:connect', async (): Promise<CalendarStatus> => {
+  const requireTrusted = (event: IpcMainInvokeEvent) => {
+    if (!trustedSender(event)) {
+      throw new Error('Untrusted Calendar renderer')
+    }
+  }
+
+  ipcMain.handle('jarvis:calendar:status', async event => {
+    requireTrusted(event)
+
+    return status()
+  })
+  ipcMain.handle('jarvis:calendar:connect', async (event): Promise<CalendarStatus> => {
+    requireTrusted(event)
     const before = await status()
 
     if (!before.supported) {return before}
@@ -167,19 +194,24 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
 
     return status()
   })
-  ipcMain.handle('jarvis:calendar:disconnect', async (): Promise<CalendarStatus> => {
+  ipcMain.handle('jarvis:calendar:disconnect', async (event): Promise<CalendarStatus> => {
+    requireTrusted(event)
     saveEnabled(configPath, false)
 
     return status()
   })
-  ipcMain.handle('jarvis:calendar:list', async (_event, start: unknown, end: unknown) => {
+  ipcMain.handle('jarvis:calendar:list', async (event, start: unknown, end: unknown) => {
+    requireTrusted(event)
+
     if (!(await status()).connected) {return { ok: false, code: 'not_connected' }}
 
     if (typeof start !== 'string' || typeof end !== 'string') {return { ok: false, code: 'invalid_input' }}
 
     return call({ command: 'list-events', start, end, limit: 100 })
   })
-  ipcMain.handle('jarvis:calendar:create', async (_event, title: unknown, start: unknown, end: unknown) => {
+  ipcMain.handle('jarvis:calendar:create', async (event, title: unknown, start: unknown, end: unknown) => {
+    requireTrusted(event)
+
     if (!(await status()).connected) {return { ok: false, code: 'not_connected' }}
 
     if (typeof title !== 'string' || typeof start !== 'string' || typeof end !== 'string') {

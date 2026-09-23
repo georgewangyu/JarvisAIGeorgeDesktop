@@ -256,7 +256,7 @@ import { createHudSnapShortcut } from './hud-snap-shortcut'
 import { buildHudWindowUrl } from './hud-url'
 import { resolveHudWindowing } from './hud-windowing'
 import { createIntroRevealWindowController } from './intro-reveal-window'
-import { registerJarvisCalendar } from './jarvis-calendar'
+import { calendarRendererMatches, registerJarvisCalendar } from './jarvis-calendar'
 import { registerJarvisCodexOAuth } from './jarvis-codex-oauth'
 import { registerJarvisOnboardingPermissions } from './jarvis-onboarding-permissions'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
@@ -16294,7 +16294,18 @@ ipcMain.on('hermes:previewShortcutActive', (_event, active) => {
 })
 
 registerJarvisOnboardingPermissions({ ipcMain, shell, systemPreferences })
-registerJarvisCalendar({ appPath: app.getAppPath(), ipcMain, userData: app.getPath('userData') })
+registerJarvisCalendar({
+  appPath: app.getAppPath(),
+  ipcMain,
+  trustedSender: event => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+
+    return Boolean(window && !window.isDestroyed() && calendarRendererMatches(
+      event, DEV_SERVER || pathToFileURL(resolveRendererIndex()).toString()
+    ))
+  },
+  userData: app.getPath('userData')
+})
 registerJarvisCodexOAuth({
   ipcMain,
   resolveCommand: async () => {
