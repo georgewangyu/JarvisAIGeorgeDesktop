@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
-import { type CronExecution, getCronJobExecutions, getCronJobRuns, type SessionInfo } from '@/hermes'
+import { type CronExecution, getCronExecutionResult, getCronJobExecutions, getCronJobRuns, type SessionInfo } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { useJarvisCopy } from '@/i18n/jarvis'
 import { $changeEventsAvailable, $cronChangeTick } from '@/store/live-sync'
@@ -55,6 +55,61 @@ function executionLabel(status: CronExecution['status'], c: Translations['cron']
   }
 
   return unknown
+}
+
+function ScriptExecutionResult({ jobId, run }: { jobId: string; run: CronExecution }) {
+  const { t } = useI18n()
+  const s = useJarvisCopy()
+  const [result, setResult] = useState<string | null>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [retryTick, setRetryTick] = useState(0)
+
+  useEffect(() => {
+    if (!run.output_available) {
+      return
+    }
+
+    let cancelled = false
+
+    setResult(null)
+    setLoadFailed(false)
+    void getCronExecutionResult(jobId, run.id).then(
+      value => {
+        if (!cancelled) {
+          setResult(value)
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setLoadFailed(true)
+        }
+      }
+    )
+
+    return () => {
+      cancelled = true
+    }
+  }, [jobId, retryTick, run.id, run.output_available])
+
+  if (!run.output_available) {
+    return null
+  }
+
+  if (loadFailed) {
+    return <div className="flex items-center justify-between gap-2" role="alert">
+      <span>{s.runError}</span>
+      <Button onClick={() => setRetryTick(tick => tick + 1)} size="xs" variant="ghost">{t.common.retry}</Button>
+    </div>
+  }
+
+  if (result === null) {
+    return <div className="flex items-center gap-1.5"><Codicon name="loading" size="0.75rem" spinning />{s.runResult}</div>
+  }
+
+  return <div className="space-y-1">
+    <div className="font-medium text-foreground">{s.runResult}</div>
+    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-(--ui-bg-tertiary) p-3 font-mono text-xs text-foreground">{result || s.runEmpty}</pre>
+  </div>
 }
 
 export function CronJobRuns({ c, jobId, noAgent = false }: { c: Translations['cron']; jobId: string; noAgent?: boolean }) {
@@ -174,9 +229,10 @@ export function CronJobRuns({ c, jobId, noAgent = false }: { c: Translations['cr
               </button>
               {selectedRunId === item.run.id && (item.kind === 'session'
                 ? <AutomationRunResult key={item.run.id} run={item.run} />
-                : <div className="space-y-1 px-2 py-2 text-xs text-muted-foreground">
+                  : <div className="space-y-1 px-2 py-2 text-xs text-muted-foreground">
                     <div>{executionLabel(item.run.status, c, t.messaging.unknown)}</div>
                     {item.run.delivery_outcome ? <div>{s.runDelivery[item.run.delivery_outcome]}</div> : null}
+                    <ScriptExecutionResult jobId={jobId} run={item.run} />
                   </div>)}
             </div>
           ))}

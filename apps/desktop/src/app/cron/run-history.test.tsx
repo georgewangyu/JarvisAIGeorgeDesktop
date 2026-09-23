@@ -1,14 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
-import { getCronJobExecutions, getCronJobRuns } from '@/hermes'
+import { getCronExecutionResult, getCronJobExecutions, getCronJobRuns } from '@/hermes'
 import { I18nProvider } from '@/i18n'
 import { en } from '@/i18n/en'
 import type { SessionInfo } from '@/types/hermes'
 
 import { CronJobRuns } from './run-history'
 
-vi.mock('@/hermes', () => ({ getCronJobExecutions: vi.fn(), getCronJobRuns: vi.fn() }))
+vi.mock('@/hermes', () => ({ getCronExecutionResult: vi.fn(), getCronJobExecutions: vi.fn(), getCronJobRuns: vi.fn() }))
 vi.mock('./run-result', () => ({ AutomationRunResult: () => null }))
 
 afterEach(() => {
@@ -110,4 +110,53 @@ it('shows script-only execution history without opening a nonexistent chat sessi
   expect(screen.queryByText('No runs yet')).toBeNull()
   expect(getCronJobRuns).not.toHaveBeenCalled()
   expect(getCronJobExecutions).toHaveBeenCalledWith('script-job')
+  expect(getCronExecutionResult).not.toHaveBeenCalled()
+})
+
+it('loads only the selected script execution result without rendering it as HTML', async () => {
+  vi.mocked(getCronJobExecutions).mockResolvedValueOnce([{
+    id: 'execution-two',
+    status: 'completed',
+    output_available: true,
+    claimed_at: '2026-09-23T06:00:00+00:00',
+    finished_at: '2026-09-23T06:00:01+00:00'
+  }])
+  vi.mocked(getCronExecutionResult).mockResolvedValueOnce('<script>not markup</script>')
+
+  render(
+    <I18nProvider configClient={null} initialLocale="en">
+      <CronJobRuns c={en.cron} jobId="script-job" noAgent />
+    </I18nProvider>
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: /completed/i }))
+  expect(await screen.findByText('<script>not markup</script>')).toBeTruthy()
+  expect(globalThis.document.querySelector('script')).toBeNull()
+  expect(getCronExecutionResult).toHaveBeenCalledWith('script-job', 'execution-two')
+})
+
+it('keeps a failed script result read retryable without exposing an error body', async () => {
+  vi.mocked(getCronJobExecutions).mockResolvedValueOnce([{
+    id: 'execution-three',
+    status: 'completed',
+    output_available: true,
+    claimed_at: '2026-09-23T06:00:00+00:00',
+    finished_at: '2026-09-23T06:00:01+00:00'
+  }])
+  vi.mocked(getCronExecutionResult)
+    .mockRejectedValueOnce(new Error('private backend diagnostic'))
+    .mockResolvedValueOnce('Safe result')
+
+  render(
+    <I18nProvider configClient={null} initialLocale="en">
+      <CronJobRuns c={en.cron} jobId="script-job" noAgent />
+    </I18nProvider>
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: /completed/i }))
+  expect((await screen.findByRole('alert')).textContent).toContain('Could not load this result')
+  expect(screen.queryByText('private backend diagnostic')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  expect(await screen.findByText('Safe result')).toBeTruthy()
+  expect(getCronExecutionResult).toHaveBeenCalledTimes(2)
 })

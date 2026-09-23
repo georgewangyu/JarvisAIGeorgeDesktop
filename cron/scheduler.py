@@ -2740,6 +2740,7 @@ class _RunDelivery:
     job: dict
     success: bool
     error: Optional[str]
+    output_file: Optional[str] = None
     delivery_attempted: bool = False
     delivery_error: Optional[str] = None
     should_deliver: bool = False
@@ -2767,6 +2768,8 @@ def _save_compose_deliver(
         output_file = (
             None if self_removal_delivery_allowed(job["id"])
             else save_job_output(job["id"], output))
+        if output_file is not None and job.get("no_agent"):
+            d.output_file = Path(output_file).name
     if verbose and output_file is not None:
         logger.info("Output saved to: %s", output_file)
 
@@ -2901,7 +2904,8 @@ def _finish_completed_run(d: _RunDelivery, fire_owner: Optional[str], execution_
         # Failure ping left the process (or had a configured target): mark the incident alerted.
         _mark_incident_alerted(d.failure_incident_id)
     finish_execution(
-        execution_id, success=d.success, error=d.error, delivery_outcome=delivery_outcome)
+        execution_id, success=d.success, error=d.error, delivery_outcome=delivery_outcome,
+        output_file=d.output_file if job.get("no_agent") else None)
     return True
 
 

@@ -20,6 +20,7 @@ export interface CronExecution {
   delivery_outcome?: 'delivered' | 'failed' | 'not_configured' | 'queued' | 'suppressed' | 'suppressed_acked' | null
   finished_at: null | string
   id: string
+  output_available?: boolean
   status: 'claimed' | 'completed' | 'failed' | 'running' | 'unknown'
 }
 
@@ -65,6 +66,16 @@ export async function getCronJobExecutions(jobId: string, limit = 20): Promise<C
   })
 
   return executions ?? []
+}
+
+export async function getCronExecutionResult(jobId: string, executionId: string): Promise<string> {
+  const { result } = await hermesApi<{ result: string }>({
+    ...profileScoped(),
+    ...connectionScoped(),
+    path: `/api/cron/jobs/${encodeURIComponent(jobId)}/executions/${encodeURIComponent(executionId)}/result`
+  })
+
+  return result
 }
 
 // The single source of truth for cron delivery targets (local + configured

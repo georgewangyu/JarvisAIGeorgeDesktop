@@ -8,6 +8,7 @@ immutable.
 from __future__ import annotations
 
 import os
+import stat
 import sqlite3
 import threading
 import time
@@ -28,6 +29,7 @@ HANDOFF_ADOPTION_GRACE_SECONDS = 30.0
 _TERMINAL_STATES = ("completed", "failed", "unknown")
 _lock = threading.RLock()
 _PROCESS_ID = uuid.uuid4().hex
+MAX_RESULT_BYTES = 1024 * 1024
 
 
 # --- executions ledger --------------------------------------------------------------------------
@@ -82,6 +84,7 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
     )
     add_column_if_missing(conn, "executions", "delivery_outcome", "delivery_outcome TEXT")
     add_column_if_missing(conn, "executions", "scheduled_instant", "scheduled_instant TEXT")
+    add_column_if_missing(conn, "executions", "output_file", "output_file TEXT")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_executions_occurrence "
         "ON executions(job_id, scheduled_instant) WHERE status='completed'"
@@ -247,6 +250,7 @@ def mark_execution_running(execution_id: str) -> Optional[Dict[str, Any]]:
 def finish_execution(
     execution_id: str, *, success: bool, error: Optional[str] = None,
     delivery_outcome: Optional[str] = None,
+    output_file: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Write a terminal result once; terminal attempts cannot be rewritten."""
     now = _hermes_now().isoformat()
@@ -256,10 +260,11 @@ def finish_execution(
         cur = conn.execute(
             """UPDATE executions
                SET status=?, finished_at=?, error=?, handoff_pending=0,
-                   handoff_started_at=NULL, delivery_outcome=?
+                   handoff_started_at=NULL, delivery_outcome=?, output_file=?
                WHERE id=? AND status IN ('claimed','running')
                  AND process_id=? AND pid=?""",
-            (status, now, detail, delivery_outcome, execution_id, _PROCESS_ID, os.getpid()),
+            (status, now, detail, delivery_outcome, output_file if success else None,
+             execution_id, _PROCESS_ID, os.getpid()),
         )
         if cur.rowcount != 1:
             return None
@@ -350,6 +355,59 @@ def get_execution(execution_id: str) -> Optional[Dict[str, Any]]:
             (str(execution_id),),
         ).fetchone()
     return dict(row) if row is not None else None
+
+
+def _result_path(job_id: str, record: Dict[str, Any]) -> Optional[Path]:
+    """Resolve a ledger-owned basename under this profile's canonical output directory."""
+    if record.get("job_id") != job_id or record.get("status") != "completed":
+        return None
+    name = record.get("output_file")
+    if not isinstance(name, str) or not name.endswith(".md") or Path(name).name != name:
+        return None
+    from cron.jobs import _job_output_dir, _current_cron_store
+
+    try:
+        root = _current_cron_store().output_dir.resolve()
+        untrusted_directory = _job_output_dir(job_id)
+        directory = untrusted_directory.resolve()
+        if directory != untrusted_directory or not directory.is_dir():
+            return None
+        directory.relative_to(root)
+        candidate = directory / name
+    except (OSError, ValueError):
+        return None
+    return candidate
+
+
+def read_execution_result(job_id: str, execution_id: str) -> Optional[str]:
+    """Read a successful run's bounded output; absent, pruned and unsafe files are unavailable."""
+    record = get_execution(execution_id)
+    path = _result_path(job_id, record) if record else None
+    if path is None:
+        return None
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, "rb") as output:
+            info = os.fstat(output.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_RESULT_BYTES:
+                return None
+            content = output.read(MAX_RESULT_BYTES + 1)
+        if len(content) > MAX_RESULT_BYTES:
+            return None
+        return content.decode("utf-8")
+    except (OSError, UnicodeError):
+        return None
+
+
+def execution_result_available(job_id: str, record: Dict[str, Any]) -> bool:
+    path = _result_path(job_id, record)
+    if path is None:
+        return False
+    try:
+        info = path.stat(follow_symlinks=False)
+        return stat.S_ISREG(info.st_mode) and info.st_size <= MAX_RESULT_BYTES
+    except OSError:
+        return False
 
 
 def latest_execution(job_id: str) -> Optional[Dict[str, Any]]:

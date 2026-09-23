@@ -144,7 +144,7 @@ def _list_cron_job_executions_sync(job_id: str, profile: Optional[str] = None, l
     if not job.get("no_agent"):
         return {"executions": []}
 
-    from cron.executions import list_executions
+    from cron.executions import execution_result_available, list_executions
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 
     _, home = _cron_profile_home(selected)
@@ -154,7 +154,9 @@ def _list_cron_job_executions_sync(job_id: str, profile: Optional[str] = None, l
         limit_n = 20
     token = set_hermes_home_override(str(home))
     try:
-        rows = list_executions(job_id=str(job["id"]), limit=limit_n)
+        canonical = str(job["id"])
+        rows = list_executions(job_id=canonical, limit=limit_n)
+        available = {row["id"]: execution_result_available(canonical, row) for row in rows}
     finally:
         reset_hermes_home_override(token)
     # The ledger's error may contain script stdout or secrets. Project only a
@@ -164,9 +166,30 @@ def _list_cron_job_executions_sync(job_id: str, profile: Optional[str] = None, l
         {
             **{key: row.get(key) for key in ("id", "status", "claimed_at", "finished_at")},
             "delivery_outcome": row.get("delivery_outcome") if row.get("delivery_outcome") in safe_outcomes else None,
+            "output_available": available[row["id"]],
         }
         for row in rows
     ]}
+
+
+def _get_cron_execution_result_sync(job_id: str, execution_id: str, profile: Optional[str] = None):
+    selected = _job_profile(job_id, profile)
+    job = _found(_call_cron_for_profile(selected, "get_job", job_id))
+    if not job.get("no_agent"):
+        raise _job_not_found()
+
+    from cron.executions import read_execution_result
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+
+    _, home = _cron_profile_home(selected)
+    token = set_hermes_home_override(str(home))
+    try:
+        result = read_execution_result(str(job["id"]), execution_id)
+    finally:
+        reset_hermes_home_override(token)
+    if result is None:
+        raise _job_not_found()
+    return {"result": result}
 
 
 _EXECUTION_FIELDS = {"prompt", "skill", "skills", "script", "no_agent"}
@@ -258,6 +281,11 @@ async def list_cron_job_runs(job_id: str, profile: Optional[str] = None, limit: 
 @router.get("/api/cron/jobs/{job_id}/executions")
 async def list_cron_job_executions(job_id: str, profile: Optional[str] = None, limit: int = 20):
     return await _run_cron_dashboard_io(_list_cron_job_executions_sync, job_id, profile, limit)
+
+
+@router.get("/api/cron/jobs/{job_id}/executions/{execution_id}/result")
+async def get_cron_execution_result(job_id: str, execution_id: str, profile: Optional[str] = None):
+    return await _run_cron_dashboard_io(_get_cron_execution_result_sync, job_id, execution_id, profile)
 
 
 @router.post("/api/cron/jobs")
