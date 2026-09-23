@@ -150,6 +150,8 @@ def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
         time.sleep(0.01)
     assert [row["id"] for row in listed()] == [a_id]
     assert [row["id"] for row in listed("worker_alpha")] == [b_id]
+    assert [row["status"] for row in listed()] == ["completed"]
+    assert [row["status"] for row in listed("worker_alpha")] == ["completed"]
     assert [row["id"] for row in listed()] == [a_id]
     assert client.get(f"/api/feed/editions/{b_id}").status_code == 404
     assert client.get(f"/api/feed/editions/{a_id}?profile=worker_alpha").status_code == 404
