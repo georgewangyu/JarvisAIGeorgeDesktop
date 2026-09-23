@@ -51,6 +51,7 @@ import {
   type ArtifactRecord,
   type ArtifactSort,
   loadArtifactsForSessions,
+  matchesArtifactFilter,
   sortArtifactRecords
 } from './artifact-utils'
 
@@ -202,7 +203,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
 
     return sortArtifactRecords(
       artifacts.filter(artifact => {
-        if (kindFilter !== 'all' && artifact.kind !== kindFilter) {
+        if (!matchesArtifactFilter(artifact, kindFilter)) {
           return false
         }
 
@@ -269,13 +270,21 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const counts = useMemo(() => {
     const all = artifacts || []
 
-    return {
-      all: all.length,
-      image: all.filter(artifact => artifact.kind === 'image').length,
-      file: all.filter(artifact => artifact.kind === 'file').length,
-      link: all.filter(artifact => artifact.kind === 'link').length
-    }
+    return Object.fromEntries(
+      ARTIFACT_FILTERS.map(filter => [filter, all.filter(artifact => matchesArtifactFilter(artifact, filter)).length])
+    ) as Record<ArtifactFilter, number>
   }, [artifacts])
+
+  const filterLabels: Record<ArtifactFilter, string> = {
+    all: a.tabAll,
+    document: a.tabDocuments,
+    web: a.tabWebFiles,
+    image: a.tabImages,
+    video: a.tabVideos,
+    audio: a.tabAudio,
+    file: a.tabFiles,
+    link: a.tabLinks
+  }
 
   const openArtifact = useCallback(
     async (artifact: ArtifactRecord) => {
@@ -325,32 +334,61 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
 
   return (
     <ConsumerPage description="Files, images, and links Jarvis has created or collected for you." title="Library">
-      <section {...props} className={cn('space-y-6', props.className)}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-1 rounded-2xl bg-(--ui-bg-secondary) p-1">
-            {(
-              [
-                ['all', a.tabAll, counts.all],
-                ['image', a.tabImages, counts.image],
-                ['file', a.tabFiles, counts.file],
-                ['link', a.tabLinks, counts.link]
-              ] as const
-            ).map(([id, label, count]) => (
-              <Button
-                aria-pressed={kindFilter === id}
-                className="rounded-xl"
-                key={id}
-                onClick={() => setKindFilter(id)}
-                size="sm"
-                variant={kindFilter === id ? 'secondary' : 'ghost'}
-              >
-                {label}
-                {artifacts ? <span className="text-(--ui-text-tertiary)">{count}</span> : null}
-              </Button>
-            ))}
-          </div>
-          <div className="flex min-w-0 items-center gap-2">
-            {counts.all > 0 ? (
+      <section {...props} className={cn('grid gap-8 lg:grid-cols-[10rem_minmax(0,1fr)]', props.className)}>
+        <nav
+          aria-label="Library categories"
+          className="grid content-start grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-1"
+        >
+          {(
+            [
+              {
+                label: a.groupArtifacts,
+                rows: [
+                  ['all', a.tabAll, counts.all],
+                  ['document', a.tabDocuments, counts.document],
+                  ['web', a.tabWebFiles, counts.web]
+                ]
+              },
+              {
+                label: a.groupMedia,
+                rows: [
+                  ['image', a.tabImages, counts.image],
+                  ['video', a.tabVideos, counts.video],
+                  ['audio', a.tabAudio, counts.audio]
+                ]
+              },
+              {
+                label: a.groupOther,
+                rows: [
+                  ['file', a.tabFiles, counts.file],
+                  ['link', a.tabLinks, counts.link]
+                ]
+              }
+            ] as const
+          ).map(group => (
+            <div className="contents lg:block lg:pb-5" key={group.label}>
+              <h2 className="col-span-full pt-3 text-xs font-semibold uppercase tracking-[0.14em] text-(--ui-text-tertiary) first:pt-0 lg:pb-2">
+                {group.label}
+              </h2>
+              {group.rows.map(([id, label, count]) => (
+                <Button
+                  aria-pressed={kindFilter === id}
+                  className="w-full justify-between rounded-xl"
+                  key={id}
+                  onClick={() => setKindFilter(id)}
+                  size="sm"
+                  variant={kindFilter === id ? 'secondary' : 'ghost'}
+                >
+                  {label}
+                  {artifacts && count > 0 ? <span className="text-(--ui-text-tertiary)">{count}</span> : null}
+                </Button>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="min-w-0 space-y-6">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <Select onValueChange={value => setSortOrder(value as ArtifactSort)} value={sortOrder}>
                 <SelectTrigger aria-label={a.sortLabel} size="sm">
                   <SelectValue />
@@ -361,8 +399,6 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                   <SelectItem value="name">{a.sortName}</SelectItem>
                 </SelectContent>
               </Select>
-            ) : null}
-            {counts.all > 0 ? (
               <SearchField
                 aria-label={a.search}
                 containerClassName="rounded-xl bg-(--ui-bg-secondary) px-3 py-1 opacity-100"
@@ -372,83 +408,91 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                 placeholder={a.search}
                 value={query}
               />
-            ) : null}
-            <Tip label={refreshing ? a.refreshing : a.refresh}>
-              <Button
-                aria-label={refreshing ? a.refreshing : a.refresh}
-                className="rounded-xl text-(--ui-text-tertiary)"
-                disabled={refreshing}
-                onClick={() => void refreshArtifacts()}
-                size="icon"
-                variant="secondary"
-              >
-                {refreshing ? <TitlebarIcon name="loading" spinning /> : <TitlebarIcon name="refresh" />}
-              </Button>
-            </Tip>
-          </div>
-        </div>
-
-        {!artifacts ? (
-          <div className="grid min-h-64 place-items-center">
-            <PageLoader label={a.indexing} />
-          </div>
-        ) : visibleArtifacts.length === 0 ? (
-          <div className="grid min-h-64 place-items-center px-6 text-center">
-            <div>
-              <FolderOpen className="mx-auto size-5 text-(--ui-text-tertiary)" />
-              <div className="mt-4 text-base font-semibold">{a.noArtifactsTitle}</div>
-              <div className="mx-auto mt-1 max-w-sm text-sm leading-6 text-(--ui-text-tertiary)">
-                {a.noArtifactsDesc}
-              </div>
+              <Tip label={refreshing ? a.refreshing : a.refresh}>
+                <Button
+                  aria-label={refreshing ? a.refreshing : a.refresh}
+                  className="rounded-xl text-(--ui-text-tertiary)"
+                  disabled={refreshing}
+                  onClick={() => void refreshArtifacts()}
+                  size="icon"
+                  variant="secondary"
+                >
+                  {refreshing ? <TitlebarIcon name="loading" spinning /> : <TitlebarIcon name="refresh" />}
+                </Button>
+              </Tip>
             </div>
           </div>
-        ) : (
-          <div className="flex flex-col gap-3 pb-2">
-            {visibleImageArtifacts.length > 0 && (
-              <section className="flex flex-col">
-                <div className="flex h-7 items-center gap-3 overflow-x-auto">
-                  <ArtifactsPagination
-                    className="ml-auto justify-end px-0"
-                    itemLabel={a.itemsImage}
-                    onPageChange={setImagePage}
-                    page={currentImagePage}
-                    pageSize={24}
-                    total={visibleImageArtifacts.length}
-                  />
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] items-start gap-2 pt-1.5">
-                  {pagedImageArtifacts.map(artifact => (
-                    <ArtifactImageCard
-                      artifact={artifact}
-                      failedImage={failedImageIds.has(artifact.id)}
-                      key={artifact.id}
-                      onImageError={markImageFailed}
-                      onOpenChat={sessionId => openSession(sessionId, navigate)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
 
-            {visibleFileArtifacts.length > 0 && (
-              <section className="flex flex-col">
-                <div className="flex h-7 items-center gap-3 overflow-x-auto">
-                  <ArtifactsPagination
-                    className="ml-auto justify-end px-0"
-                    itemLabel={itemsLabel(kindFilter, a)}
-                    onPageChange={setFilePage}
-                    page={currentFilePage}
-                    pageSize={100}
-                    total={visibleFileArtifacts.length}
-                  />
+          {!artifacts ? (
+            <div className="grid min-h-64 place-items-center">
+              <PageLoader label={a.indexing} />
+            </div>
+          ) : visibleArtifacts.length === 0 ? (
+            <div className="grid min-h-64 place-items-center px-6 text-center">
+              <div>
+                <FolderOpen className="mx-auto size-5 text-(--ui-text-tertiary)" />
+                <div className="mt-4 text-base font-semibold">
+                  {query.trim()
+                    ? a.noSearchResults
+                    : kindFilter === 'all'
+                      ? a.noArtifactsTitle
+                      : a.noCategoryTitle(filterLabels[kindFilter])}
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background)">
-                  <ArtifactTable artifacts={pagedFileArtifacts} ctx={cellCtx} filter={kindFilter} />
-                </div>
-              </section>
-            )}
-          </div>
-        )}
+                {kindFilter === 'all' && !query.trim() ? (
+                  <div className="mx-auto mt-1 max-w-sm text-sm leading-6 text-(--ui-text-tertiary)">
+                    {a.noArtifactsDesc}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 pb-2">
+              {visibleImageArtifacts.length > 0 && (
+                <section className="flex flex-col">
+                  <div className="flex h-7 items-center gap-3 overflow-x-auto">
+                    <ArtifactsPagination
+                      className="ml-auto justify-end px-0"
+                      itemLabel={a.itemsImage}
+                      onPageChange={setImagePage}
+                      page={currentImagePage}
+                      pageSize={24}
+                      total={visibleImageArtifacts.length}
+                    />
+                  </div>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] items-start gap-2 pt-1.5">
+                    {pagedImageArtifacts.map(artifact => (
+                      <ArtifactImageCard
+                        artifact={artifact}
+                        failedImage={failedImageIds.has(artifact.id)}
+                        key={artifact.id}
+                        onImageError={markImageFailed}
+                        onOpenChat={sessionId => openSession(sessionId, navigate)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {visibleFileArtifacts.length > 0 && (
+                <section className="flex flex-col">
+                  <div className="flex h-7 items-center gap-3 overflow-x-auto">
+                    <ArtifactsPagination
+                      className="ml-auto justify-end px-0"
+                      itemLabel={itemsLabel(kindFilter, a)}
+                      onPageChange={setFilePage}
+                      page={currentFilePage}
+                      pageSize={100}
+                      total={visibleFileArtifacts.length}
+                    />
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-chat-bubble-background)">
+                    <ArtifactTable artifacts={pagedFileArtifacts} ctx={cellCtx} filter={kindFilter} />
+                  </div>
+                </section>
+              )}
+            </div>
+          )}
+        </div>
       </section>
     </ConsumerPage>
   )

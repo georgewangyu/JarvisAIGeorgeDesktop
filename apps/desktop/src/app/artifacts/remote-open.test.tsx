@@ -90,3 +90,20 @@ it('keeps discovered file paths and originating session scope intact through rem
   expect(screen.getByRole('link').getAttribute('href')).toBe('https://example.com/report.txt')
   expect(openExternal).not.toHaveBeenCalled()
 })
+
+it('filters real indexed documents and gives empty web files a truthful state', async () => {
+  render(
+    <MemoryRouter>
+      <ArtifactsView />
+    </MemoryRouter>
+  )
+
+  expect(await screen.findByRole('button', { name: 'USER.md' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /^Documents/ }))
+  expect(screen.getByRole('button', { name: 'USER.md' })).toBeTruthy()
+  expect(screen.queryByRole('link', { name: /report.txt/ })).toBeNull()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Web files' }))
+  expect(screen.getByText('No web files yet')).toBeTruthy()
+  expect(screen.getByRole('textbox', { name: 'Search artifacts...' })).toBeTruthy()
+})

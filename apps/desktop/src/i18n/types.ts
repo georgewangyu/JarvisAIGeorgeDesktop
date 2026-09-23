@@ -2306,7 +2306,14 @@ export interface Translations {
     refreshing: string
     indexing: string
     tabAll: string
+    groupArtifacts: string
+    groupMedia: string
+    groupOther: string
+    tabDocuments: string
+    tabWebFiles: string
     tabImages: string
+    tabVideos: string
+    tabAudio: string
     tabFiles: string
     tabLinks: string
     sortLabel: string
@@ -2314,6 +2321,8 @@ export interface Translations {
     sortOldest: string
     sortName: string
     noArtifactsTitle: string
+    noCategoryTitle: (category: string) => string
+    noSearchResults: string
     noArtifactsDesc: string
     failedLoad: string
     openFailed: string

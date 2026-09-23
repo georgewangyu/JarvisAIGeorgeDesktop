@@ -3,9 +3,18 @@ import { isArtifactFilePath, mediaExternalUrl, resolveMediaDisplaySrc } from '@/
 import type { SessionInfo, SessionMessage } from '@/types/hermes'
 
 export type ArtifactKind = 'image' | 'file' | 'link'
-export type ArtifactFilter = 'all' | ArtifactKind
+export type ArtifactFilter = 'all' | 'audio' | 'document' | ArtifactKind | 'video' | 'web'
 export type ArtifactSort = 'newest' | 'oldest' | 'name'
-export const ARTIFACT_FILTERS: readonly ArtifactFilter[] = ['all', 'image', 'file', 'link']
+export const ARTIFACT_FILTERS: readonly ArtifactFilter[] = [
+  'all',
+  'document',
+  'web',
+  'image',
+  'video',
+  'audio',
+  'file',
+  'link'
+]
 
 export interface ArtifactRecord {
   id: string
@@ -17,6 +26,43 @@ export interface ArtifactRecord {
   profile?: string
   sessionTitle: string
   timestamp: number
+}
+
+const DOCUMENT_EXTENSIONS = new Set(['csv', 'doc', 'docx', 'md', 'pdf', 'ppt', 'pptx', 'rtf', 'txt', 'xls', 'xlsx'])
+const VIDEO_EXTENSIONS = new Set(['avi', 'mkv', 'mov', 'mp4', 'webm'])
+const AUDIO_EXTENSIONS = new Set(['flac', 'm4a', 'mp3', 'ogg', 'opus', 'wav'])
+
+export function matchesArtifactFilter(artifact: ArtifactRecord, filter: ArtifactFilter): boolean {
+  if (filter === 'all') {
+    return true
+  }
+
+  if (filter === 'image' || filter === 'file' || filter === 'link') {
+    return artifact.kind === filter
+  }
+
+  // These views are derived only from indexed file outputs. An ordinary URL
+  // is a link, not proof Jarvis created a web artifact; an unknown file is
+  // still available under Files instead of being guessed into a category.
+  if (artifact.kind !== 'file') {
+    return false
+  }
+
+  const extension = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(artifact.value)?.[1]?.toLowerCase()
+
+  if (filter === 'document') {
+    return extension != null && DOCUMENT_EXTENSIONS.has(extension)
+  }
+
+  if (filter === 'video') {
+    return extension != null && VIDEO_EXTENSIONS.has(extension)
+  }
+
+  if (filter === 'audio') {
+    return extension != null && AUDIO_EXTENSIONS.has(extension)
+  }
+
+  return extension === 'html' || extension === 'htm'
 }
 
 export function sortArtifactRecords(records: ArtifactRecord[], order: ArtifactSort): ArtifactRecord[] {
@@ -51,7 +97,7 @@ const WINDOWS_PATH_RE = /(^|[\s("'`])([A-Za-z]:[\\/][^\s"'`<>]+(?:\.[a-z0-9]{1,8
 const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|svg|bmp)(?:\?.*)?$/i
 
 const FILE_EXT_RE =
-  /\.(?:png|jpe?g|gif|webp|svg|bmp|pdf|txt|json|md|csv|zip|tar|gz|avi|flac|m4a|mkv|mp3|ogg|opus|wav|webm|mp4|mov)(?:\?.*)?$/i
+  /\.(?:png|jpe?g|gif|webp|svg|bmp|pdf|docx?|pptx?|xlsx?|rtf|txt|json|md|csv|html?|zip|tar|gz|avi|flac|m4a|mkv|mp3|ogg|opus|wav|webm|mp4|mov)(?:\?.*)?$/i
 
 const MAX_UNIX_SECONDS = 10_000_000_000
 

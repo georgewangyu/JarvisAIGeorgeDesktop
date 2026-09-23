@@ -7,6 +7,7 @@ import {
   artifactImageSrc,
   collectArtifactsForSession,
   loadArtifactsForSessions,
+  matchesArtifactFilter,
   sortArtifactRecords
 } from './artifact-utils'
 
@@ -28,6 +29,44 @@ function makeSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
     ...overrides
   }
 }
+
+it('groups only indexed file outputs into document, web, video and audio views', () => {
+  const record = (kind: 'file' | 'link', value: string) => ({
+    id: value,
+    kind,
+    value,
+    href: value,
+    label: value,
+    sessionId: 'session-1',
+    sessionTitle: 'Session',
+    timestamp: 1
+  })
+
+  const pdf = record('file', '/tmp/report.pdf')
+  const html = record('file', '/tmp/dashboard.html')
+  const video = record('file', '/tmp/clip.mp4')
+  const audio = record('file', '/tmp/voice.m4a')
+  const url = record('link', 'https://example.com/page.html')
+
+  expect(matchesArtifactFilter(pdf, 'document')).toBe(true)
+  expect(matchesArtifactFilter(html, 'web')).toBe(true)
+  expect(matchesArtifactFilter(video, 'video')).toBe(true)
+  expect(matchesArtifactFilter(audio, 'audio')).toBe(true)
+  expect(matchesArtifactFilter(url, 'web')).toBe(false)
+  expect(matchesArtifactFilter(url, 'link')).toBe(true)
+  expect(matchesArtifactFilter(pdf, 'file')).toBe(true)
+  expect(matchesArtifactFilter(pdf, 'video')).toBe(false)
+})
+
+it('indexes genuine generated document and web files before categorizing them', () => {
+  const artifacts = collectArtifactsForSession(makeSession(), [
+    { role: 'assistant', content: 'Saved /tmp/report.docx and /tmp/dashboard.html', timestamp: 2000 }
+  ])
+
+  expect(artifacts.map(artifact => artifact.value)).toEqual(['/tmp/report.docx', '/tmp/dashboard.html'])
+  expect(matchesArtifactFilter(artifacts[0], 'document')).toBe(true)
+  expect(matchesArtifactFilter(artifacts[1], 'web')).toBe(true)
+})
 
 it('sorts existing Library records without mutating the source index', () => {
   const records = [
