@@ -8,6 +8,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { useI18n } from '@/i18n'
 import { useJarvisCopy } from '@/i18n/jarvis'
 import { openConsumerSetupReview } from '@/store/consumer-setup-review'
+import { $activeGatewayProfile } from '@/store/profile'
 import { canUseQuickEntry } from '@/store/quick-entry'
 import { $desktopVersion, refreshDesktopVersion } from '@/store/updates'
 import { useTheme } from '@/themes'
@@ -16,6 +17,7 @@ import type { ThemeMode } from '@/themes/context'
 import { CONNECTIONS_ROUTE } from '../routes'
 import { QuickEntrySettings } from '../settings/quick-entry-settings'
 
+import { ConsumerApprovalSettings } from './consumer-approval-settings'
 import { ConsumerSettingsLayout } from './settings-layout'
 
 export function PreferencesView() {
@@ -24,6 +26,7 @@ export function PreferencesView() {
   const s = useJarvisCopy()
   const { mode, setMode, setTheme, themeName } = useTheme()
   const version = useStore($desktopVersion)
+  const profile = useStore($activeGatewayProfile)
 
   useEffect(() => {
     void refreshDesktopVersion()
@@ -80,11 +83,12 @@ export function PreferencesView() {
         </p>
         <Button onClick={openConsumerSetupReview} variant="secondary">Review setup steps</Button>
       </section>
+      <ConsumerApprovalSettings key={profile} profile={profile} />
       <details className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
         <summary className="cursor-pointer text-base font-semibold">{t.settings.sections.advanced}</summary>
         <p className="mb-4 mt-3 text-sm text-muted-foreground">{s.advancedDetail}</p>
         <p className="text-sm text-muted-foreground">
-          Jarvis keeps provider, safety, and runtime details managed automatically in this preview.
+          Jarvis keeps provider and runtime details managed automatically in this preview.
         </p>
       </details>
       <section className="mt-10 flex items-center justify-between gap-4 border-t border-(--ui-stroke-tertiary) pt-8">
