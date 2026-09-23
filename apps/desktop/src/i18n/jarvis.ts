@@ -21,6 +21,14 @@ const copy = {
     runResult: 'Automation result',
     runEmpty: 'No new update from this run.',
     runError: 'Could not load this result. Try again.',
+    runDelivery: {
+      delivered: 'Notification delivered',
+      queued: 'Notification queued',
+      suppressed: 'No notification sent',
+      suppressed_acked: 'Failure notice acknowledged',
+      failed: 'Notification delivery failed',
+      not_configured: 'No delivery destination'
+    },
     appInventory: 'Apps on this Mac',
     appInventoryDetail:
       'App detection is ready. Dedicated read and interact permissions are not connected in this prototype yet.',
@@ -57,6 +65,14 @@ const copy = {
     runResult: '自動化の結果',
     runEmpty: '今回の実行に新しい報告はありません。',
     runError: '結果を読み込めませんでした。もう一度お試しください。',
+    runDelivery: {
+      delivered: '通知を配信しました',
+      queued: '通知を配信待ちにしました',
+      suppressed: '通知は送信されませんでした',
+      suppressed_acked: '失敗の通知は確認済みです',
+      failed: '通知の配信に失敗しました',
+      not_configured: '配信先が設定されていません'
+    },
     appInventory: 'このMacのアプリ',
     appInventoryDetail: 'アプリを検出しました。この試作版では、専用の読み取り・操作権限はまだ接続されていません。',
     appPending: '未接続',
@@ -92,6 +108,14 @@ const copy = {
     runResult: '自动化结果',
     runEmpty: '此次运行没有新消息。',
     runError: '无法加载结果，请重试。',
+    runDelivery: {
+      delivered: '通知已送达',
+      queued: '通知等待发送',
+      suppressed: '未发送通知',
+      suppressed_acked: '失败通知已确认',
+      failed: '通知发送失败',
+      not_configured: '未设置发送目标'
+    },
     appInventory: '这台 Mac 上的应用',
     appInventoryDetail: '已检测应用。此原型尚未接入专用的读取和操作权限。',
     appPending: '未连接',
@@ -127,6 +151,14 @@ const copy = {
     runResult: '自動化結果',
     runEmpty: '此次執行沒有新消息。',
     runError: '無法載入結果，請重試。',
+    runDelivery: {
+      delivered: '通知已送達',
+      queued: '通知等待傳送',
+      suppressed: '未傳送通知',
+      suppressed_acked: '失敗通知已確認',
+      failed: '通知傳送失敗',
+      not_configured: '未設定傳送目標'
+    },
     appInventory: '這台 Mac 上的應用程式',
     appInventoryDetail: '已偵測應用程式。此原型尚未接入專用的讀取和操作權限。',
     appPending: '未連線',

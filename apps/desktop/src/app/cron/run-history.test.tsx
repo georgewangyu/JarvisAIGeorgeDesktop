@@ -93,6 +93,7 @@ it('shows script-only execution history without opening a nonexistent chat sessi
   vi.mocked(getCronJobExecutions).mockResolvedValueOnce([{
     id: 'execution-one',
     status: 'completed',
+    delivery_outcome: 'queued',
     claimed_at: '2026-09-23T06:00:00+00:00',
     finished_at: '2026-09-23T06:00:01+00:00'
   }])
@@ -104,6 +105,8 @@ it('shows script-only execution history without opening a nonexistent chat sessi
   )
 
   await screen.findByRole('button', { name: /completed/i })
+  fireEvent.click(screen.getByRole('button', { name: /completed/i }))
+  expect(screen.getByText('Notification queued')).toBeTruthy()
   expect(screen.queryByText('No runs yet')).toBeNull()
   expect(getCronJobRuns).not.toHaveBeenCalled()
   expect(getCronJobExecutions).toHaveBeenCalledWith('script-job')

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { type CronExecution, getCronJobExecutions, getCronJobRuns, type SessionInfo } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { $changeEventsAvailable, $cronChangeTick } from '@/store/live-sync'
 
 import { PanelSectionLabel } from '../overlays/panel'
@@ -58,6 +59,7 @@ function executionLabel(status: CronExecution['status'], c: Translations['cron']
 
 export function CronJobRuns({ c, jobId, noAgent = false }: { c: Translations['cron']; jobId: string; noAgent?: boolean }) {
   const { t } = useI18n()
+  const s = useJarvisCopy()
   const [runs, setRuns] = useState<HistoryItem[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [retryTick, setRetryTick] = useState(0)
@@ -172,7 +174,10 @@ export function CronJobRuns({ c, jobId, noAgent = false }: { c: Translations['cr
               </button>
               {selectedRunId === item.run.id && (item.kind === 'session'
                 ? <AutomationRunResult key={item.run.id} run={item.run} />
-                : <div className="px-2 py-2 text-xs text-muted-foreground">{executionLabel(item.run.status, c, t.messaging.unknown)}</div>)}
+                : <div className="space-y-1 px-2 py-2 text-xs text-muted-foreground">
+                    <div>{executionLabel(item.run.status, c, t.messaging.unknown)}</div>
+                    {item.run.delivery_outcome ? <div>{s.runDelivery[item.run.delivery_outcome]}</div> : null}
+                  </div>)}
             </div>
           ))}
         </div>

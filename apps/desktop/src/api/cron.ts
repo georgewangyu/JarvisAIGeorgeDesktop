@@ -17,6 +17,7 @@ const CRON_TRIGGER_REQUEST_TIMEOUT_MS = 24 * 60 * 60 * 1000
 
 export interface CronExecution {
   claimed_at: string
+  delivery_outcome?: 'delivered' | 'failed' | 'not_configured' | 'queued' | 'suppressed' | 'suppressed_acked' | null
   finished_at: null | string
   id: string
   status: 'claimed' | 'completed' | 'failed' | 'running' | 'unknown'

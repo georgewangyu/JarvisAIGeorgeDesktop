@@ -157,10 +157,14 @@ def _list_cron_job_executions_sync(job_id: str, profile: Optional[str] = None, l
         rows = list_executions(job_id=str(job["id"]), limit=limit_n)
     finally:
         reset_hermes_home_override(token)
-    # The ledger's error may contain script stdout or secrets. This consumer
-    # view needs only the outcome and timing, not raw process diagnostics.
+    # The ledger's error may contain script stdout or secrets. Project only a
+    # known delivery state, never raw process diagnostics or script output.
+    safe_outcomes = {"delivered", "queued", "suppressed", "suppressed_acked", "failed", "not_configured"}
     return {"executions": [
-        {key: row.get(key) for key in ("id", "status", "claimed_at", "finished_at")}
+        {
+            **{key: row.get(key) for key in ("id", "status", "claimed_at", "finished_at")},
+            "delivery_outcome": row.get("delivery_outcome") if row.get("delivery_outcome") in safe_outcomes else None,
+        }
         for row in rows
     ]}
 
