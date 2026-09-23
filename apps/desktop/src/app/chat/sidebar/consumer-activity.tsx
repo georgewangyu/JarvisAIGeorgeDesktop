@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useJarvisCopy } from '@/i18n/jarvis'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { Activity, iconSize } from '@/lib/icons'
+import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
 import {
   $sessionDotStateById,
@@ -54,6 +55,16 @@ export function buildConsumerActivityRows(
 
   return sessions
     .flatMap(session => {
+      const source = normalizeSessionSource(session.source)
+
+      // An optimistic/backend row can briefly enter the recents store even
+      // when its normal fetch excludes worker and channel sources. Activity
+      // must never turn those private execution titles into consumer rows.
+      if (!automationIds.has(session.id) && (isMessagingSource(source) ||
+        ['cron', 'kanban', 'oneshot', 'subagent', 'tool'].includes(source ?? ''))) {
+        return []
+      }
+
       const status = sessionStatusBucket(states[session.id])
 
       if (status === 'draft' || status === 'idle') {

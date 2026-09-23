@@ -59,6 +59,19 @@ describe('consumer activity rows', () => {
     ])
   })
 
+  it('never exposes worker or messaging rows if they enter recents optimistically', () => {
+    const hidden = [
+      { ...session('child', 'Private worker task', 10), source: 'subagent' },
+      { ...session('tool', 'Shell command', 9), source: 'tool' },
+      { ...session('message', 'Personal message', 8), source: 'telegram' },
+      { ...session('cron', 'Technical cron run', 7), source: 'cron' }
+    ]
+
+    const states = Object.fromEntries(hidden.map(row => [row.id, 'needs-input' as const]))
+
+    expect(buildConsumerActivityRows(hidden, states)).toEqual([])
+  })
+
   it('routes automation rows to Automations and chat rows to their visible chat', () => {
     const openChat = vi.fn()
     const openAutomations = vi.fn()
