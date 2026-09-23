@@ -337,10 +337,10 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
 
   return (
     <ConsumerPage description="Files, images, and links Jarvis has created or collected for you." title="Library">
-      <section {...props} className={cn('grid gap-8 lg:grid-cols-[10rem_minmax(0,1fr)]', props.className)}>
+      <section {...props} className={cn('grid gap-8 md:grid-cols-[10rem_minmax(0,1fr)]', props.className)}>
         <nav
           aria-label="Library categories"
-          className="grid content-start grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-1"
+          className="grid content-start grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-1"
         >
           {(
             [
@@ -369,8 +369,8 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
               }
             ] as const
           ).map(group => (
-            <div className="contents lg:block lg:pb-5" key={group.label}>
-              <h2 className="col-span-full pt-3 text-xs font-semibold uppercase tracking-[0.14em] text-(--ui-text-tertiary) first:pt-0 lg:pb-2">
+            <div className="contents md:block md:pb-5" key={group.label}>
+              <h2 className="col-span-full pt-3 text-xs font-semibold uppercase tracking-[0.14em] text-(--ui-text-tertiary) first:pt-0 md:pb-2">
                 {group.label}
               </h2>
               {group.rows.map(([id, label, count]) => (
