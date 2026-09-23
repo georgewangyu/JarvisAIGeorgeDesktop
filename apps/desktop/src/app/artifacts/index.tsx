@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { TitlebarIcon } from '@/app/shell/titlebar-icon'
+import { formatRefValue } from '@/components/assistant-ui/directive-text'
 import { ZoomableImage } from '@/components/chat/zoomable-image'
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
@@ -63,6 +64,7 @@ function formatArtifactTime(timestamp: number): string {
 }
 
 const SESSION_INDEX_PAGE_SIZE = 30
+const READABLE_TEXT_FILE_RE = /\.(?:csv|html?|json|md|toml|txt|ya?ml)$/i
 
 function sessionKey(session: { id: string; profile?: string }): string {
   return `${session.profile || 'default'}:${session.id}`
@@ -72,17 +74,29 @@ function artifactKey(artifact: ArtifactRecord): string {
   return `${artifact.profile || 'default'}:${artifact.id}`
 }
 
-function discussionPrompt(artifacts: readonly ArtifactRecord[]): string {
+function discussionPrompt(artifacts: readonly ArtifactRecord[], activeProfile: string): string {
   const references = artifacts.map(artifact => {
+    const path = artifact.value
+
+    // @file is expanded by the agent gateway on submit. Only offer that read
+    // for a file owned by this chat's profile and a path its parser can quote
+    // without letting a transcript-supplied value inject another directive.
+    if (artifact.kind === 'file' &&
+      (artifact.profile || 'default') === activeProfile &&
+      isArtifactFilePath(path) && READABLE_TEXT_FILE_RE.test(path) && !path.startsWith('file:') &&
+      ![...path].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 || '`"\''.includes(char))) {
+      return `- ${JSON.stringify(artifact.label)} — @file:${formatRefValue(path)}`
+    }
+
     const location = artifact.kind === 'link'
       ? /^https?:\/\//i.test(artifact.value) ? artifact.value : null
       : isArtifactFilePath(artifact.value) ? artifact.value : null
 
-    return `- ${JSON.stringify(artifact.label)}${location ? ` — ${JSON.stringify(location)}` : ''}`
+    return `- ${JSON.stringify(artifact.label)}${location ? ` — ${JSON.stringify(location)}` : ''} (reference only)`
   })
 
   return [
-    'Help me discuss these Library entries from earlier chats. These are references, not attached files. Confirm access before reading a file, and ask me for missing context.',
+    'Help me discuss these Library entries from earlier chats. The @file references below will be read from this chat’s connected workspace when I send this message; tell me if a file is missing or unreadable. Other entries are references only. Do not claim to have read a reference-only entry. Ask me for missing context.',
     '',
     ...references
   ].join('\n')
@@ -598,7 +612,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                 <Button disabled={currentPageArtifacts.length === 0} onClick={toggleCurrentPage} size="sm" variant="ghost">
                   {allCurrentPageSelected ? 'Clear page' : 'Select all on page'}
                 </Button>
-                <Button disabled={selectedArtifacts.length === 0} onClick={() => startConsumerDraft(discussionPrompt(selectedArtifacts), navigate)} size="sm" variant="secondary">
+                <Button disabled={selectedArtifacts.length === 0} onClick={() => startConsumerDraft(discussionPrompt(selectedArtifacts, activeProfile), navigate)} size="sm" variant="secondary">
                   Discuss selected
                 </Button>
                 <Button onClick={() => { setSelectedKeys(new Set()); setSelecting(false) }} size="sm" variant="ghost">

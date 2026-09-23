@@ -14,7 +14,7 @@ vi.mock('@/hermes', async () => ({
   ...(await vi.importActual('@/hermes')),
   listAllProfileSessions: (...args: unknown[]) => listSessions(...args),
   getAllSessionMessages: async () => ({
-    messages: [{ role: 'assistant', timestamp: 1000, content: 'Saved /tmp/alpha.pdf and /tmp/beta.pdf' }]
+    messages: [{ role: 'assistant', timestamp: 1000, content: 'Saved /tmp/alpha.md and /tmp/beta.pdf' }]
   })
 }))
 
@@ -33,22 +33,35 @@ function mount() {
   render(<MemoryRouter><ArtifactsView /></MemoryRouter>)
 }
 
-it('selects indexed entries on the visible page and prepares an unsent reference draft', async () => {
+it('selects indexed entries on the visible page and prepares editable file reads', async () => {
   mount()
-  expect(await screen.findByRole('button', { name: 'alpha.pdf' })).toBeTruthy()
+  expect(await screen.findByRole('button', { name: 'alpha.md' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Select' }))
   expect(screen.getByText('0 selected')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Select all on page' }))
   expect(screen.getByText('2 selected')).toBeTruthy()
-  expect((screen.getByRole('checkbox', { name: 'Select alpha.pdf' }) as HTMLInputElement).checked).toBe(true)
+  expect((screen.getByRole('checkbox', { name: 'Select alpha.md' }) as HTMLInputElement).checked).toBe(true)
   fireEvent.click(screen.getByRole('button', { name: 'Discuss selected' }))
 
   const draft = takeSessionDraft(null)
-  expect(draft.text).toContain('"alpha.pdf" — "/tmp/alpha.pdf"')
-  expect(draft.text).toContain('"beta.pdf" — "/tmp/beta.pdf"')
-  expect(draft.text).toContain('not attached files')
+  expect(draft.text).toContain('"alpha.md" — @file:/tmp/alpha.md')
+  expect(draft.text).toContain('"beta.pdf" — "/tmp/beta.pdf" (reference only)')
+  expect(draft.text).toContain('when I send this message')
   expect(draft.attachments).toEqual([])
   expect($freshSessionRequest.get()).toBe(1)
+})
+
+it('does not turn another profile’s Library file into a readable reference', async () => {
+  $activeGatewayProfile.set('other')
+  mount()
+  expect(await screen.findByRole('button', { name: 'alpha.md' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.md' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Discuss selected' }))
+
+  const draft = takeSessionDraft(null)
+  expect(draft.text).toContain('"alpha.md" — "/tmp/alpha.md" (reference only)')
+  expect(draft.text).not.toContain('@file:/tmp/alpha.md')
 })
 
 it('keeps the empty selection honest and resets on filter, profile and index changes', async () => {
@@ -62,17 +75,17 @@ it('keeps the empty selection honest and resets on filter, profile and index cha
   expect(screen.queryByText('0 selected')).toBeNull()
 
   fireEvent.click(screen.getByRole('button', { name: 'Refresh artifacts' }))
-  expect(await screen.findByRole('button', { name: 'alpha.pdf' })).toBeTruthy()
+  expect(await screen.findByRole('button', { name: 'alpha.md' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Select' }))
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.pdf' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.md' }))
   fireEvent.click(screen.getByRole('button', { name: /^Documents/ }))
   expect(screen.queryByText('1 selected')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Select' }))
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.pdf' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.md' }))
   $activeGatewayProfile.set('other')
   await waitFor(() => expect(screen.queryByText('1 selected')).toBeNull())
   fireEvent.click(screen.getByRole('button', { name: 'Select' }))
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.pdf' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.md' }))
   fireEvent.click(screen.getByRole('button', { name: 'Refresh artifacts' }))
   await waitFor(() => expect(screen.queryByText('1 selected')).toBeNull())
 })
@@ -80,9 +93,9 @@ it('keeps the empty selection honest and resets on filter, profile and index cha
 it('preserves an existing draft and offers explicit recovery before adding selected references', async () => {
   stashSessionDraft(null, 'Unfinished thought', [])
   mount()
-  expect(await screen.findByRole('button', { name: 'alpha.pdf' })).toBeTruthy()
+  expect(await screen.findByRole('button', { name: 'alpha.md' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Select' }))
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.pdf' }))
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select alpha.md' }))
   fireEvent.click(screen.getByRole('button', { name: 'Discuss selected' }))
 
   expect(takeSessionDraft(null).text).toBe('Unfinished thought')
