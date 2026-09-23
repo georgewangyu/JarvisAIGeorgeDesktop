@@ -1299,6 +1299,7 @@ export function ChatBar({
               grows upward over the thread and the dock's own measurement covers
               it. Collapses to nothing when every status is empty. */}
           <ComposerStatusStack
+            consumer={themeName === 'jarvis'}
             onSubmit={onSubmit}
             queue={
               activeQueueSessionKey && queuedPrompts.length > 0 ? (

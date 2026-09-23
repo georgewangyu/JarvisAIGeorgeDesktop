@@ -22,6 +22,20 @@ afterEach(() => {
   $subagentsBySession.set({})
 })
 
+it('keeps worker topology out of the consumer status surface', () => {
+  upsertSubagent('owner', { subagent_id: 'child', goal: 'Private worker task', status: 'running' })
+
+  render(
+    <MemoryRouter>
+      <ComposerStatusStack consumer queue={<div>Queued follow-up</div>} sessionId="owner" />
+    </MemoryRouter>
+  )
+
+  expect(screen.queryByRole('button', { name: /Subagent/ })).toBeNull()
+  expect(screen.queryByText('Private worker task')).toBeNull()
+  expect(screen.getByText('Queued follow-up')).toBeTruthy()
+})
+
 it('shows live work only from the composer session and keeps it hidden after collapse and progress', () => {
   for (let i = 0; i < 5; i++) {
     upsertSubagent('owner', { subagent_id: `child-${i}`, goal: `Task ${i}`, status: i ? 'queued' : 'running' })

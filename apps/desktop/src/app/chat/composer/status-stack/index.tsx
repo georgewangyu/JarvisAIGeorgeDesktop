@@ -83,6 +83,7 @@ const hasRunningTodo = (group: StatusGroup) =>
   group.type === 'todo' && group.items.some(item => item.todoStatus === 'in_progress' && item.state === 'running')
 
 interface ComposerStatusStackProps {
+  consumer?: boolean
   onSubmit?: (value: string, options?: SubmitTextOptions) => Promise<boolean> | boolean
   /** The queue, built by the composer (it owns the queue's callbacks). */
   queue: ReactNode
@@ -94,7 +95,7 @@ interface ComposerStatusStackProps {
  * every session-scoped status — subagents, background tasks, queue — grouped by
  * type and separated by light dividers. Collapses to nothing when empty.
  */
-export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStatusStackProps) {
+export function ComposerStatusStack({ consumer = false, onSubmit, queue, sessionId }: ComposerStatusStackProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
   useSubagentSnapshot(sessionId)
@@ -128,12 +129,11 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
   const groups = useMemo(() => {
     const raw = groupStatusItems(items)
 
-    if (isStructuredSupported) {
-      return raw.filter(g => g.type !== 'goal')
-    }
-
-    return raw
-  }, [items, isStructuredSupported])
+    return raw.filter(group =>
+      !(isStructuredSupported && group.type === 'goal') &&
+      !(consumer && group.type === 'subagent')
+    )
+  }, [consumer, items, isStructuredSupported])
 
   // Seed from the registry on session open; event-driven refreshes (terminal /
   // process tool completions) live in use-message-stream. This must NOT reset
