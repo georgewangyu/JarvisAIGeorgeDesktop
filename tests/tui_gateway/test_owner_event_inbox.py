@@ -3,6 +3,8 @@
 import json
 import subprocess
 import sys
+import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -71,6 +73,9 @@ def test_jarvis_event_requires_the_exact_live_desktop_owner(tmp_path):
         lease.release()
         db.close()
     assert owner_event_receipt(tmp_path, source="calendar", event_id="one")["status"] == "claimed"
+    assert admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Review today")["id"] == admitted["id"]
+    with pytest.raises(ValueError, match="different payload"):
+        admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Changed event")
     with pytest.raises(RuntimeError, match="no live desktop owner"):
         admit_jarvis_event(tmp_path, source="calendar", event_id="two", text="Review tomorrow")
 
@@ -98,3 +103,61 @@ def test_jarvis_event_refuses_lookalike_or_nonconsumer_owner(tmp_path, title, so
     finally:
         lease.release()
         db.close()
+
+
+def test_jarvis_event_admission_to_idle_turn_and_restart_receipt(tmp_path):
+    """Real DB/lease/mailbox/poller wiring; only the model dispatch is synthetic."""
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from hermes_state import SessionDB
+    from tui_gateway import session_notifications
+    from tui_gateway.method_ctx import rebind
+    from tui_gateway.owner_event_inbox import admit_jarvis_event, owner_event_receipt
+    from tui_gateway.session_lifecycle import _session_turn_admission
+
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+    lease, refusal = try_acquire_active_session(
+        session_id="main", surface="desktop", config={}, registry_home=tmp_path,
+        metadata={"live_session_id": "runtime", "bot_live_delivery_consumer": True},
+    )
+    assert refusal is None
+    calls = []
+
+    def submit(_rid, _sid, _session, text, **kwargs):
+        calls.append(text)
+        kwargs["terminal_callback"]({"status": "settled", "text": "One concise result"})
+        return True
+
+    poll = rebind(session_notifications._poll_bot_live_delivery_once, {
+        "_session_home": lambda _session: tmp_path,
+        "_session_turn_admission": _session_turn_admission,
+        "_run_prompt_submit": submit,
+        "_notif_release_turn": lambda session: session.update(running=False),
+    })
+    session = {"source": "desktop", "history_lock": threading.RLock(), "agent": object(),
+               "session_key": "main", "active_session_lease": SimpleNamespace(
+                   lease_id=lease.lease_id, released=False)}
+    try:
+        # A sleeping poll does no model work, even after a mailbox has existed.
+        assert poll("runtime", session) is False
+        assert calls == []
+        first = admit_jarvis_event(tmp_path, source="calendar", event_id="synthetic-1", text="Check the date")
+        assert poll("runtime", session) is True
+        assert calls == ["[Event from calendar; id synthetic-1]\nCheck the date"]
+        receipt = owner_event_receipt(tmp_path, source="calendar", event_id="synthetic-1")
+        assert receipt["id"] == first["id"] and receipt["status"] == "settled"
+        assert receipt["reply"] == "One concise result"
+        assert poll("runtime", session) is False
+        assert len(calls) == 1
+    finally:
+        lease.release()
+        db.close()
+
+    observed = subprocess.run([
+        sys.executable, "-c",
+        "import json,sys; from tui_gateway.owner_event_inbox import owner_event_receipt; "
+        "print(json.dumps(owner_event_receipt(sys.argv[1],source='calendar',event_id='synthetic-1')))",
+        str(tmp_path),
+    ], check=True, capture_output=True, text=True)
+    assert json.loads(observed.stdout)["status"] == "settled"

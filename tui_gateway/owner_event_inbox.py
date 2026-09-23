@@ -48,9 +48,17 @@ def admit_jarvis_event(
     """Admit an event to the currently live permanent desktop chat only.
 
     This does not start a backend or promise delivery after the Mac app exits.
-    Producers can inspect an existing receipt after restart, but a new event
-    without a live exact owner is refused rather than queued for a wrong chat.
+    An identical retry returns its original receipt even after the owner exits;
+    a new event without a live owner is refused rather than queued for a wrong chat.
     """
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("event text is required")
+    existing = owner_event_receipt(profile_home, source=source, event_id=event_id)
+    if existing is not None:
+        expected = f"[Event from {source}; id {event_id}]\n{text}"
+        if existing.get("message") != expected:
+            raise ValueError("event id already belongs to a different payload")
+        return existing
     owner = find_jarvis_live_owner(profile_home)
     if owner is None:
         raise RuntimeError("the Jarvis main chat has no live desktop owner")
