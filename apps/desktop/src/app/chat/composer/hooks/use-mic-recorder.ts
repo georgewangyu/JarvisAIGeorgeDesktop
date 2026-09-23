@@ -261,7 +261,13 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
       resolver?.(null)
     }
 
-    recorder.start()
+    try {
+      recorder.start()
+    } catch (error) {
+      cleanup()
+      throw micError(error, copy)
+    }
+
     setRecording(true)
     startMeter(stream, options)
   }
