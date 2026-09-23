@@ -323,7 +323,7 @@ export const ja = defineLocale({
     exportConfig: '設定を書き出す',
     importConfig: '設定を読み込む',
     resetToDefaults: 'デフォルトに戻す',
-    resetConfirm: 'すべての設定を Hermes のデフォルトに戻しますか？',
+    resetConfirm: '標準設定を Hermes のデフォルトに戻しますか？カスタム設定は残る場合があります。',
     exportFailed: '書き出しに失敗しました',
     resetFailed: 'リセットに失敗しました',
     nav: {

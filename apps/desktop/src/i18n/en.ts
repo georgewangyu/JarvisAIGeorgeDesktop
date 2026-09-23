@@ -502,8 +502,8 @@ export const en: Translations = {
     closeSettings: 'Close settings',
     exportConfig: 'Export config',
     importConfig: 'Import config',
-    resetToDefaults: 'Reset to defaults',
-    resetConfirm: 'Reset all settings to Hermes defaults?',
+    resetToDefaults: 'Restore default values',
+    resetConfirm: 'Restore standard settings to Hermes defaults? Custom settings may remain.',
     exportFailed: 'Export failed',
     resetFailed: 'Reset failed',
     nav: {

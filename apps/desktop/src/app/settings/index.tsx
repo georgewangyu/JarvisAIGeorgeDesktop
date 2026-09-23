@@ -5,7 +5,6 @@ import { useLocation, useNavigate } from 'react-router'
 import { codiconIcon } from '@/components/ui/codicon'
 import { KbdCombo } from '@/components/ui/kbd'
 import { Tip } from '@/components/ui/tooltip'
-import { getHermesConfigDefaults, getHermesConfigRecord, saveHermesConfig } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import {
@@ -35,7 +34,7 @@ import { $activeConnectionId } from '@/store/connections'
 import { bindingsFor } from '@/store/keybinds'
 import { $localModelsEnabled } from '@/store/local-models-flag'
 import { notifyError } from '@/store/notifications'
-import { $settingsScopeProfile } from '@/store/settings-scope'
+import { $settingsRequestProfile, $settingsScopeProfile } from '@/store/settings-scope'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { OverlayIconButton } from '../overlays/overlay-chrome'
@@ -47,6 +46,7 @@ import { AppearanceSettings } from './appearance-settings'
 import { BillingSettings } from './billing'
 import { ConfigSettings } from './config-settings'
 import { SECTIONS } from './constants'
+import { exportSettingsConfig, restoreDefaultSettings } from './data-controls'
 import { GatewaySettings } from './gateway-settings'
 import { KeybindSettings } from './keybind-settings'
 import { KEYS_VIEWS, KeysSettings, type KeysView } from './keys-settings'
@@ -75,6 +75,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
 
 export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: SettingsPageProps) {
   const scopeProfile = useStore($settingsScopeProfile)
+  const requestProfile = useStore($settingsRequestProfile)
   const activeConnectionId = useStore($activeConnectionId)
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -136,14 +137,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
 
   const exportConfig = async () => {
     try {
-      const cfg = await getHermesConfigRecord()
-      const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'hermes-config.json'
-      a.click()
-      URL.revokeObjectURL(url)
+      await exportSettingsConfig(requestProfile)
       triggerHaptic('success')
     } catch (err) {
       notifyError(err, t.settings.exportFailed)
@@ -162,7 +156,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
     }
 
     try {
-      await saveHermesConfig(await getHermesConfigDefaults())
+      await restoreDefaultSettings(requestProfile)
       triggerHaptic('success')
       onConfigSaved?.()
     } catch (err) {

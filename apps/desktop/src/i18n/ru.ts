@@ -410,7 +410,7 @@ export const ru = defineLocale({
     exportConfig: 'Экспорт конфигурации',
     importConfig: 'Импорт конфигурации',
     resetToDefaults: 'Сбросить к значениям по умолчанию',
-    resetConfirm: 'Сбросить все настройки к значениям Hermes по умолчанию?',
+    resetConfirm: 'Восстановить стандартные значения Hermes? Пользовательские настройки могут сохраниться.',
     exportFailed: 'Не удалось экспортировать',
     resetFailed: 'Не удалось сбросить',
     nav: {

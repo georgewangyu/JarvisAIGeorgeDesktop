@@ -314,7 +314,7 @@ export const zhHant = defineLocale({
     exportConfig: '匯出設定',
     importConfig: '匯入設定',
     resetToDefaults: '恢復預設值',
-    resetConfirm: '要將所有設定恢復為 Hermes 預設值嗎？',
+    resetConfirm: '要將標準設定恢復為 Hermes 預設值嗎？自訂設定可能會保留。',
     exportFailed: '匯出失敗',
     resetFailed: '重設失敗',
     nav: {

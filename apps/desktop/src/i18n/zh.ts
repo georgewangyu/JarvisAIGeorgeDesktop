@@ -455,7 +455,7 @@ export const zh = defineLocale({
     exportConfig: '导出配置',
     importConfig: '导入配置',
     resetToDefaults: '恢复默认',
-    resetConfirm: '将所有设置恢复为 Hermes 默认值？',
+    resetConfirm: '将标准设置恢复为 Hermes 默认值？自定义设置可能会保留。',
     exportFailed: '导出失败',
     resetFailed: '重置失败',
     nav: {
