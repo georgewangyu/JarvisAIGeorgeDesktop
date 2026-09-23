@@ -104,15 +104,15 @@ describe('consumer chat navigation', () => {
     expect(await screen.findByRole('dialog', { name: 'Search' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'New side chat' })).toBeNull()
     await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Search chats and pages' }) === window.document.activeElement).toBe(true)
+      expect(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }) === window.document.activeElement).toBe(true)
     )
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats and pages' }), { target: { value: 'side' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), { target: { value: 'side' } })
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Search' })).toBeNull())
 
     act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
-    expect(await screen.findByRole('textbox', { name: 'Search chats and pages' })).toHaveProperty('value', '')
+    expect(await screen.findByRole('textbox', { name: 'Search chats, pages, and automations' })).toHaveProperty('value', '')
   })
 
   it('keeps Search usable with no side chats and returns to the permanent main chat', async () => {
@@ -121,7 +121,7 @@ describe('consumer chat navigation', () => {
 
     act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
 
-    expect(await screen.findByRole('textbox', { name: 'Search chats and pages' })).toBeTruthy()
+    expect(await screen.findByRole('textbox', { name: 'Search chats, pages, and automations' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Main chat' }))
 
     expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({ id: 'new-session' }))
@@ -133,7 +133,7 @@ describe('consumer chat navigation', () => {
 
     act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
     const dialog = await screen.findByRole('dialog', { name: 'Search' })
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats and pages' }), { target: { value: 'goals' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), { target: { value: 'goals' } })
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Goals' }))
     expect(onNavigate).toHaveBeenCalledWith(expect.objectContaining({ id: 'goals' }))
@@ -149,7 +149,7 @@ describe('consumer chat navigation', () => {
 
     act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
     const dialog = await screen.findByRole('dialog', { name: 'Search' })
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats and pages' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), {
       target: { value: 'morning' }
     })
 

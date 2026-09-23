@@ -1932,8 +1932,8 @@ export const ar = defineLocale({
       cron: 'المهام المجدولة',
       agents: 'الوكلاء'
     },
-    searchAria: 'البحث في المحادثات والصفحات',
-    searchPlaceholder: 'البحث في المحادثات والصفحات...',
+    searchAria: 'البحث في المحادثات والصفحات والأتمتة',
+    searchPlaceholder: 'البحث في المحادثات والصفحات والأتمتة...',
     clearSearch: 'مسح البحث',
     noMatch: query => `لا توجد جلسات تطابق "${query}"`,
     results: 'النتائج',

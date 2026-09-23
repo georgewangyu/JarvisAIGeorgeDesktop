@@ -2528,8 +2528,8 @@ export const ru = defineLocale({
       artifacts: 'Артефакты',
       cron: 'Запланированные задачи'
     },
-    searchAria: 'Поиск чатов и страниц',
-    searchPlaceholder: 'Поиск чатов и страниц…',
+    searchAria: 'Поиск чатов, страниц и автоматизаций',
+    searchPlaceholder: 'Поиск чатов, страниц и автоматизаций…',
     clearSearch: 'Очистить поиск',
     noMatch: query => `Нет сеансов по запросу «${query}».`,
     results: 'Результаты',

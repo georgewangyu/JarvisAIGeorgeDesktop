@@ -1670,7 +1670,7 @@ export function ChatSidebar({
             <SheetHeader className="border-b border-(--ui-stroke-secondary) px-4 pb-3 pt-12">
               <SheetTitle className="text-lg tracking-tight">{drawerMode === 'search' ? 'Search' : 'Chats'}</SheetTitle>
               <SheetDescription className="sr-only">
-                {drawerMode === 'search' ? 'Search Jarvis conversations' : 'Jarvis conversation and side chats'}
+                {drawerMode === 'search' ? 'Find chats, pages, and automations' : 'Jarvis conversation and side chats'}
               </SheetDescription>
             </SheetHeader>
 
