@@ -1,0 +1,54 @@
+"""Run a disposable dashboard with deterministic Feed agent output.
+
+This fixture is only for packaged UI proof. It never contacts a model or
+accesses a user profile; pass an empty, test-owned ``--root`` directory.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import secrets
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+
+def serve(root: Path, port: int) -> None:
+    if root.exists() and any(root.iterdir()):
+        raise ValueError("Fixture root must be empty")
+    root.mkdir(parents=True, exist_ok=True)
+    home = root / "hermes-home"
+    home.mkdir()
+    token = secrets.token_urlsafe(32)
+    os.environ["HERMES_HOME"] = str(home)
+    os.environ["HERMES_DASHBOARD_SESSION_TOKEN"] = token
+    os.environ["HERMES_SERVE_HEADLESS"] = "1"
+
+    from hermes_cli import feed_editions
+
+    def synthetic_agent(prompt: str, _edition_id: str):
+        if "fail once" in prompt.lower() and not (root / "failed-once").exists():
+            (root / "failed-once").touch()
+            raise RuntimeError("Synthetic provider interruption")
+        return f"Synthetic briefing for: {prompt}", None
+
+    feed_editions._run_real_agent = synthetic_agent
+    from hermes_cli.web_server import app
+    import uvicorn
+
+    print(json.dumps({"url": f"http://127.0.0.1:{port}", "session_token": token}), flush=True)
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--port", type=int, required=True)
+    args = parser.parse_args()
+    serve(args.root.resolve(strict=False), args.port)

@@ -17,6 +17,7 @@ import { notify } from '@/store/notifications'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $connection, $sessions } from '@/store/session'
 
+import { ConsumerFeedEditions } from './consumer-feed-editions'
 import { ConsumerFeedUpdates } from './consumer-feed-updates'
 import { IDEA_GROUPS } from './ideas/catalog'
 import { type IdeaFeedback, type IdeaFeedbackById, ideaFeedbackKey, readIdeaFeedback, setIdeaFeedback } from './ideas/feedback'
@@ -97,11 +98,10 @@ export function ConsumerFeedView() {
     .slice(0, 8)
 
   return (
-    <ConsumerPage description="Saved updates from Jarvis, with your recent activity close by." title="Feed">
+    <ConsumerPage description="Briefings you ask Jarvis to make, plus saved automation updates and recent activity." title="Feed">
+      <div className="mb-10"><ConsumerFeedEditions /></div>
       {recentSessions.length === 0 && jobs.length === 0 ? (
-        <EmptyState icon="list-flat" title="Nothing new yet">
-          Saved automation updates will appear here after they produce an answer.
-        </EmptyState>
+        <p className="text-sm text-(--ui-text-tertiary)">Automation updates and recent chats will appear here when available.</p>
       ) : (
         <div className="space-y-8">
           <ConsumerFeedUpdates />

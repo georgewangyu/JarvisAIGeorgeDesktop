@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
+vi.mock('@/api/feed', () => ({ getFeedEditions: vi.fn(async () => []), generateFeedEdition: vi.fn() }))
+
 import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
