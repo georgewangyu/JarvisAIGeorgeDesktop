@@ -439,6 +439,7 @@ export function DesktopOnboardingOverlay({
   const freeTierIntro = onboarding.freeTierReady && !onboarding.manual && flow.status === 'idle'
   const ready = freeTierIntro || onboarding.manual || (enabled && onboarding.configured === false)
   const showPicker = !freeTierIntro && (flow.status === 'idle' || flow.status === 'success')
+  const firstRunPicker = ready && showPicker && !onboarding.manual && !freeTierIntro
   // The final "you're in" screen drops the card chrome and floats centered on
   // the surface — same bare, cinematic treatment as the connecting overlay.
   const bare = ready && (freeTierIntro || (!showPicker && flow.status === 'confirming_model'))
@@ -460,7 +461,7 @@ export function DesktopOnboardingOverlay({
       <div
         className={cn(
           'relative w-full max-w-[45rem] transition-all duration-500 ease-out',
-          bare
+          bare || firstRunPicker
             ? ''
             : 'overflow-hidden rounded-xl border border-(--stroke-nous) bg-(--ui-chat-bubble-background) shadow-nous',
           // Bare confirm screen orchestrates its own per-element exit; the
@@ -470,7 +471,7 @@ export function DesktopOnboardingOverlay({
             : 'translate-y-0 scale-100 opacity-100 blur-0'
         )}
       >
-        {showPicker || !ready ? <Header /> : null}
+        {showPicker || !ready ? <Header centered={firstRunPicker} /> : null}
         {onboarding.manual ? (
           <Button
             aria-label={t.common.close}
@@ -482,7 +483,7 @@ export function DesktopOnboardingOverlay({
             <Codicon name="close" size="1rem" />
           </Button>
         ) : null}
-        <div className="grid gap-3 p-5">
+        <div className={cn('grid gap-3', firstRunPicker ? 'px-5 pb-5' : 'p-5')}>
           {reason ? <ReasonNotice reason={reason} /> : null}
           {ready && showPicker && !freeTierIntro && !onboarding.manual ? <FreeTierSetupNotice ctx={ctx} /> : null}
           {ready ? (
@@ -603,13 +604,27 @@ export function Preparing({ boot }: { boot: DesktopBootState }) {
   )
 }
 
-function Header() {
+function Header({ centered = false }: { centered?: boolean }) {
   const { t } = useI18n()
 
   return (
-    <div className="bg-(--ui-chat-bubble-background) px-5 pt-5 pb-1">
-      <h2 className="text-[0.9375rem] font-semibold tracking-tight">{t.onboarding.headerTitle}</h2>
-      <p className="mt-1 max-w-xl text-[0.8125rem] leading-5 text-(--ui-text-tertiary)">{t.onboarding.headerDesc}</p>
+    <div
+      className={cn(
+        'px-5',
+        centered ? 'pb-8 pt-5 text-center' : 'bg-(--ui-chat-bubble-background) pt-5 pb-1'
+      )}
+    >
+      {centered ? (
+        <span aria-hidden="true" className="mx-auto mb-6 grid size-16 place-items-center rounded-2xl bg-primary text-3xl font-semibold text-primary-foreground">
+          J
+        </span>
+      ) : null}
+      <h2 className={cn('font-semibold tracking-tight', centered ? 'text-3xl leading-tight' : 'text-[0.9375rem]')}>
+        {t.onboarding.headerTitle}
+      </h2>
+      <p className={cn('mt-2 text-(--ui-text-tertiary)', centered ? 'text-base leading-7' : 'max-w-xl text-[0.8125rem] leading-5')}>
+        {t.onboarding.headerDesc}
+      </p>
     </div>
   )
 }
@@ -720,7 +735,7 @@ export function Picker({
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
-        {featured ? <FeaturedProviderRow onSelect={select} provider={featured} /> : null}
+        {featured ? <FeaturedProviderRow firstRun={!manual} onSelect={select} provider={featured} /> : null}
         {showRest ? (
           <>
             {/* Advanced/local choices remain available without competing with

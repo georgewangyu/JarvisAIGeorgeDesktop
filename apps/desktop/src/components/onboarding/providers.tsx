@@ -1,6 +1,7 @@
 import { RowButton } from '@/components/ui/row-button'
 import { useI18n } from '@/i18n'
 import { Check, ChevronRight, KeyRound, Terminal } from '@/lib/icons'
+import { cn } from '@/lib/utils'
 import type { OAuthProvider } from '@/types/hermes'
 
 const PROVIDER_DISPLAY: Record<string, { order: number; title: string }> = {
@@ -24,9 +25,11 @@ export const sortProviders = (providers: OAuthProvider[]) =>
   [...providers].sort((a, b) => orderOf(a) - orderOf(b) || a.name.localeCompare(b.name))
 
 export function FeaturedProviderRow({
+  firstRun = false,
   onSelect,
   provider
 }: {
+  firstRun?: boolean
   onSelect: (provider: OAuthProvider) => void
   provider: OAuthProvider
 }) {
@@ -37,11 +40,14 @@ export function FeaturedProviderRow({
 
   return (
     <button
-      className="group relative flex w-full items-center justify-between gap-4 rounded-[8px] bg-primary/[0.06] px-3 py-2.5 text-left transition-colors hover:bg-primary/10"
+      className={cn(
+        'group relative flex w-full items-center justify-between gap-4 bg-primary/[0.06] text-left transition-colors hover:bg-primary/10',
+        firstRun ? 'rounded-2xl px-5 py-4' : 'rounded-[8px] px-3 py-2.5'
+      )}
       onClick={() => onSelect(provider)}
       type="button"
     >
-      <span aria-hidden className="arc-border arc-reverse arc-nous" />
+      {!firstRun ? <span aria-hidden className="arc-border arc-reverse arc-nous" /> : null}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           {isCodex ? (
@@ -51,7 +57,7 @@ export function FeaturedProviderRow({
           ) : (
             <img alt="" className="size-5 shrink-0 rounded" src={assetPath('apple-touch-icon.png')} />
           )}
-          <span className="text-[length:var(--conversation-text-font-size)] font-semibold">
+          <span className={cn('font-semibold', firstRun ? 'text-base' : 'text-[length:var(--conversation-text-font-size)]')}>
             {freeTier ? t.freeTier.providerRowTitle : providerTitle(provider)}
           </span>
           {freeTier ? (
@@ -65,7 +71,7 @@ export function FeaturedProviderRow({
             </span>
           )}
         </div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+        <p className={cn('mt-1 text-muted-foreground', firstRun ? 'text-sm leading-6' : 'text-xs leading-5')}>
           {isCodex
             ? 'Use your existing ChatGPT or Codex subscription. No API key required.'
             : freeTier

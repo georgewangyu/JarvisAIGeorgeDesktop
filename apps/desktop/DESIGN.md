@@ -43,6 +43,12 @@ Consumer Library empty and loading states stay borderless and quiet. Artifact
 filters provide the active-state accent; an empty index must not become a large
 tinted card that dominates the page.
 
+First-run provider setup is a single centered task on an opaque, calm canvas:
+Jarvis mark, readable title, short explanation, and one prominent account
+choice. The provider row is the interaction surface; manual provider setup and
+later connection changes retain their compact dialog treatment. Do not expose
+the underlying chat shell until setup is dismissed.
+
 The ordinary Jarvis composer discloses model/reasoning controls in Chat options
 and folds voice configuration into the existing live-state voice menu. The
 model-picker shortcut opens options when closed; HUD, pop-out, guided-chat and
