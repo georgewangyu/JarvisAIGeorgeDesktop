@@ -290,6 +290,8 @@ export function JarvisSetupJourney({
 
   if (step === 'microphone') {
     const granted = permissions.microphone === 'granted'
+    const denied = permissions.microphone === 'denied'
+    const restricted = permissions.microphone === 'restricted'
 
     return (
       <SetupShell onBack={back} step={step}>
@@ -306,11 +308,17 @@ export function JarvisSetupJourney({
             </div>
             <div className="min-w-0 flex-1">
               <div className="font-medium">Microphone</div>
-              <div className="mt-1 text-sm text-(--ui-text-tertiary)">Used only when you activate voice input.</div>
+              <div className="mt-1 text-sm text-(--ui-text-tertiary)">
+                {restricted
+                  ? 'Microphone access is restricted on this Mac.'
+                  : denied
+                    ? 'Access was denied. You can change it in System Settings.'
+                    : 'Used only when you activate voice input.'}
+              </div>
             </div>
             {granted ? (
               <PermissionStatus granted />
-            ) : (
+            ) : restricted ? null : (
               <Button
                 onClick={async () => {
                   await window.hermesDesktop?.jarvisOnboarding?.requestMicrophone?.()
@@ -322,7 +330,7 @@ export function JarvisSetupJourney({
                 }}
                 size="sm"
               >
-                Allow
+                {denied ? 'Open settings' : 'Allow'}
               </Button>
             )}
           </div>
