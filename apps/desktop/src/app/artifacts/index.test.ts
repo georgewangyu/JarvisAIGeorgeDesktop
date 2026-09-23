@@ -68,6 +68,17 @@ it('indexes genuine generated document and web files before categorizing them', 
   expect(matchesArtifactFilter(artifacts[1], 'web')).toBe(true)
 })
 
+it('shows a macOS /tmp file only once when tool and assistant use different aliases', () => {
+  const artifacts = collectArtifactsForSession(makeSession(), [
+    { role: 'tool', tool_name: 'write_file', content: '{"output_path":"/private/tmp/proof/report.md"}', timestamp: 2000 },
+    { role: 'assistant', content: 'Saved /tmp/proof/report.md', timestamp: 2001 }
+  ])
+
+  expect(artifacts).toHaveLength(1)
+  expect(artifacts[0].value).toBe('/private/tmp/proof/report.md')
+  expect(artifacts[0].id).toBe('session-1:/tmp/proof/report.md')
+})
+
 it('sorts existing Library records without mutating the source index', () => {
   const records = [
     { id: 'later', label: 'Apple', timestamp: 3 },

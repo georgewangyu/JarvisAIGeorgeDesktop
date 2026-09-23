@@ -120,6 +120,13 @@ function normalizeValue(value: string): string {
   return value.trim().replace(/[),.;]+$/, '')
 }
 
+function artifactIdentity(value: string): string {
+  // macOS exposes /tmp through /private/tmp. A tool can report the physical
+  // path while the assistant reports the user-facing alias for the same file.
+  // Keep the original value for opening/copying, but index the pair once.
+  return value.startsWith('/private/tmp/') ? value.slice('/private'.length) : value
+}
+
 function unquoteMediaValue(value: string): string {
   let trimmed = value.trim()
   const quote = trimmed[0]
@@ -457,7 +464,7 @@ export function collectArtifactsForSession(session: SessionInfo, messages: Sessi
         return
       }
 
-      const key = `${session.id}:${value}`
+      const key = `${session.id}:${artifactIdentity(value)}`
 
       if (found.has(key)) {
         return
