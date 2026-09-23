@@ -573,7 +573,13 @@ export function ConsumerGoalsView() {
                 <div className="flex flex-wrap gap-2">
                   <Button disabled={!newGoalTitle.trim() || savingGoal} onClick={() => void saveGoal()}>Save goal</Button>
                   <Button disabled={savingGoal} onClick={() => {
-                    startConsumerDraft(selectedStarter[1], navigate)
+                    const title = newGoalTitle.trim()
+
+                    const prompt = title
+                      ? `I want to work toward: ${title}\n\n${selectedStarter[1]}`
+                      : selectedStarter[1]
+
+                    startConsumerDraft(prompt, navigate)
                     setSelectedStarter(null)
                   }} variant="secondary">Continue to chat</Button>
                 </div>

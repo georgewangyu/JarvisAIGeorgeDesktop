@@ -143,6 +143,23 @@ it('clarifies a goal category before creating an editable draft, without claimin
   expect(screen.getByRole('heading', { name: 'Create a goal' })).toBeTruthy()
 })
 
+it('carries the typed goal into an editable clarification draft without saving it', async () => {
+  const request = vi.fn(async () => ({ goals: [] }))
+  $gateway.set({ request } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Goal name' }), { target: { value: '  Walk three times a week  ' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
+
+  expect(takeSessionDraft(null).text).toBe(
+    'I want to work toward: Walk three times a week\n\nHelp me clarify a health-related goal. Ask what outcome I want and what constraints matter before making a plan.'
+  )
+  expect($freshSessionRequest.get()).toBe(1)
+  expect(request).not.toHaveBeenCalledWith('session.goals.create', expect.anything())
+})
+
 it('saves a passive goal and shows it in Tracking without sending a prompt', async () => {
   const request = vi.fn(async (method: string) => method === 'session.goals.list'
     ? { goals: [] }
