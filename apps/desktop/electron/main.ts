@@ -17436,7 +17436,21 @@ ipcMain.on('hermes:devtools:disable-f12', (_event, on) => {
   }
 })
 
-ipcMain.handle('hermes:openExternal', (_event, url) => {
+ipcMain.handle('hermes:openExternal', async (_event, url) => {
+  // The Library opens local artifacts through this bridge. Wait for macOS to
+  // report the result instead of acknowledging the request while openPath is
+  // still pending; the renderer can then show its existing failure notice.
+  if (typeof url === 'string' && /^file:/i.test(url)) {
+    const localPath = resolveRequestedPathForIpc(url, { purpose: 'Open external file' })
+    const error = await shell.openPath(localPath)
+
+    if (error) {
+      throw new Error(error)
+    }
+
+    return
+  }
+
   if (!openExternalUrl(url)) {
     throw new Error('Invalid external URL')
   }
