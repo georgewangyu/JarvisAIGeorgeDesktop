@@ -108,3 +108,50 @@ def test_failure_and_interruption_require_explicit_retry(tmp_path, monkeypatch):
     assert calls[0]["prompt"] == "Deliberate request"
     assert calls[0]["id"] == "abcdef123456"
     assert calls[0]["deliver"] == "local"
+
+
+def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
+    """A shared serve process must not mix edition storage between profiles."""
+    from starlette.testclient import TestClient
+
+    from hermes_cli import profiles
+    from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
+
+    default_home = tmp_path / ".hermes"
+    profiles_root = default_home / "profiles"
+    other_home = profiles_root / "worker_alpha"
+    for home in (default_home, other_home):
+        home.mkdir(parents=True)
+        (home / "config.yaml").write_text("model: test-model\n", encoding="utf-8")
+
+    monkeypatch.setattr(profiles, "_get_default_hermes_home", lambda: default_home)
+    monkeypatch.setattr(profiles, "_get_profiles_root", lambda: profiles_root)
+    monkeypatch.setenv("HERMES_HOME", str(default_home))
+    monkeypatch.setattr(feed, "_run_real_agent", lambda prompt, _: (f"Edition: {prompt}", None))
+
+    client = TestClient(app)
+    client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
+    a = client.post("/api/feed/editions", json={"prompt": "Default only"})
+    assert a.status_code == 202
+    a_id = a.json()["edition"]["id"]
+    b = client.post("/api/feed/editions?profile=worker_alpha", json={"prompt": "Worker only"})
+    assert b.status_code == 202
+    b_id = b.json()["edition"]["id"]
+
+    def listed(profile=None):
+        suffix = f"?profile={profile}" if profile else ""
+        return client.get(f"/api/feed/editions{suffix}").json()["editions"]
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if len(listed()) == 1 and len(listed("worker_alpha")) == 1:
+            if listed()[0]["status"] == listed("worker_alpha")[0]["status"] == "completed":
+                break
+        time.sleep(0.01)
+    assert [row["id"] for row in listed()] == [a_id]
+    assert [row["id"] for row in listed("worker_alpha")] == [b_id]
+    assert [row["id"] for row in listed()] == [a_id]
+    assert client.get(f"/api/feed/editions/{b_id}").status_code == 404
+    assert client.get(f"/api/feed/editions/{a_id}?profile=worker_alpha").status_code == 404
+    assert (default_home / "feed" / "editions.sqlite3").exists()
+    assert (other_home / "feed" / "editions.sqlite3").exists()
