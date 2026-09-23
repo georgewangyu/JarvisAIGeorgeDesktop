@@ -2923,6 +2923,24 @@
       }
     },
     {
+      "name": "session.goals.create",
+      "summary": "Persist a passive consumer goal without starting an agent turn or autonomous loop.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SessionGoalCreateParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SessionGoalCreateResult"
+        }
+      }
+    },
+    {
       "name": "session.goals.list",
       "summary": "List persisted goals for visible conversations without resuming agent sessions.",
       "params": [
@@ -25859,6 +25877,45 @@
           }
         },
         "title": "SessionForeignPreviewResult",
+        "type": "object"
+      },
+      "SessionGoalCreateParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "SessionGoalCreateParams",
+        "type": "object"
+      },
+      "SessionGoalCreateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "goal": {
+            "$ref": "#/components/schemas/SessionGoalListRow"
+          }
+        },
+        "required": [
+          "goal"
+        ],
+        "title": "SessionGoalCreateResult",
         "type": "object"
       },
       "SessionGoalListRow": {

@@ -853,6 +853,13 @@ export interface WaitBarrierTarget {
   target: string | number
   reason?: string
 }
+export interface SessionGoalCreateParams {
+  profile?: string | null
+  title: string
+}
+export interface SessionGoalCreateResult {
+  goal: SessionGoalListRow
+}
 export interface SessionGoalSetCompletedParams {
   profile?: string | null
   session_id: string
@@ -4535,6 +4542,8 @@ export interface RpcMethods {
   'session.foreign.list': { params: SessionForeignListParams; result: SessionForeignListResult }
   /** Preview a foreign session's tail before importing it. */
   'session.foreign.preview': { params: SessionForeignIdParams; result: SessionForeignPreviewResult }
+  /** Persist a passive consumer goal without starting an agent turn or autonomous loop. */
+  'session.goals.create': { params: SessionGoalCreateParams; result: SessionGoalCreateResult }
   /** List persisted goals for visible conversations without resuming agent sessions. */
   'session.goals.list': { params: SessionGoalsListParams; result: SessionGoalsListResult }
   /** Mark a visible conversation's persisted goal complete or reopen it without a model turn. */
@@ -4816,6 +4825,7 @@ export const RPC_METHODS = [
   'session.foreign.import',
   'session.foreign.list',
   'session.foreign.preview',
+  'session.goals.create',
   'session.goals.list',
   'session.goals.set_completed',
   'session.history',

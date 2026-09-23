@@ -1,4 +1,4 @@
-import type { SessionGoalSetCompletedResult, SessionGoalsListResult } from '@hermes/shared'
+import type { SessionGoalCreateResult, SessionGoalSetCompletedResult, SessionGoalsListResult } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
@@ -331,6 +332,9 @@ export function ConsumerGoalsView() {
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null)
   const [goalUpdateError, setGoalUpdateError] = useState(false)
   const [selectedStarter, setSelectedStarter] = useState<(typeof GOAL_STARTERS)[number] | null>(null)
+  const [newGoalTitle, setNewGoalTitle] = useState('')
+  const [savingGoal, setSavingGoal] = useState(false)
+  const [saveGoalError, setSaveGoalError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -367,9 +371,10 @@ export function ConsumerGoalsView() {
     ? savedGoalsSnapshot.goals
     : []
 
-  const itemsById = new Map<string, { detail?: string; status: string; title: string; updatedAt: number }>(
+  const itemsById = new Map<string, { detail?: string; passive?: boolean; status: string; title: string; updatedAt: number }>(
     savedGoals.map(row => [row.session_id, {
-      detail: row.session_title,
+      detail: row.session_title === row.goal.title ? undefined : row.session_title,
+      passive: row.goal.paused_reason === 'consumer_tracking',
       status: row.goal.status,
       title: row.goal.title,
       updatedAt: row.goal.updated_at ?? 0
@@ -378,7 +383,7 @@ export function ConsumerGoalsView() {
 
   for (const [sessionId, goal] of Object.entries(goals)) {
     if (sessionById.has(sessionId)) {
-      itemsById.set(sessionId, goal)
+      itemsById.set(sessionId, { ...itemsById.get(sessionId), ...goal })
     }
   }
 
@@ -410,7 +415,7 @@ export function ConsumerGoalsView() {
           }
         : current)
       setSessionGoal(sessionId, {
-        status: completed ? 'active' : 'done',
+        status: result.goal.goal.status === 'done' ? 'done' : result.goal.goal.status === 'paused' ? 'paused' : 'active',
         title: result.goal.goal.title,
         updatedAt: Date.now()
       })
@@ -420,6 +425,37 @@ export function ConsumerGoalsView() {
       }
     } finally {
       setPendingGoalId(null)
+    }
+  }
+
+  const saveGoal = async () => {
+    const title = newGoalTitle.trim()
+
+    if (!gateway || !title || savingGoal) {
+      return
+    }
+
+    setSavingGoal(true)
+    setSaveGoalError(false)
+
+    try {
+      const result = await gateway.request<SessionGoalCreateResult>('session.goals.create', { profile, title })
+
+      if ($gateway.get() !== gateway || $activeGatewayProfile.get() !== profile) {
+        return
+      }
+
+      setSavedGoalsSnapshot(current => current?.gateway === gateway && current.profile === profile
+        ? { ...current, goals: [result.goal, ...current.goals] }
+        : current)
+      setSelectedStarter(null)
+      setNewGoalTitle('')
+    } catch {
+      if ($gateway.get() === gateway && $activeGatewayProfile.get() === profile) {
+        setSaveGoalError(true)
+      }
+    } finally {
+      setSavingGoal(false)
     }
   }
 
@@ -484,7 +520,7 @@ export function ConsumerGoalsView() {
                   </span>
                 </button>
                 <span className="rounded-full bg-(--ui-bg-tertiary) px-2.5 py-1 text-xs capitalize text-(--ui-text-secondary)">
-                  {goal.status}
+                  {goal.status === 'paused' && goal.passive ? 'Tracking' : goal.status}
                 </span>
               </div>
             )
@@ -500,7 +536,7 @@ export function ConsumerGoalsView() {
                 <button
                   className="block w-full rounded-2xl px-4 py-3 text-left transition-colors hover:bg-(--ui-control-hover-background)"
                   key={starter[0]}
-                  onClick={() => setSelectedStarter(starter)}
+                  onClick={() => { setSelectedStarter(starter); setNewGoalTitle(''); setSaveGoalError(false) }}
                   type="button"
                 >
                   <span className="block font-medium">{starter[0]}</span>
@@ -510,15 +546,18 @@ export function ConsumerGoalsView() {
           </section>
         </div>
       )}
-      <Dialog onOpenChange={open => !open && setSelectedStarter(null)} open={selectedStarter !== null}>
+      <Dialog onOpenChange={open => !open && !savingGoal && setSelectedStarter(null)} open={selectedStarter !== null}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{selectedStarter?.[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter?.[0]?.toLowerCase()} goal`}</DialogTitle>
             <DialogDescription>
-              First, clarify what you want with Jarvis in chat. This step prepares a draft; it does not save or schedule a goal.
+              Give this goal a name to track it here, or talk it through with Jarvis first. Saving a goal does not start background work.
             </DialogDescription>
           </DialogHeader>
-          <Button onClick={() => {
+          <Input aria-label="Goal name" autoCapitalize="sentences" maxLength={200} onChange={event => setNewGoalTitle(event.target.value)} placeholder="What would you like to work toward?" value={newGoalTitle} />
+          {saveGoalError ? <p className="text-sm text-(--ui-text-danger)" role="alert">The goal could not be saved. Try again.</p> : null}
+          <Button disabled={!newGoalTitle.trim() || savingGoal} onClick={() => void saveGoal()}>Save goal</Button>
+          <Button disabled={savingGoal} onClick={() => {
             if (selectedStarter) {
               startConsumerDraft(selectedStarter[1], navigate)
               setSelectedStarter(null)

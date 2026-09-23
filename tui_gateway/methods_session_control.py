@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import time
+import uuid
 
 from .method_ctx import HandlerRegistry, bind_module
 
@@ -240,6 +241,40 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 5031, "could not read persisted goals")
 
 
+@method("session.goals.create")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    """Save a passive consumer goal. Creation never starts the autonomous /goal loop."""
+    from hermes_cli.goals import GoalState
+
+    raw_title = params.get("title")
+    title = raw_title.strip() if isinstance(raw_title, str) else ""
+    if not title or len(title) > 200:
+        return _err(rid, 4004, "goal title must be 1–200 characters")
+
+    with _profile_db(params, writer=True) as db:
+        if db is None:
+            return _err(rid, 5031, "session store unavailable")
+        session_id = f"desktop-goal-{uuid.uuid4().hex}"
+        state = GoalState(goal=title, status="paused", paused_reason="consumer_tracking", created_at=time.time())
+        try:
+            db.create_session(session_id, source="desktop")
+            if not db.set_session_title(session_id, title):
+                raise RuntimeError("could not title goal session")
+            db.set_meta(f"goal:{session_id}", state.to_json())
+            return _ok(rid, {"goal": {"session_id": session_id,
+                                         "session_title": title,
+                                         "goal": _safe_goal_snapshot(state)}})
+        except Exception as exc:
+            # Only this newly minted, otherwise empty session may be compensated.
+            try:
+                db.delete_session(session_id)
+            except Exception:
+                logger.warning("Could not compensate failed goal create", exc_info=True)
+            logger.debug("session.goals.create failed: %s", exc, exc_info=True)
+            return _err(rid, 5031, "could not save goal")
+
+
 @method("session.goals.set_completed")
 @_profile_scoped
 def _(rid, params: dict) -> dict:
@@ -275,7 +310,7 @@ def _(rid, params: dict) -> dict:
                 state.clear_wait()
                 db.set_meta(meta_key, state.to_json())
             elif not completed and state.status == "done":
-                state.status = "active"
+                state.status = "paused" if state.paused_reason == "consumer_tracking" else "active"
                 state.last_verdict = None
                 state.last_reason = "Reopened by user"
                 state.turns_used = 0

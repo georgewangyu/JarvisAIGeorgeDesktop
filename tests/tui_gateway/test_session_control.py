@@ -141,6 +141,35 @@ def test_goals_list_reads_saved_visible_sessions_without_resuming_them(server):
     assert not server._sessions
 
 
+def test_consumer_goal_create_is_listed_without_starting_agent(server):
+    from hermes_cli.goals import GoalState
+    from hermes_state import SessionDB
+
+    created = _call(server, "session.goals.create", title="  Walk three times a week  ")
+    assert "error" not in created
+    row = created["result"]["goal"]
+    sid = row["session_id"]
+    assert row["goal"]["title"] == "Walk three times a week"
+    assert row["goal"]["status"] == "paused"
+    assert GoalState.from_json(server._get_db().get_meta(f"goal:{sid}")).paused_reason == "consumer_tracking"
+    assert server._get_db().get_session(sid)["title"] == "Walk three times a week"
+    assert not server._sessions
+
+    with SessionDB(server._hermes_home / "state.db", read_only=True) as reopened_db:
+        assert GoalState.from_json(reopened_db.get_meta(f"goal:{sid}")).goal == "Walk three times a week"
+
+    assert sid in [item["session_id"] for item in _call(server, "session.goals.list")["result"]["goals"]]
+    assert _call(server, "session.goals.set_completed", session_id=sid, completed=True)["result"]["goal"]["goal"]["status"] == "done"
+    assert _call(server, "session.goals.set_completed", session_id=sid, completed=False)["result"]["goal"]["goal"]["status"] == "paused"
+    assert not server._sessions
+
+
+def test_consumer_goal_create_rejects_blank_or_oversized_title(server):
+    for title in ("  ", "x" * 201, {"not": "text"}):
+        assert _call(server, "session.goals.create", title=title)["error"]["code"] == 4004
+    assert _call(server, "session.goals.list")["result"]["goals"] == []
+
+
 def test_goals_completion_toggle_persists_without_resuming_agent(server):
     from hermes_cli.goals import GoalState
 

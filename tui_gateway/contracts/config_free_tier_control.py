@@ -422,6 +422,18 @@ method("session.goals.list", params=SessionGoalsListParams, result=SessionGoalsL
        doc="List persisted goals for visible conversations without resuming agent sessions.")
 
 
+class SessionGoalCreateParams(ProfileParams):
+    title: str
+
+
+class SessionGoalCreateResult(Result):
+    goal: SessionGoalListRow
+
+
+method("session.goals.create", params=SessionGoalCreateParams, result=SessionGoalCreateResult,
+       doc="Persist a passive consumer goal without starting an agent turn or autonomous loop.")
+
+
 class SessionGoalSetCompletedParams(ProfileParams):
     session_id: str
     completed: bool

@@ -143,6 +143,45 @@ it('clarifies a goal category before creating an editable draft, without claimin
   expect(screen.getByRole('heading', { name: 'Create a goal' })).toBeTruthy()
 })
 
+it('saves a passive goal and shows it in Tracking without sending a prompt', async () => {
+  const request = vi.fn(async (method: string) => method === 'session.goals.list'
+    ? { goals: [] }
+    : { goal: { session_id: 'new-goal', session_title: 'Walk three times a week', goal: { status: 'paused', paused_reason: 'consumer_tracking', title: 'Walk three times a week' } } })
+
+  $gateway.set({ request } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Goal name' }), { target: { value: 'Walk three times a week' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
+
+  expect(await screen.findByRole('button', { name: /Walk three times a week/ })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Tracking' })).toBeTruthy()
+  expect(request).toHaveBeenCalledWith('session.goals.create', { profile: 'default', title: 'Walk three times a week' })
+  expect($freshSessionRequest.get()).toBe(0)
+})
+
+it('keeps the goal dialog open when saving fails', async () => {
+  const request = vi.fn(async (method: string) => {
+    if (method === 'session.goals.list') {
+      return { goals: [] }
+    }
+
+    throw new Error('offline')
+  })
+
+  $gateway.set({ request } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Goal name' }), { target: { value: 'Keep in touch' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
+
+  expect((await screen.findByRole('alert')).textContent).toContain('could not be saved')
+  expect(screen.getByRole('textbox', { name: 'Goal name' })).toHaveProperty('value', 'Keep in touch')
+  expect(screen.queryByRole('button', { name: /Keep in touch/ })).toBeNull()
+})
+
 it('closes goal clarification without preparing a chat draft', async () => {
   $gateway.set({ request: async () => ({ goals: [] }) } as never)
 
@@ -238,6 +277,23 @@ it('persists completion and reopening from the goal checkbox without opening a c
   expect(request).toHaveBeenCalledWith('session.goals.set_completed', {
     completed: false, profile: 'default', session_id: 'saved-chat'
   })
+})
+
+it('reopens a consumer tracking goal without showing an autonomous active loop', async () => {
+  const goal = { session_id: 'saved-chat', session_title: 'Walking', goal: { status: 'paused', paused_reason: 'consumer_tracking', title: 'Walk three times a week' } }
+
+  const request = vi.fn(async (method: string, params: { completed?: boolean }) => method === 'session.goals.list'
+    ? { goals: [goal] }
+    : { goal: { ...goal, goal: { ...goal.goal, status: params.completed ? 'done' : 'paused' } } })
+
+  $gateway.set({ request } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Complete Walk three times a week' }))
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Reopen Walk three times a week' }))
+
+  expect((await screen.findByRole('checkbox', { name: 'Complete Walk three times a week' })).getAttribute('aria-checked')).toBe('false')
+  expect(screen.getByRole('heading', { name: 'Tracking' })).toBeTruthy()
 })
 
 it('keeps the goal unchecked and reports a failed completion write', async () => {
