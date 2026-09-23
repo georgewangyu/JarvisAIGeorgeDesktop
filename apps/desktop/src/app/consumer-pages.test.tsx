@@ -79,21 +79,41 @@ it('preserves an existing unsent draft when starting a goal', async () => {
     </MemoryRouter>
   )
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Start a goal' }))
-  expect(takeSessionDraft(null).text).toBe('Existing thought\n\nHelp me set a goal and turn it into a realistic plan: ')
+  fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
+  expect(screen.getByRole('dialog', { name: 'Create a health goal' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
+  expect(takeSessionDraft(null).text).toBe(
+    'Existing thought\n\nHelp me clarify a health-related goal. Ask what outcome I want and what constraints matter before making a plan.'
+  )
 })
 
-it('offers goal categories as editable fresh-chat drafts without claiming a saved goal', async () => {
+it('clarifies a goal category before creating an editable draft, without claiming a saved goal', async () => {
   $gateway.set({ request: async () => ({ goals: [] }) } as never)
 
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
-  fireEvent.click(await screen.findByRole('button', { name: /A routine/ }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Productivity' }))
+  expect(screen.getByRole('dialog', { name: 'Create a productivity goal' })).toBeTruthy()
+  expect($freshSessionRequest.get()).toBe(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Continue to chat' }))
   expect(takeSessionDraft(null).text).toBe(
-    'Help me turn a routine I want to build into a sustainable goal. The routine is: '
+    'Help me clarify a productivity goal. Ask what outcome matters and what is getting in the way.'
   )
   expect($freshSessionRequest.get()).toBe(1)
-  expect(screen.getByRole('heading', { name: 'Start with an outcome' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Create a goal' })).toBeTruthy()
+})
+
+it('closes goal clarification without preparing a chat draft', async () => {
+  $gateway.set({ request: async () => ({ goals: [] }) } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Health' }))
+  expect(screen.getByRole('dialog', { name: 'Create a health goal' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+  expect(screen.queryByRole('dialog', { name: 'Create a health goal' })).toBeNull()
+  expect($freshSessionRequest.get()).toBe(0)
 })
 
 it('shows live goal state and opens its owning conversation', () => {
@@ -137,6 +157,7 @@ it('lists persisted goals without opening a session or spending a model turn', a
   const goal = await screen.findByRole('button', { name: /Find a new place/ })
   expect(request).toHaveBeenCalledWith('session.goals.list', { profile: 'default' })
   expect(request).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('button', { name: 'Health' })).toBeTruthy()
   fireEvent.click(goal)
   expect(screen.getByText('Opened saved chat')).toBeTruthy()
 })
@@ -151,7 +172,7 @@ it('shows a retry instead of an empty state when persisted goals fail to load', 
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
   fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
-  await waitFor(() => expect(screen.getByRole('heading', { name: 'Start with an outcome' })).toBeTruthy())
+  await waitFor(() => expect(screen.getByRole('heading', { name: 'Create a goal' })).toBeTruthy())
   expect(request).toHaveBeenCalledTimes(2)
 })
 

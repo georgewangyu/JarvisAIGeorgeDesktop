@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
@@ -195,9 +196,13 @@ export function ConsumerIdeasView() {
 type SavedGoalRow = SessionGoalsListResult['goals'][number]
 
 const GOAL_STARTERS = [
-  ['Personal', 'Help me define a personal goal and make a realistic plan. The outcome I want is: '],
-  ['Work', 'Help me define a work goal with a clear finish line and next steps. The outcome I want is: '],
-  ['A routine', 'Help me turn a routine I want to build into a sustainable goal. The routine is: ']
+  ['Health', 'Help me clarify a health-related goal. Ask what outcome I want and what constraints matter before making a plan.'],
+  ['Relationships', 'Help me clarify a relationship goal. Ask what outcome I want and what matters to the people involved.'],
+  ['Finance', 'Help me clarify a financial goal. Ask what outcome I want and what limits matter before making a plan.'],
+  ['Career', 'Help me clarify a career goal. Ask what outcome I want and what constraints matter.'],
+  ['Interests', 'Help me clarify a goal around an interest. Ask what I want to make time for and how I will know I am making progress.'],
+  ['Productivity', 'Help me clarify a productivity goal. Ask what outcome matters and what is getting in the way.'],
+  ['Something else', 'Help me clarify a goal. Ask what outcome I want before making a plan.']
 ] as const
 
 export function ConsumerGoalsView() {
@@ -218,6 +223,7 @@ export function ConsumerGoalsView() {
   const [refreshIndex, setRefreshIndex] = useState(0)
   const [pendingGoalId, setPendingGoalId] = useState<string | null>(null)
   const [goalUpdateError, setGoalUpdateError] = useState(false)
+  const [selectedStarter, setSelectedStarter] = useState<(typeof GOAL_STARTERS)[number] | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -271,10 +277,6 @@ export function ConsumerGoalsView() {
 
   const items = [...itemsById.entries()].sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
 
-  const startGoal = () => {
-    startConsumerDraft('Help me set a goal and turn it into a realistic plan: ', navigate)
-  }
-
   const toggleGoalCompletion = async (sessionId: string, completed: boolean) => {
     if (!gateway || pendingGoalId) {
       return
@@ -316,7 +318,7 @@ export function ConsumerGoalsView() {
 
   return (
     <ConsumerPage
-      description="Saved goals from your recent conversations, without exposing worker agents."
+      description="Track the things you're working toward with Jarvis."
       title="Goals"
     >
       {!gateway ? (
@@ -332,35 +334,16 @@ export function ConsumerGoalsView() {
         <EmptyState icon="loading" title="Loading goals">
           Reading saved goals…
         </EmptyState>
-      ) : items.length === 0 ? (
-        <section className="max-w-2xl">
-          <h2 className="text-xl font-semibold tracking-tight">Start with an outcome</h2>
-          <p className="mt-2 text-sm leading-6 text-(--ui-text-secondary)">
-            Talk it through with Jarvis. Goals saved in a conversation will appear here.
-          </p>
-          <div className="mt-6 space-y-1">
-            {GOAL_STARTERS.map(([title, prompt]) => (
-              <button
-                className="block w-full rounded-2xl px-4 py-3 text-left transition-colors hover:bg-(--ui-control-hover-background)"
-                key={title}
-                onClick={() => startConsumerDraft(prompt, navigate)}
-                type="button"
-              >
-                <span className="block font-medium">{title}</span>
-                <span className="mt-1 block text-sm text-(--ui-text-tertiary)">Open an editable chat draft</span>
-              </button>
-            ))}
-          </div>
-          <Button className="mt-5" onClick={startGoal} variant="secondary">Start a goal</Button>
-        </section>
       ) : (
-        <div className="space-y-3">
-          {goalUpdateError ? (
-            <p className="text-sm text-(--ui-text-danger)" role="alert">
-              The goal could not be updated. Try again.
-            </p>
-          ) : null}
-          {items.map(([sessionId, goal]) => {
+        <div className="space-y-10">
+          {items.length > 0 ? <section className="space-y-3">
+            <h2 className="text-xl font-semibold tracking-tight">Tracking</h2>
+            {goalUpdateError ? (
+              <p className="text-sm text-(--ui-text-danger)" role="alert">
+                The goal could not be updated. Try again.
+              </p>
+            ) : null}
+            {items.map(([sessionId, goal]) => {
             const session = sessionById.get(sessionId)
             const completed = goal.status === 'done'
 
@@ -398,12 +381,44 @@ export function ConsumerGoalsView() {
                 </span>
               </div>
             )
-          })}
-          <Button className="mt-3" onClick={startGoal} variant="secondary">
-            Start another goal
-          </Button>
+            })}
+          </section> : null}
+          <section className="max-w-2xl">
+            <h2 className="text-xl font-semibold tracking-tight">Create a goal</h2>
+            <p className="mt-2 text-sm leading-6 text-(--ui-text-secondary)">
+              Choose a topic. You and Jarvis can clarify the outcome in chat before tracking it here.
+            </p>
+            <div className="mt-6 space-y-1">
+              {GOAL_STARTERS.map(starter => (
+                <button
+                  className="block w-full rounded-2xl px-4 py-3 text-left transition-colors hover:bg-(--ui-control-hover-background)"
+                  key={starter[0]}
+                  onClick={() => setSelectedStarter(starter)}
+                  type="button"
+                >
+                  <span className="block font-medium">{starter[0]}</span>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       )}
+      <Dialog onOpenChange={open => !open && setSelectedStarter(null)} open={selectedStarter !== null}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{selectedStarter?.[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter?.[0]?.toLowerCase()} goal`}</DialogTitle>
+            <DialogDescription>
+              First, clarify what you want with Jarvis in chat. This step prepares a draft; it does not save or schedule a goal.
+            </DialogDescription>
+          </DialogHeader>
+          <Button onClick={() => {
+            if (selectedStarter) {
+              startConsumerDraft(selectedStarter[1], navigate)
+              setSelectedStarter(null)
+            }
+          }}>Continue to chat</Button>
+        </DialogContent>
+      </Dialog>
     </ConsumerPage>
   )
 }
