@@ -211,6 +211,13 @@ describe('$unreadSessionCount (titlebar badge)', () => {
     expect($unreadSessionCount.get()).toBe(0)
   })
 
+  it('restores persisted cron unread in Activity after restart without lighting the titlebar', () => {
+    setCronSessions([storedRow('cron-2', { source: 'cron', unread: true })])
+
+    expect($sessionDotStateById.get()['cron-2']).toBe('unread')
+    expect($unreadSessionCount.get()).toBe(0)
+  })
+
   it('counts an unread regular session', () => {
     setSessions([storedRow('reg-1', { unread: true })])
 

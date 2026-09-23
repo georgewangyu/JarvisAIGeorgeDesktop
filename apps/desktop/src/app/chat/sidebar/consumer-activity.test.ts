@@ -78,10 +78,11 @@ describe('consumer activity rows', () => {
     const visibleChat = session('chat', 'Trip planning', 1)
 
     openConsumerActivityRow(
-      { id: 'cron-run', kind: 'automation', status: 'working', title: 'Morning briefing' },
+      { id: 'cron_morning_brief_20260923_090000', kind: 'automation', status: 'working', title: 'Morning briefing' },
       undefined,
       openChat,
-      openAutomations
+      openAutomations,
+      [{ id: 'morning_brief', enabled: true }]
     )
     openConsumerActivityRow(
       { id: 'chat', kind: 'chat', status: 'working', title: 'Trip planning' },
@@ -90,7 +91,15 @@ describe('consumer activity rows', () => {
       openAutomations
     )
 
-    expect(openAutomations).toHaveBeenCalledOnce()
+    expect(openAutomations).toHaveBeenCalledWith('morning_brief')
     expect(openChat).toHaveBeenCalledWith('chat', visibleChat)
+  })
+
+  it('opens generic Automations rather than guessing an unknown or ambiguous owner', () => {
+    const openAutomations = vi.fn()
+    const row = { id: 'cron_unknown_20260923_090000', kind: 'automation' as const, status: 'working' as const, title: 'Run' }
+
+    openConsumerActivityRow(row, undefined, vi.fn(), openAutomations, [{ id: 'known', enabled: true }])
+    expect(openAutomations).toHaveBeenCalledWith(null)
   })
 })

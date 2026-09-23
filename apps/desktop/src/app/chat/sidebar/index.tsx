@@ -29,7 +29,7 @@ import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
 import { $activeConnectionId } from '@/store/connections'
-import { $cronJobs } from '@/store/cron'
+import { $cronJobs, setCronFocusJobId } from '@/store/cron'
 import {
   $dismissedAutoProjectIds,
   $panesFlipped,
@@ -1745,8 +1745,12 @@ export function ChatSidebar({
                         {s.newSideChat}
                       </Button>
                       <ConsumerActivity
+                        automationJobs={cronJobs}
                         automationSessions={activityAutomationSessions}
-                        onOpenAutomations={() => onNavigate(AUTOMATIONS_NAV_ITEM)}
+                        onOpenAutomations={jobId => {
+                          setCronFocusJobId(jobId)
+                          onNavigate(AUTOMATIONS_NAV_ITEM)
+                        }}
                         onOpenChat={resumeFromDrawer}
                         sessions={activitySessions}
                       />

@@ -28,7 +28,7 @@ import { computed } from 'nanostores'
 import { stableArray, stableRecord } from '@/lib/stable-array'
 
 import { $backgroundRunningSessionIds } from './composer-status'
-import { $messagingSessions, $sessions, $unreadFinishedSessionIds, lineageAliases } from './session'
+import { $cronSessions, $messagingSessions, $sessions, $unreadFinishedSessionIds, lineageAliases } from './session'
 import {
   $attentionSessionIds,
   $draftSessionIds,
@@ -109,9 +109,10 @@ export const $sessionDotStateById = computed(
     $unreadFinishedSessionIds,
     $draftSessionIds,
     $sessions,
+    $cronSessions,
     $unreadWriteGuard
   ],
-  (attention, working, stalled, background, delegating, unread, draft, sessions, unreadWriteGuard) => {
+  (attention, working, stalled, background, delegating, unread, draft, sessions, cronSessions, unreadWriteGuard) => {
     const next: Record<string, SessionDotState> = {}
 
     const claim = (ids: readonly string[], state: SessionDotState) => {
@@ -139,7 +140,7 @@ export const $sessionDotStateById = computed(
     // page confirms it or the guard expires.
     const persistedUnread: string[] = []
 
-    for (const s of sessions) {
+    for (const s of [...sessions, ...cronSessions]) {
       const entry = unreadWriteGuard.get(s.id)
 
       if (entry && Date.now() - entry.at < UNREAD_WRITE_GUARD_MS) {

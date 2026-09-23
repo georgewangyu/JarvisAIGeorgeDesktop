@@ -14,7 +14,7 @@ import {
   sessionStatusBucket,
   type SessionStatusBucket
 } from '@/store/session-dot-state'
-import type { SessionInfo } from '@/types/hermes'
+import type { CronJob, SessionInfo } from '@/types/hermes'
 
 export interface ConsumerActivityRow {
   id: string
@@ -27,10 +27,18 @@ export function openConsumerActivityRow(
   row: ConsumerActivityRow,
   session: SessionInfo | undefined,
   onOpenChat: (sessionId: string, session?: SessionInfo) => void,
-  onOpenAutomations: () => void
+  onOpenAutomations: (jobId: null | string) => void,
+  automationJobs: readonly CronJob[] = []
 ): void {
   if (row.kind === 'automation') {
-    onOpenAutomations()
+    // Cron run ids carry their originating job id, but compression or a
+    // legacy backend may produce a different id. Focus only an exact,
+    // unambiguous known job; otherwise open the general Automations page.
+    const matches = automationJobs.filter(job =>
+      new RegExp(`^cron_${job.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_\\d{8}_\\d{6}$`).test(row.id)
+    )
+
+    onOpenAutomations(matches.length === 1 ? matches[0].id : null)
 
     return
   }
@@ -93,14 +101,16 @@ export function buildConsumerActivityRows(
 }
 
 export function ConsumerActivity({
+  automationJobs = [],
   automationSessions = [],
   onOpenChat,
   onOpenAutomations,
   sessions
 }: {
+  automationJobs?: readonly CronJob[]
   automationSessions?: readonly SessionInfo[]
   onOpenChat: (sessionId: string, session?: SessionInfo) => void
-  onOpenAutomations: () => void
+  onOpenAutomations: (jobId: null | string) => void
   sessions: readonly SessionInfo[]
 }) {
   const copy = useJarvisCopy()
@@ -142,7 +152,7 @@ export function ConsumerActivity({
               <button
                 className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-(--ui-control-hover-background)"
                 key={row.id}
-                onClick={() => openConsumerActivityRow(row, sessionById.get(row.id), onOpenChat, onOpenAutomations)}
+                onClick={() => openConsumerActivityRow(row, sessionById.get(row.id), onOpenChat, onOpenAutomations, automationJobs)}
                 type="button"
               >
                 {row.kind === 'automation' ? (
