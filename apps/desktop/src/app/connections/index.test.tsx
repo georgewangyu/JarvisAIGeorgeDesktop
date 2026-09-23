@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
@@ -61,7 +61,11 @@ it('keeps Mac permission results when the AI account check fails', async () => {
     </MemoryRouter>
   )
 
-  await screen.findByText('Unavailable')
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole('heading', { name: 'AI account' }).closest('section')!).getByText('Unavailable')
+    ).toBeTruthy()
+  )
   expect(screen.getByText('Allowed')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Manage' }))
   expect(openFullDiskAccess).toHaveBeenCalledOnce()
@@ -83,7 +87,11 @@ it('recovers the account state after a failed check and refresh', async () => {
     </MemoryRouter>
   )
 
-  await screen.findByText('Unavailable')
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole('heading', { name: 'AI account' }).closest('section')!).getByText('Unavailable')
+    ).toBeTruthy()
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
   await screen.findByText('Connected')
   expect(screen.queryByText('Could not check your AI account.')).toBeNull()
@@ -195,4 +203,47 @@ it('filters only real connection and permission rows without inventing available
   fireEvent.change(search, { target: { value: '' } })
   expect(screen.getByText('ChatGPT / Codex')).toBeTruthy()
   expect(screen.getByText('Files on this Mac')).toBeTruthy()
+})
+
+it('does not claim an app is absent or offer a no-op permission action without a native permission bridge', async () => {
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
+
+  await screen.findByText('Could not check Mac permissions.')
+  expect(screen.queryByText('Not installed')).toBeNull()
+  expect(screen.queryByRole('button', { name: /^(Allow|Manage)/ })).toBeNull()
+  expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(1)
+})
+
+it('reports a failed microphone request and leaves the action available for retry', async () => {
+  const requestMicrophone = vi.fn().mockRejectedValue(new Error('Native request failed'))
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: {
+      jarvisOnboarding: {
+        getPermissions: vi.fn().mockResolvedValue({
+          apps: { mail: false, messages: false, notes: false, whatsapp: false },
+          fullDiskAccess: 'unknown',
+          microphone: 'not-determined',
+          platform: 'darwin'
+        }),
+        requestMicrophone
+      }
+    }
+  })
+
+  render(
+    <MemoryRouter>
+      <ConnectionsView />
+    </MemoryRouter>
+  )
+
+  await screen.findByText('Not set up')
+  fireEvent.click(screen.getByRole('button', { name: /^Allow/ }))
+  await screen.findByText('Could not request microphone access. Try again from System Settings.')
+  expect(requestMicrophone).toHaveBeenCalledOnce()
+  expect(screen.getByRole('button', { name: /^Allow/ }).hasAttribute('disabled')).toBe(false)
 })

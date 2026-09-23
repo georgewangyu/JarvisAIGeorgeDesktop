@@ -25,13 +25,6 @@ import { $currentModel, $currentProvider } from '@/store/session'
 
 import { ConsumerSettingsLayout } from '../preferences/settings-layout'
 
-const EMPTY_PERMISSIONS: JarvisOnboardingPermissionSnapshot = {
-  apps: { mail: false, messages: false, notes: false, whatsapp: false },
-  fullDiskAccess: 'unknown',
-  microphone: 'not-determined',
-  platform: 'darwin'
-}
-
 function statusLabel(status: JarvisPermissionStatus): string {
   if (status === 'granted') {
     return 'Allowed'
@@ -96,8 +89,10 @@ export function ConnectionsView() {
   const s = useJarvisCopy()
   const currentModel = useStore($currentModel)
   const currentProvider = useStore($currentProvider)
-  const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS)
+  const [permissions, setPermissions] = useState<JarvisOnboardingPermissionSnapshot | null>(null)
+  const [permissionsCheckState, setPermissionsCheckState] = useState<'checking' | 'ready' | 'unavailable'>('checking')
   const [refreshing, setRefreshing] = useState(false)
+  const [requestingMicrophone, setRequestingMicrophone] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -110,10 +105,8 @@ export function ConnectionsView() {
     setRefreshing(true)
 
     try {
-      const [snapshotResult, accountsResult] = await Promise.allSettled([
-        window.hermesDesktop?.jarvisOnboarding?.getPermissions?.(),
-        listOAuthProviders()
-      ])
+      const getPermissions = window.hermesDesktop?.jarvisOnboarding?.getPermissions
+      const [snapshotResult, accountsResult] = await Promise.allSettled([getPermissions?.(), listOAuthProviders()])
 
       const failures: string[] = []
 
@@ -128,11 +121,11 @@ export function ConnectionsView() {
         failures.push('Could not check your AI account.')
       }
 
-      if (snapshotResult.status === 'fulfilled') {
-        if (snapshotResult.value) {
-          setPermissions(snapshotResult.value)
-        }
+      if (snapshotResult.status === 'fulfilled' && snapshotResult.value) {
+        setPermissions(snapshotResult.value)
+        setPermissionsCheckState('ready')
       } else {
+        setPermissionsCheckState(current => (current === 'ready' ? current : 'unavailable'))
         failures.push('Could not check Mac permissions.')
       }
 
@@ -153,8 +146,21 @@ export function ConnectionsView() {
     return () => window.removeEventListener('focus', onFocus)
   }, [refresh])
 
-  const fullDiskAllowed = permissions.fullDiskAccess === 'granted'
-  const microphoneAllowed = permissions.microphone === 'granted'
+  const fullDiskAllowed = permissions?.fullDiskAccess === 'granted'
+  const microphoneAllowed = permissions?.microphone === 'granted'
+
+  const macStatus = (status?: JarvisPermissionStatus) =>
+    status ? statusLabel(status) : permissionsCheckState === 'checking' ? 'Checking' : 'Unavailable'
+
+  const appStatus = (detected?: boolean) =>
+    detected === undefined
+      ? permissionsCheckState === 'checking'
+        ? 'Checking'
+        : 'Unavailable'
+      : detected
+        ? 'Detected'
+        : 'Not installed'
+
   const search = query.trim().toLocaleLowerCase()
   const matches = (label: string) => label.toLocaleLowerCase().includes(search)
   const accountMatches = matches('ChatGPT / Codex')
@@ -267,29 +273,50 @@ export function ConnectionsView() {
           <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
             {filesMatch ? (
               <ConnectionRow
-                  action={
+                action={
+                  permissions && window.hermesDesktop?.jarvisOnboarding?.openFullDiskAccess ? (
                     <Button
-                      onClick={() => void window.hermesDesktop?.jarvisOnboarding?.openFullDiskAccess?.()}
+                      onClick={async () => {
+                        try {
+                          await window.hermesDesktop?.jarvisOnboarding?.openFullDiskAccess?.()
+                        } catch {
+                          setError('Could not open Full Disk Access settings.')
+                        }
+                      }}
                       size="sm"
                       variant="secondary"
                     >
                       {fullDiskAllowed ? 'Manage' : 'Allow'} <ChevronRight className="size-4" />
                     </Button>
-                  }
+                  ) : null
+                }
                 detail="Read files on this Mac when you ask. App access is separate."
                 icon={FileText}
                 label="Files on this Mac"
-                status={<Status active={fullDiskAllowed}>{statusLabel(permissions.fullDiskAccess)}</Status>}
+                status={<Status active={fullDiskAllowed}>{macStatus(permissions?.fullDiskAccess)}</Status>}
               />
             ) : null}
             {microphoneMatch ? (
               <ConnectionRow
                 action={
-                  microphoneAllowed ? null : (
+                  microphoneAllowed ||
+                  !permissions ||
+                  !window.hermesDesktop?.jarvisOnboarding?.requestMicrophone ? null : (
                     <Button
+                      disabled={requestingMicrophone}
+                      loading={requestingMicrophone}
                       onClick={async () => {
-                        await window.hermesDesktop?.jarvisOnboarding?.requestMicrophone?.()
-                        await refresh()
+                        setRequestingMicrophone(true)
+                        setError(null)
+
+                        try {
+                          await window.hermesDesktop?.jarvisOnboarding?.requestMicrophone?.()
+                          await refresh()
+                        } catch {
+                          setError('Could not request microphone access. Try again from System Settings.')
+                        } finally {
+                          setRequestingMicrophone(false)
+                        }
                       }}
                       size="sm"
                       variant="secondary"
@@ -301,7 +328,7 @@ export function ConnectionsView() {
                 detail="Speak naturally to Jarvis when you choose voice input."
                 icon={Mic}
                 label="Microphone"
-                status={<Status active={microphoneAllowed}>{statusLabel(permissions.microphone)}</Status>}
+                status={<Status active={microphoneAllowed}>{macStatus(permissions?.microphone)}</Status>}
               />
             ) : null}
             {computerUseMatch ? (
@@ -326,7 +353,7 @@ export function ConnectionsView() {
                 detail="App detection only. Mail access is not connected yet."
                 icon={Mail}
                 label="Mail"
-                status={<Status>{permissions.apps.mail ? 'Detected' : 'Not installed'}</Status>}
+                status={<Status>{appStatus(permissions?.apps.mail)}</Status>}
               />
             ) : null}
             {messagesMatch ? (
@@ -334,7 +361,7 @@ export function ConnectionsView() {
                 detail="App detection only. Message access is not connected yet."
                 icon={MessageCircle}
                 label="Messages"
-                status={<Status>{permissions.apps.messages ? 'Detected' : 'Not installed'}</Status>}
+                status={<Status>{appStatus(permissions?.apps.messages)}</Status>}
               />
             ) : null}
             {notesMatch ? (
@@ -342,7 +369,7 @@ export function ConnectionsView() {
                 detail="App detection only. Notes access is not connected yet."
                 icon={NotebookTabs}
                 label="Notes"
-                status={<Status>{permissions.apps.notes ? 'Detected' : 'Not installed'}</Status>}
+                status={<Status>{appStatus(permissions?.apps.notes)}</Status>}
               />
             ) : null}
             {whatsAppMatch ? (
@@ -350,7 +377,7 @@ export function ConnectionsView() {
                 detail="App detection only. WhatsApp access is not connected yet."
                 icon={MessageCircle}
                 label="WhatsApp"
-                status={<Status>{permissions.apps.whatsapp ? 'Detected' : 'Not installed'}</Status>}
+                status={<Status>{appStatus(permissions?.apps.whatsapp)}</Status>}
               />
             ) : null}
             {browserMatch ? (
