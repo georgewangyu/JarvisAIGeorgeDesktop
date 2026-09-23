@@ -197,12 +197,80 @@ it('filters only real connection and permission rows without inventing available
   expect(screen.queryByText('Mail')).toBeNull()
 
   fireEvent.change(search, { target: { value: 'calendar' } })
-  expect(screen.getByText('No matching connections.')).toBeTruthy()
+  expect(screen.getByText('Calendar')).toBeTruthy()
+  expect(screen.getByText('Apple Calendar preview. macOS access and a separate Jarvis connection are both required.')).toBeTruthy()
   expect(screen.queryByText('Connect')).toBeNull()
 
   fireEvent.change(search, { target: { value: '' } })
   expect(screen.getByText('ChatGPT / Codex')).toBeTruthy()
   expect(screen.getByText('Files on this Mac')).toBeTruthy()
+})
+
+it('does not read or request Calendar access during status check, and disconnect hides event actions', async () => {
+  const status = vi.fn().mockResolvedValue({ supported: true, authorization: 'fullAccess', connected: false })
+  const connect = vi.fn().mockResolvedValue({ supported: true, authorization: 'fullAccess', connected: true })
+  const disconnect = vi.fn().mockResolvedValue({ supported: true, authorization: 'fullAccess', connected: false })
+  const list = vi.fn().mockResolvedValue({ ok: true, command: 'list-events', events: [] })
+  const create = vi.fn()
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisCalendar: { status, connect, disconnect, list, create } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+  await waitFor(() => expect(within(section).getByText('Not connected')).toBeTruthy())
+  expect(status).toHaveBeenCalled()
+  expect(connect).not.toHaveBeenCalled()
+  expect(list).not.toHaveBeenCalled()
+  expect(create).not.toHaveBeenCalled()
+
+  fireEvent.click(within(section).getByRole('button', { name: 'Connect' }))
+  await waitFor(() => expect(within(section).getByText('Connected')).toBeTruthy())
+  fireEvent.click(within(section).getByRole('button', { name: 'View upcoming' }))
+  await waitFor(() => expect(list).toHaveBeenCalledOnce())
+  expect(within(section).getByText('No events in the next 7 days.')).toBeTruthy()
+  expect(create).not.toHaveBeenCalled()
+
+  fireEvent.click(within(section).getByRole('button', { name: 'Disconnect' }))
+  await waitFor(() => expect(within(section).getByText('Not connected')).toBeTruthy())
+  expect(within(section).queryByRole('button', { name: 'View upcoming' })).toBeNull()
+  expect(within(section).queryByRole('button', { name: 'Create event' })).toBeNull()
+})
+
+it('requires an explicit valid create action and reports a denied Calendar connection', async () => {
+  const status = vi.fn().mockResolvedValue({ supported: true, authorization: 'notDetermined', connected: false })
+
+  const connect = vi.fn().mockResolvedValueOnce({ supported: true, authorization: 'denied', connected: false })
+    .mockResolvedValueOnce({ supported: true, authorization: 'fullAccess', connected: true })
+
+  const create = vi.fn().mockResolvedValue({ ok: true, command: 'create-event', event: {
+    id: 'synthetic', title: 'Synthetic test', start: '2026-09-23T10:00:00.000Z', end: '2026-09-23T11:00:00.000Z', isAllDay: false, calendarId: 'synthetic'
+  } })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisCalendar: { status, connect, disconnect: vi.fn(), list: vi.fn(), create } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+  await waitFor(() => expect(within(section).getByText('Not connected')).toBeTruthy())
+  fireEvent.click(within(section).getByRole('button', { name: 'Connect' }))
+  await waitFor(() => expect(within(section).getByText('Needs macOS access')).toBeTruthy())
+  expect(within(section).getByText('Calendar access was not granted. You can try again from macOS Settings.')).toBeTruthy()
+  expect(create).not.toHaveBeenCalled()
+
+  fireEvent.click(within(section).getByRole('button', { name: 'Connect' }))
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'Create event' })).toBeTruthy())
+  fireEvent.click(within(section).getByRole('button', { name: 'Create event' }))
+  expect(within(section).getByText('Add a title and a valid start and end time.')).toBeTruthy()
+  expect(create).not.toHaveBeenCalled()
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Event title' }), { target: { value: 'Synthetic test' } })
+  fireEvent.change(within(section).getByLabelText('Event start'), { target: { value: '2026-09-23T10:00' } })
+  fireEvent.change(within(section).getByLabelText('Event end'), { target: { value: '2026-09-23T11:00' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'Create event' }))
+  await waitFor(() => expect(create).toHaveBeenCalledOnce())
 })
 
 it('does not claim an app is absent or offer a no-op permission action without a native permission bridge', async () => {

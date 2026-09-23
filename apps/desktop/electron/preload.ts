@@ -315,6 +315,13 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     requestMicrophone: () => ipcRenderer.invoke('jarvis:onboarding-permissions:request-microphone'),
     startCodexOAuth: () => ipcRenderer.invoke('jarvis:codex-oauth:start')
   },
+  jarvisCalendar: {
+    status: () => ipcRenderer.invoke('jarvis:calendar:status'),
+    connect: () => ipcRenderer.invoke('jarvis:calendar:connect'),
+    disconnect: () => ipcRenderer.invoke('jarvis:calendar:disconnect'),
+    list: (start, end) => ipcRenderer.invoke('jarvis:calendar:list', start, end),
+    create: (title, start, end) => ipcRenderer.invoke('jarvis:calendar:create', title, start, end)
+  },
   readWindowBelow: () => ipcRenderer.invoke('hermes:window:readBelow'),
   readFileDataUrl: filePath => ipcRenderer.invoke('hermes:readFileDataUrl', filePath),
   readFileDataUrlForAttach: filePath => ipcRenderer.invoke('hermes:readFileDataUrlForAttach', filePath),

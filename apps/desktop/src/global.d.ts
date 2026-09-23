@@ -286,6 +286,13 @@ declare global {
         requestMicrophone: () => Promise<boolean>
         startCodexOAuth: () => Promise<{ message?: string; ok: boolean }>
       }
+      jarvisCalendar?: {
+        status: () => Promise<JarvisCalendarStatus>
+        connect: () => Promise<JarvisCalendarStatus>
+        disconnect: () => Promise<JarvisCalendarStatus>
+        list: (start: string, end: string) => Promise<JarvisCalendarResponse>
+        create: (title: string, start: string, end: string) => Promise<JarvisCalendarResponse>
+      }
       /** read_window_below tool: metadata for the OS window directly underneath this one (never pixels). */
       readWindowBelow?: () => Promise<{
         frontmost: { app: string; title: string } | null
@@ -625,6 +632,25 @@ export interface JarvisOnboardingPermissionSnapshot {
   microphone: JarvisPermissionStatus
   platform: NodeJS.Platform
 }
+
+export interface JarvisCalendarStatus {
+  authorization: 'notDetermined' | 'restricted' | 'denied' | 'writeOnly' | 'fullAccess' | 'unknown'
+  connected: boolean
+  supported: boolean
+}
+
+export interface JarvisCalendarEvent {
+  id: string
+  title: string
+  start: string
+  end: string
+  isAllDay: boolean
+  calendarId: string
+}
+
+export type JarvisCalendarResponse =
+  | { ok: false; code: string }
+  | { ok: true; command: string; events?: JarvisCalendarEvent[]; event?: JarvisCalendarEvent; truncated?: boolean }
 
 export interface DesktopMarketplaceSearchItem {
   extensionId: string

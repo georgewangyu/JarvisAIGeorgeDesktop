@@ -5,9 +5,10 @@ import { listOAuthProviders } from '@/api/config'
 import { getGlobalModelInfo, setGlobalModel } from '@/api/models'
 import { Button } from '@/components/ui/button'
 import { SearchField } from '@/components/ui/search-field'
-import type { JarvisOnboardingPermissionSnapshot, JarvisPermissionStatus } from '@/global'
+import type { JarvisCalendarEvent, JarvisCalendarStatus, JarvisOnboardingPermissionSnapshot, JarvisPermissionStatus } from '@/global'
 import { useJarvisCopy } from '@/i18n/jarvis'
 import {
+  Calendar,
   Check,
   ChevronRight,
   FileText,
@@ -96,6 +97,13 @@ export function ConnectionsView() {
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [calendar, setCalendar] = useState<JarvisCalendarStatus | null>(null)
+  const [calendarBusy, setCalendarBusy] = useState(false)
+  const [calendarEvents, setCalendarEvents] = useState<JarvisCalendarEvent[] | null>(null)
+  const [calendarError, setCalendarError] = useState<string | null>(null)
+  const [eventTitle, setEventTitle] = useState('')
+  const [eventStart, setEventStart] = useState('')
+  const [eventEnd, setEventEnd] = useState('')
 
   const [accountState, setAccountState] = useState<'checking' | 'connected' | 'disconnected' | 'unavailable'>(
     'checking'
@@ -106,7 +114,10 @@ export function ConnectionsView() {
 
     try {
       const getPermissions = window.hermesDesktop?.jarvisOnboarding?.getPermissions
-      const [snapshotResult, accountsResult] = await Promise.allSettled([getPermissions?.(), listOAuthProviders()])
+
+      const [snapshotResult, accountsResult, calendarResult] = await Promise.allSettled([
+        getPermissions?.(), listOAuthProviders(), window.hermesDesktop?.jarvisCalendar?.status()
+      ])
 
       const failures: string[] = []
 
@@ -128,6 +139,10 @@ export function ConnectionsView() {
         setPermissionsCheckState(current => (current === 'ready' ? current : 'unavailable'))
         failures.push('Could not check Mac permissions.')
       }
+
+      setCalendar(calendarResult.status === 'fulfilled' ? calendarResult.value ?? null : null)
+
+      if (calendarResult.status !== 'fulfilled' || !calendarResult.value?.connected) {setCalendarEvents(null)}
 
       setError(failures.length > 0 ? failures.join(' ') : null)
     } catch (cause) {
@@ -173,7 +188,92 @@ export function ConnectionsView() {
   const notesMatch = matches('Notes')
   const whatsAppMatch = matches('WhatsApp')
   const browserMatch = matches('Browser')
-  const appsMatch = mailMatch || messagesMatch || notesMatch || whatsAppMatch || browserMatch
+  const calendarMatch = matches('Calendar')
+  const appsMatch = mailMatch || messagesMatch || notesMatch || whatsAppMatch || browserMatch || calendarMatch
+
+  const calendarLabel = !calendar?.supported
+    ? 'Unavailable'
+    : calendar.connected
+      ? 'Connected'
+      : calendar.authorization === 'denied' || calendar.authorization === 'restricted'
+        ? 'Needs macOS access'
+        : 'Not connected'
+
+  const changeCalendarConnection = async (connect: boolean) => {
+    const bridge = window.hermesDesktop?.jarvisCalendar
+
+    if (!bridge) {return}
+    setCalendarBusy(true)
+    setCalendarError(null)
+
+    try {
+      const next = connect ? await bridge.connect() : await bridge.disconnect()
+      setCalendar(next)
+
+      if (!next.connected) {setCalendarEvents(null)}
+
+      if (connect && !next.connected) {setCalendarError('Calendar access was not granted. You can try again from macOS Settings.')}
+    } catch {
+      setCalendarError('Could not change Calendar access. Try again.')
+    } finally {
+      setCalendarBusy(false)
+    }
+  }
+
+  const viewCalendar = async () => {
+    const bridge = window.hermesDesktop?.jarvisCalendar
+
+    if (!bridge || !calendar?.connected) {return}
+    setCalendarBusy(true)
+    setCalendarError(null)
+
+    try {
+      const start = new Date()
+      const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)
+      const result = await bridge.list(start.toISOString(), end.toISOString())
+
+      if (!result.ok || !result.events) {throw new Error('read_failed')}
+      setCalendarEvents(result.events)
+    } catch {
+      setCalendarError('Could not read upcoming events. Check Calendar access and try again.')
+      setCalendarEvents(null)
+      setCalendar(await bridge.status().catch(() => null))
+    } finally {
+      setCalendarBusy(false)
+    }
+  }
+
+  const createCalendarEvent = async () => {
+    const bridge = window.hermesDesktop?.jarvisCalendar
+
+    if (!bridge || !calendar?.connected) {return}
+    const start = new Date(eventStart)
+    const end = new Date(eventEnd)
+
+    if (!eventTitle.trim() || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+      setCalendarError('Add a title and a valid start and end time.')
+
+      return
+    }
+
+    setCalendarBusy(true)
+    setCalendarError(null)
+
+    try {
+      const result = await bridge.create(eventTitle.trim(), start.toISOString(), end.toISOString())
+
+      if (!result.ok || !result.event) {throw new Error('create_failed')}
+      setEventTitle('')
+      setEventStart('')
+      setEventEnd('')
+      setCalendarEvents(current => current ? [...current, result.event!].sort((a, b) => a.start.localeCompare(b.start)) : null)
+    } catch {
+      setCalendarError('Event was not created. Check Calendar access and try again.')
+      setCalendar(await bridge.status().catch(() => null))
+    } finally {
+      setCalendarBusy(false)
+    }
+  }
 
   return (
     <ConsumerSettingsLayout section="connections">
@@ -348,6 +448,59 @@ export function ConnectionsView() {
           <h2 className="text-sm font-semibold">Apps</h2>
           <p className="mt-1 text-sm text-(--ui-text-tertiary)">{s.appInventoryDetail}</p>
           <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
+            {calendarMatch ? (
+              <>
+                <ConnectionRow
+                  action={calendar?.supported ? (
+                    <Button
+                      disabled={calendarBusy}
+                      loading={calendarBusy}
+                      onClick={() => void changeCalendarConnection(!calendar.connected)}
+                      size="sm"
+                      variant={calendar.connected ? 'secondary' : 'default'}
+                    >
+                      {calendar.connected ? 'Disconnect' : 'Connect'}
+                    </Button>
+                  ) : null}
+                  detail="Apple Calendar preview. macOS access and a separate Jarvis connection are both required."
+                  icon={Calendar}
+                  label="Calendar"
+                  status={<Status active={calendar?.connected}>{calendarLabel}</Status>}
+                />
+                {calendar?.connected ? (
+                  <div className="border-t border-(--ui-stroke-tertiary) px-5 py-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">Upcoming events</p>
+                        <p className="text-xs text-(--ui-text-tertiary)">Only loaded when you ask. Next 7 days.</p>
+                      </div>
+                      <Button disabled={calendarBusy} onClick={() => void viewCalendar()} size="sm" variant="secondary">View upcoming</Button>
+                    </div>
+                    {calendarEvents ? (
+                      <ul aria-label="Upcoming Calendar events" className="mt-4 space-y-2 text-sm">
+                        {calendarEvents.length ? calendarEvents.map(event => (
+                          <li className="flex justify-between gap-3" key={event.id || `${event.start}-${event.title}`}>
+                            <span className="min-w-0 truncate">{event.title || 'Untitled event'}</span>
+                            <time className="shrink-0 text-(--ui-text-tertiary)" dateTime={event.start}>{new Date(event.start).toLocaleString()}</time>
+                          </li>
+                        )) : <li className="text-(--ui-text-tertiary)">No events in the next 7 days.</li>}
+                      </ul>
+                    ) : null}
+                    <div className="mt-6 border-t border-(--ui-stroke-tertiary) pt-5">
+                      <p className="text-sm font-medium">Add an event</p>
+                      <p className="mt-1 text-xs text-(--ui-text-tertiary)">Nothing is added until you choose Create event.</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <input aria-label="Event title" className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) px-3 py-2 text-sm sm:col-span-2" maxLength={200} onChange={event => setEventTitle(event.target.value)} placeholder="Event title" value={eventTitle} />
+                        <input aria-label="Event start" className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) px-3 py-2 text-sm" onChange={event => setEventStart(event.target.value)} type="datetime-local" value={eventStart} />
+                        <input aria-label="Event end" className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) px-3 py-2 text-sm" onChange={event => setEventEnd(event.target.value)} type="datetime-local" value={eventEnd} />
+                      </div>
+                      <Button className="mt-3" disabled={calendarBusy} onClick={() => void createCalendarEvent()} size="sm">Create event</Button>
+                    </div>
+                  </div>
+                ) : null}
+                {calendarError ? <p className="border-t border-(--ui-stroke-tertiary) px-5 py-3 text-sm text-destructive">{calendarError}</p> : null}
+              </>
+            ) : null}
             {mailMatch ? (
               <ConnectionRow
                 detail="App detection only. Mail access is not connected yet."

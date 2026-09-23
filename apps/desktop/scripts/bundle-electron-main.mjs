@@ -15,6 +15,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mkdirSync } from 'node:fs'
 import { buildCommandScreenshotMonitor } from './build-command-screenshot-monitor.mjs'
+import { buildCalendarHelper } from './build-calendar-helper.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '..')
@@ -22,6 +23,7 @@ const distDir = resolve(root, 'dist')
 mkdirSync(distDir, { recursive: true })
 // Stage for both --dev and release bundles; non-mac hosts skip this helper.
 buildCommandScreenshotMonitor({ distDir })
+buildCalendarHelper({ distDir })
 
 const mainEntry = resolve(root, 'electron/entry.ts')
 const mainOut = resolve(distDir, 'electron-main.mjs')
