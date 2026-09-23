@@ -27,6 +27,7 @@ DELIVERY_DIR_NAME = "bot_live_delivery"
 _SEQUENCE_FILE = ".sequence"
 _OWNER_KEYS = ("profile_home", "session_id", "lease_id", "live_session_id")
 _TERMINAL = frozenset({"settled", "failed", "cancelled", "ambiguous"})
+JARVIS_MAIN_CHAT_TITLE = "Jarvis"
 
 
 def find_canonical_owner(profile_home: Path | str) -> dict[str, Any] | None:
@@ -58,6 +59,38 @@ def find_canonical_live_owner(profile_home: Path | str) -> dict[str, Any] | None
     if entry and meta.get("bot_live_delivery_consumer") is True and meta.get("live_session_id"):
         return {key: entry[key] for key in ("profile_home", "session_id", "lease_id")} | {
             "live_session_id": meta["live_session_id"]}
+    return None
+
+
+def find_jarvis_live_owner(profile_home: Path | str) -> dict[str, Any] | None:
+    """Find the one live desktop owner of the permanent Jarvis conversation.
+
+    A titled row alone is not enough: the compression tip must hold a live
+    desktop lease whose poller advertises mailbox consumption. An inactive app
+    has no owner, so event producers must not pretend that it can wake one.
+    """
+    from hermes_cli.active_sessions import active_session_registry_snapshot
+    from hermes_state import SessionDB
+
+    home = Path(profile_home).resolve()
+    if not (home / "state.db").is_file():
+        return None
+    db = SessionDB(db_path=home / "state.db", read_only=True)
+    try:
+        row = db.get_session_by_title(JARVIS_MAIN_CHAT_TITLE)
+        if not row or row.get("archived") or (row.get("source") or "").lower() != "desktop":
+            return None
+        session_id = db.get_compression_tip(row["id"])
+    finally:
+        db.close()
+    if not session_id:
+        return None
+    for entry in active_session_registry_snapshot(registry_home=home):
+        meta = entry.get("metadata") or {}
+        if (entry["session_id"] == session_id and entry.get("surface") == "desktop"
+                and meta.get("bot_live_delivery_consumer") is True and meta.get("live_session_id")):
+            return {"profile_home": str(home), "session_id": entry["session_id"],
+                    "lease_id": entry["lease_id"], "live_session_id": meta["live_session_id"]}
     return None
 
 

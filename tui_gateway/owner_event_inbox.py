@@ -1,4 +1,4 @@
-"""Durable admission for events addressed to an exact live Bot Chat owner.
+"""Durable admission for events addressed to an exact live assistant owner.
 
 This is an adapter over the existing live-owner mailbox. Its receipt proves
 admission to that owner's inbox, not that a model turn ran or a reply arrived.
@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from tools.bot_live_delivery import deliver_to_live_owner, read_delivery_result
+from tools.bot_live_delivery import deliver_to_live_owner, find_jarvis_live_owner, read_delivery_result
 
 
 def _event_delivery_id(source: str, event_id: str) -> str:
@@ -40,6 +40,21 @@ def admit_owner_event(
         raise ValueError("event text is required")
     message = f"[Event from {source}; id {event_id}]\n{text}"
     return deliver_to_live_owner(profile_home, owner, message, delivery_id=delivery_id)
+
+
+def admit_jarvis_event(
+    profile_home: Path | str, *, source: str, event_id: str, text: str,
+) -> dict[str, Any]:
+    """Admit an event to the currently live permanent desktop chat only.
+
+    This does not start a backend or promise delivery after the Mac app exits.
+    Producers can inspect an existing receipt after restart, but a new event
+    without a live exact owner is refused rather than queued for a wrong chat.
+    """
+    owner = find_jarvis_live_owner(profile_home)
+    if owner is None:
+        raise RuntimeError("the Jarvis main chat has no live desktop owner")
+    return admit_owner_event(profile_home, owner, source=source, event_id=event_id, text=text)
 
 
 def owner_event_receipt(

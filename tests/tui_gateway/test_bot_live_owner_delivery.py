@@ -119,6 +119,42 @@ def test_mailbox_poll_skips_owner_lookup_without_a_mailbox(monkeypatch, tmp_path
     assert lookups == [tmp_path]
 
 
+def test_desktop_jarvis_owner_claims_its_event_at_idle_boundary(monkeypatch, tmp_path):
+    import tools.bot_live_delivery as mailbox
+
+    owner = {"lease_id": "jarvis-lease", "live_session_id": "jarvis-live", "session_id": "main"}
+    monkeypatch.setattr(mailbox, "find_canonical_live_owner", lambda home: None)
+    monkeypatch.setattr(mailbox, "find_jarvis_live_owner", lambda home: owner)
+    pending = [{"id": "event-receipt", "message": "[Event from calendar; id one]\nReview today"}]
+    monkeypatch.setattr(mailbox, "claim_pending_delivery", lambda home, pinned: pending.pop(0))
+    settled = []
+    monkeypatch.setattr(mailbox, "complete_delivery", lambda *args, **kwargs: settled.append(kwargs))
+    submitted = []
+
+    def submit(rid, sid, session, message, **kwargs):
+        submitted.append((sid, message))
+        kwargs["terminal_callback"]({"status": "settled", "text": "I found it"})
+        return True
+
+    poll = rebind(session_notifications._poll_bot_live_delivery_once, {
+        "_session_home": lambda session: tmp_path,
+        "_session_turn_admission": _session_turn_admission,
+        "_run_prompt_submit": submit,
+        "_notif_release_turn": lambda session: session.update(running=False),
+    })
+    mailbox._root(tmp_path).mkdir(parents=True)
+    session = {"source": "desktop", "history_lock": threading.RLock(), "agent": object(),
+               "session_key": "main", "active_session_lease": SimpleNamespace(
+                   lease_id="jarvis-lease", released=False)}
+    session["queued_prompt"] = "human input"
+    assert poll("jarvis-live", session) is False
+    assert pending and not submitted
+    session.pop("queued_prompt")
+    assert poll("jarvis-live", session) is True
+    assert submitted == [("jarvis-live", "[Event from calendar; id one]\nReview today")]
+    assert settled == [{"status": "settled", "reply": "I found it", "error": "", "reason": ""}]
+
+
 def test_failing_mailbox_poll_backs_off_and_warns_once_per_window():
     """A failing poll is retried only after the backoff and logged at WARNING once per window."""
     import logging

@@ -592,6 +592,11 @@ def _poll_bot_live_delivery_once(sid: str, session: dict) -> bool:
         owner = find_canonical_live_owner(home)
         if (not owner or owner.get("lease_id") != lease.lease_id
                 or owner.get("live_session_id") != sid
+                or owner.get("session_id") != session.get("session_key")) and session.get("source") == "desktop":
+            from tools.bot_live_delivery import find_jarvis_live_owner
+            owner = find_jarvis_live_owner(home)
+        if (not owner or owner.get("lease_id") != lease.lease_id
+                or owner.get("live_session_id") != sid
                 or owner.get("session_id") != session.get("session_key")):
             return False
         # The mailbox matches each envelope to this pinned lease/live id and compression lineage.
