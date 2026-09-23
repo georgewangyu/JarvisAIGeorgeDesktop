@@ -387,10 +387,9 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
           ))}
         </nav>
         <div className="min-w-0 space-y-6">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <div className="flex min-w-0 items-center gap-2">
+          <div className="grid grid-cols-[minmax(7rem,1fr)_minmax(10rem,1.35fr)_auto] items-center gap-2">
               <Select onValueChange={value => setSortOrder(value as ArtifactSort)} value={sortOrder}>
-                <SelectTrigger aria-label={a.sortLabel} size="sm">
+                <SelectTrigger aria-label={a.sortLabel} className="w-full" size="sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -401,9 +400,9 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
               </Select>
               <SearchField
                 aria-label={a.search}
-                containerClassName="rounded-xl bg-(--ui-bg-secondary) px-3 py-1 opacity-100"
+                containerClassName="w-full rounded-xl bg-(--ui-bg-secondary) px-3 py-1 opacity-100"
                 hints={searchHints}
-                inputClassName="w-44 [field-sizing:fixed]"
+                inputClassName="w-full [field-sizing:fixed]"
                 onChange={setQuery}
                 placeholder={a.search}
                 value={query}
@@ -420,7 +419,6 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                   {refreshing ? <TitlebarIcon name="loading" spinning /> : <TitlebarIcon name="refresh" />}
                 </Button>
               </Tip>
-            </div>
           </div>
 
           {!artifacts ? (
