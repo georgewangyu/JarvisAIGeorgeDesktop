@@ -177,7 +177,7 @@ describe('consumer chat navigation', () => {
   })
 
   it('finds a real saved Library artifact and resumes its owning profile', async () => {
-    const owner = makeSessionInfo({ id: 'saved-artifact', profile: 'writer', connection_id: 'remote-1', title: 'Report work' })
+    const owner = makeSessionInfo({ id: 'saved-artifact', source: 'desktop', profile: 'writer', connection_id: 'remote-1', title: 'Report work' })
     listLibrarySessionsMock.mockResolvedValue({ sessions: [owner], total: 1 })
     getLibraryMessagesMock.mockResolvedValue({ messages: [
       { role: 'assistant', timestamp: 1000, content: 'Saved /tmp/quarterly-report.pdf' }
@@ -213,14 +213,35 @@ describe('consumer chat navigation', () => {
     expect(screen.queryByText('hidden-worker-report.pdf')).toBeNull()
   })
 
+  it('hides worker transcripts returned by full-text Search, even when they match the query', async () => {
+    $sessions.set([...sessions, makeSessionInfo({ id: 'loaded-worker', source: 'subagent', title: 'Alpine lantern worker' })])
+    searchSessionsMock.mockResolvedValue({ results: [
+      { session_id: 'server-worker', source: 'subagent', snippet: 'Alpine lantern worker-only result',
+        model: null, role: 'assistant', session_started: 1000 },
+      { session_id: 'saved-chat', source: 'desktop', snippet: 'Alpine lantern saved note',
+        model: null, role: 'assistant', session_started: 1000 }
+    ] })
+    renderSidebar()
+
+    act(() => window.dispatchEvent(new Event(OPEN_CONSUMER_SEARCH_EVENT)))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search chats, pages, and automations' }), {
+      target: { value: 'alpine lantern' }
+    })
+
+    await waitFor(() => expect(searchSessionsMock).toHaveBeenCalled())
+    expect(await screen.findByText('Alpine lantern saved note')).toBeTruthy()
+    expect(screen.queryByText(/Alpine lantern worker/)).toBeNull()
+    expect(screen.queryByText(/worker-only result/)).toBeNull()
+  })
+
   it('continues the Library search into older saved sessions', async () => {
     listLibrarySessionsMock
       .mockResolvedValueOnce({
-        sessions: Array.from({ length: 30 }, (_, index) => makeSessionInfo({ id: `recent-${index}`, profile: 'default' })),
+        sessions: Array.from({ length: 30 }, (_, index) => makeSessionInfo({ id: `recent-${index}`, source: 'desktop', profile: 'default' })),
         total: 31
       })
       .mockResolvedValueOnce({
-        sessions: [makeSessionInfo({ id: 'older-artifact', profile: 'default', title: 'Older work' })],
+        sessions: [makeSessionInfo({ id: 'older-artifact', source: 'desktop', profile: 'default', title: 'Older work' })],
         total: 31
       })
     getLibraryMessagesMock.mockImplementation(async (id: string) => ({

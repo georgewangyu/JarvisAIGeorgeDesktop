@@ -1,6 +1,6 @@
 import { type ArtifactRecord, collectArtifactsForSession } from '@/app/artifacts/artifact-utils'
 import { getAllSessionMessages, listAllProfileSessions, type SessionInfo } from '@/hermes'
-import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
+import { normalizeSessionSource } from '@/lib/session-source'
 import { normalize } from '@/lib/text'
 
 export interface LibrarySearchHit {
@@ -9,6 +9,14 @@ export interface LibrarySearchHit {
 }
 
 const PAGE_SIZE = 30
+const CONSUMER_SEARCH_SOURCES = new Set(['cli', 'codex', 'desktop', 'gateway', 'local', 'tui'])
+
+/** Fail closed: backend full-text hits can include private worker transcripts. */
+export function isConsumerSearchSource(source: string | null | undefined): boolean {
+  const normalized = normalizeSessionSource(source)
+
+  return normalized != null && CONSUMER_SEARCH_SOURCES.has(normalized)
+}
 
 export function matchingLibraryHits(hits: LibrarySearchHit[], query: string): LibrarySearchHit[] {
   const needle = normalize(query)
@@ -39,12 +47,9 @@ export async function scanLibrary(
         return
       }
 
-      const source = normalizeSessionSource(session.source)
-
       // Only user-facing conversations can produce a Search result. Workers,
       // cron internals and tool transcripts must remain behind their owner UI.
-      if (session.archived || isMessagingSource(source) ||
-          ['cron', 'kanban', 'oneshot', 'subagent', 'tool'].includes(source ?? '')) {
+      if (session.archived || !isConsumerSearchSource(session.source)) {
         continue
       }
 

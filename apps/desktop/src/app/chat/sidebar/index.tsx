@@ -148,7 +148,7 @@ import { SidebarSectionAddButton } from './chrome'
 import { ConsumerActivity } from './consumer-activity'
 import { SidebarFilterMenu } from './filter-menu'
 import { useGatewaySessionGroups } from './gateway-group-model'
-import { type LibrarySearchHit, matchingLibraryHits, scanLibrary } from './library-search'
+import { isConsumerSearchSource, type LibrarySearchHit, matchingLibraryHits, scanLibrary } from './library-search'
 import { SidebarLoadMoreRow } from './load-more-row'
 import { orderByIds, reconcileOrderIds, resolveManualSessionOrderIds, sameIds } from './order'
 import { filterSessionsByProfileScope } from './profile-scope'
@@ -781,17 +781,22 @@ export function ChatSidebar({
     const out = new Map<string, SessionInfo>()
 
     for (const s of sortedSessions) {
-      if (sessionMatchesSearch(s, trimmedQuery)) {
+      if (isConsumerSearchSource(s.source) && sessionMatchesSearch(s, trimmedQuery)) {
         out.set(s.id, s)
       }
     }
 
     for (const match of serverMatches) {
-      if (out.has(match.session_id)) {
+      if (out.has(match.session_id) || !isConsumerSearchSource(match.source)) {
         continue
       }
 
       const loaded = sessionByAnyId.get(match.session_id)
+
+      if (loaded && !isConsumerSearchSource(loaded.source)) {
+        continue
+      }
+
       out.set(match.session_id, loaded ?? searchResultToSession(match))
     }
 
