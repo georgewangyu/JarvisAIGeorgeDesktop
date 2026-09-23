@@ -60,3 +60,31 @@ it('does not let an older job response overwrite the newly selected job', async 
   await Promise.resolve()
   expect(screen.queryByText('Stale old result')).toBeNull()
 })
+
+it('keeps cached runs visible when a refresh fails and while retrying', async () => {
+  const run = { id: 'earlier-run', title: 'Earlier result' } as SessionInfo
+
+  let resolveRetry: (runs: SessionInfo[]) => void = () => undefined
+
+  const retryRequest = new Promise<SessionInfo[]>(resolve => {
+    resolveRetry = resolve
+  })
+
+  vi.mocked(getCronJobRuns)
+    .mockResolvedValueOnce([run])
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockReturnValueOnce(retryRequest)
+
+  renderRuns('job-one')
+  await screen.findByText('Earlier result')
+  fireEvent(globalThis.document, new Event('visibilitychange'))
+  await screen.findByText('Failed to load automations')
+  expect(screen.getByText('Earlier result')).toBeTruthy()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+  expect(screen.getByText('Earlier result')).toBeTruthy()
+  resolveRetry([run])
+  await screen.findByText('Earlier result')
+  expect(screen.queryByText('Failed to load automations')).toBeNull()
+  expect(getCronJobRuns).toHaveBeenCalledTimes(3)
+})

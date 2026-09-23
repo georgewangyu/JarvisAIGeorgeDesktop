@@ -87,11 +87,9 @@ export function CronJobRuns({ c, jobId }: { c: Translations['cron']; jobId: stri
   }, [changeEventsAvailable, cronChangeTick, jobId, retryTick])
 
   const retry = () => {
-    // A manual retry is intentionally a remount-sized operation: it clears the
-    // error and lets the effect's event/poll owner remain the only load loop.
+    // Keep any previously loaded runs visible while the effect retries.
+    // Only the first load has no cached history to show.
     setLoadFailed(false)
-    setRuns(null)
-    setSelectedRun(null)
     setRetryTick(tick => tick + 1)
   }
 
@@ -101,19 +99,24 @@ export function CronJobRuns({ c, jobId }: { c: Translations['cron']; jobId: stri
         {c.runHistory}
         {runs && runs.length > 0 ? ` · ${runs.length}` : ''}
       </PanelSectionLabel>
-      {loadFailed ? (
+      {loadFailed && (
         <div className="flex items-center justify-between gap-3 rounded-md bg-destructive/8 px-2 py-1.5 text-xs text-destructive">
           <span>{c.failedLoad}</span>
           <Button onClick={retry} size="xs" variant="ghost">
             {t.common.retry}
           </Button>
         </div>
-      ) : runs === null ? (
-        <div className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
-          <Codicon name="loading" size="0.75rem" spinning />
-        </div>
+      )}
+      {runs === null ? (
+        loadFailed ? null : (
+          <div className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
+            <Codicon name="loading" size="0.75rem" spinning />
+          </div>
+        )
       ) : runs.length === 0 ? (
-        <div className="py-1 text-xs text-muted-foreground">{c.noRuns}</div>
+        loadFailed ? null : (
+          <div className="py-1 text-xs text-muted-foreground">{c.noRuns}</div>
+        )
       ) : (
         <div className="flex flex-col gap-px">
           {runs.map(run => (
