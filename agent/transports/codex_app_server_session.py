@@ -184,10 +184,13 @@ def _classify_oauth_failure(primary: str = "", *, stderr: str = "") -> Optional[
 
 @dataclass
 class _ServerRequestRouting:
-    """Default approval policies when no interactive approval_callback is wired in (tests, cron)."""
+    """Approval bypass policies when no interactive approval_callback is wired in (tests, cron).
 
-    auto_approve_exec: bool = False
-    auto_approve_apply_patch: bool = False
+    A callable is resolved for each request so a long-lived thread cannot retain a revoked bypass.
+    """
+
+    auto_approve_exec: bool | Callable[[], bool] = False
+    auto_approve_apply_patch: bool | Callable[[], bool] = False
 
 
 class CodexThreadResumeError(CodexAppServerError):
@@ -710,12 +713,18 @@ class CodexAppServerSession:
         "mcpServer/elicitation/request": _respond_elicitation,
     }
 
-    def _run_approval_callback(self, auto_approve: bool, prompt: Callable[[], tuple[str, str]], log_label: str) -> str:
+    def _run_approval_callback(self, auto_approve: bool | Callable[[], bool], prompt: Callable[[], tuple[str, str]], log_label: str) -> str:
         """Protocol routing only: auto-approve, fail-closed without a callback, else ask via ``prompt()``.
 
-        Approval mode/timeout resolution lives upstream (codex_runtime.py derives the
-        auto flags; the callback runs the shared gate). Do not re-read config here.
+        Approval mode/timeout resolution lives upstream (codex_runtime.py supplies the
+        per-request bypass lookup; the callback runs the shared gate).
         """
+        if callable(auto_approve):
+            try:
+                auto_approve = bool(auto_approve())
+            except Exception:
+                logger.warning("approval-bypass lookup failed on %s; using the normal approval path", log_label, exc_info=True)
+                auto_approve = False
         if auto_approve:
             return "accept"
         if self._approval_callback is None:

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from agent import codex_runtime
 from agent.transports import codex_app_server_session as sess_mod
+from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 
 
 class _FakeClient:
@@ -73,3 +74,37 @@ def test_runtime_retires_thread_when_prompt_composition_changes(monkeypatch):
     starts = [p["developerInstructions"] for (m, p) in client.requests if m == "thread/start"]
     assert starts == ["SOUL: you are Hermes\n\nAlways start with ZZZ", "SOUL: you are Hermes\n\nPersonality: pirate"]
     assert client.closed == 1  # the stale thread's client was closed, not leaked
+
+
+def test_live_codex_approval_bypass_tracks_profile_mode_and_revocation(tmp_path):
+    """One reused app-server session must not keep an Off grant after the profile revokes it."""
+    off_home, other_home = tmp_path / "off", tmp_path / "other"
+    for home, mode in ((off_home, "off"), (other_home, "manual")):
+        home.mkdir()
+        (home / "config.yaml").write_text(f"approvals:\n  mode: {mode}\n", encoding="utf-8")
+
+    token = set_hermes_home_override(off_home)
+    try:
+        agent = _agent()
+        codex_runtime._ensure_codex_session(agent)
+        session = agent._codex_session
+
+        def decisions():
+            return (session._decide_exec_approval({"command": "synthetic command"}),
+                    session._decide_apply_patch_approval({"reason": "synthetic patch"}))
+
+        assert decisions() == ("accept", "accept")
+        other_token = set_hermes_home_override(other_home)
+        try:
+            assert decisions() == ("decline", "decline")
+            (other_home / "config.yaml").write_text("approvals:\n  mode: smart\n", encoding="utf-8")
+            assert decisions() == ("decline", "decline")
+        finally:
+            reset_hermes_home_override(other_token)
+        assert decisions() == ("accept", "accept")
+        (off_home / "config.yaml").write_text("approvals:\n  mode: manual\n", encoding="utf-8")
+        assert decisions() == ("decline", "decline")
+        (off_home / "config.yaml").write_text("approvals:\n  mode: off\n", encoding="utf-8")
+        assert decisions() == ("accept", "accept")
+    finally:
+        reset_hermes_home_override(token)

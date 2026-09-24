@@ -523,12 +523,12 @@ def _ensure_codex_session(agent, messages: List[Dict[str, Any]] | None = None) -
     with suppress(Exception):
         from tools.terminal_tool import _get_approval_callback
         approval_callback = _get_approval_callback()
-    # Gateway/cron have no UI for codex approval requests, so exec/apply_patch fail closed by default. Only an
-    # explicit approval bypass (approvals.mode: off, /yolo, --yolo, HERMES_YOLO_MODE) hands policy to codex's sandbox.
+    # Gateway/cron have no UI for codex approval requests, so exec/apply_patch fail closed by default. A live
+    # lookup is required: this session can outlive a profile's Off→Manual/Smart approval-mode change.
     auto_approve_requests = False
     try:
         from tools.approval import is_approval_bypass_active
-        auto_approve_requests = is_approval_bypass_active()
+        auto_approve_requests = is_approval_bypass_active
     except Exception:
         logger.debug("codex app-server: approval-bypass lookup failed; keeping fail-closed default", exc_info=True)
     # Bridge codex JSON-RPC notifications (item/started, item/completed, item/agentMessage/delta, ...) into
@@ -555,7 +555,8 @@ def _ensure_codex_session(agent, messages: List[Dict[str, Any]] | None = None) -
     agent._codex_session = CodexAppServerSession(
         cwd=getattr(agent, "session_cwd", None) or str(resolve_agent_cwd()), approval_callback=approval_callback,
         codex_bin=get_configured_codex_binary(load_config()),
-        request_routing=_ServerRequestRouting(auto_approve_exec=auto_approve_requests, auto_approve_apply_patch=auto_approve_requests),
+        request_routing=_ServerRequestRouting(auto_approve_exec=auto_approve_requests,
+                                              auto_approve_apply_patch=auto_approve_requests),
         on_event=make_codex_app_server_event_bridge(agent),
         developer_instructions=developer_instructions or None,
         model=getattr(agent, "model", None) if model_provider else None, model_provider=model_provider,
