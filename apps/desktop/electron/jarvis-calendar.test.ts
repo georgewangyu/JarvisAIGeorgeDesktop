@@ -93,6 +93,31 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(run.mock.calls.every(([, input]) => input.command === 'status')).toBe(true)
   })
 
+  it('treats unknown OS authorization as unavailable without erasing a previous app opt-in', async () => {
+    const userData = testHome()
+    let authorization = 'fullAccess'
+
+    const spy = vi.fn(async (_executable, input) => ({
+      ok: true,
+      command: input.command,
+      authorization
+    }))
+
+    const call = bridge(spy as typeof runCalendarHelper, userData)
+
+    expect(await call('connect')).toMatchObject({ connected: true, supported: true })
+    authorization = 'unexpected-status'
+    expect(await call('status')).toEqual({ authorization: 'unknown', connected: false, supported: false })
+    expect(await call('connect')).toEqual({ authorization: 'unknown', connected: false, supported: false })
+    expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
+      .toEqual({ ok: false, code: 'not_connected' })
+    expect(spy.mock.calls.some(([, input]) => input.command === 'request-full-access' || input.command === 'list-events'))
+      .toBe(false)
+
+    authorization = 'fullAccess'
+    expect(await call('status')).toMatchObject({ connected: true, supported: true })
+  })
+
   it('requires explicit app and OS grants, and disconnect survives bridge restart', async () => {
     const userData = testHome()
     let osGrant = false

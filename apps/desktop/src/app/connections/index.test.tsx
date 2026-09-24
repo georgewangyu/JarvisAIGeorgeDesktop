@@ -279,6 +279,26 @@ it('does not read or request Calendar access during status check, and disconnect
   expect(within(section).queryByRole('button', { name: 'Create event' })).toBeNull()
 })
 
+it('shows Calendar as unavailable when macOS authorization cannot be verified', async () => {
+  const connect = vi.fn()
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: {
+      jarvisCalendar: {
+        status: vi.fn().mockResolvedValue({ supported: false, authorization: 'unknown', connected: false }),
+        connect
+      }
+    }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+  await waitFor(() => expect(within(section).getByText('Unavailable')).toBeTruthy())
+  expect(within(section).queryByText('Not connected')).toBeNull()
+  expect(within(section).queryByRole('button', { name: 'Connect' })).toBeNull()
+  expect(connect).not.toHaveBeenCalled()
+})
+
 it('requires an explicit valid create action and reports a denied Calendar connection', async () => {
   const status = vi.fn().mockResolvedValue({ supported: true, authorization: 'notDetermined', connected: false })
 

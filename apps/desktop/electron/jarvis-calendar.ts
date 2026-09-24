@@ -197,7 +197,14 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
       saveEnabled(configPath, false)
     }
 
-    return { authorization, connected: enabled(configPath) && authorization === 'fullAccess', supported: platform === 'darwin' && response.ok }
+    // A helper response without a recognized macOS authorization is not proof
+    // that Calendar access can be requested or used. Preserve the app opt-in so
+    // a transient unknown result does not silently revoke the user's choice.
+    return {
+      authorization,
+      connected: enabled(configPath) && authorization === 'fullAccess',
+      supported: platform === 'darwin' && response.ok && authorization !== 'unknown'
+    }
   }
 
   const requireTrustedScope = (event: IpcMainInvokeEvent): string | null => {
