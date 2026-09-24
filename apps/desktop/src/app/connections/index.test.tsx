@@ -38,6 +38,8 @@ it('does not treat a selected model as proof of an authenticated account', async
   )
   await screen.findByText('Not connected')
   expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy()
+  expect(screen.getByText(/not blanket approval for every action/)).toBeTruthy()
+  expect(screen.queryByText(/asks before consequential actions/)).toBeNull()
 })
 
 it('does not expose a synchronous connection-check exception to the consumer', async () => {

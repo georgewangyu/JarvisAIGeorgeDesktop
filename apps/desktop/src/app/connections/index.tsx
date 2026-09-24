@@ -582,7 +582,8 @@ export function ConnectionsView() {
       ) : null}
 
       <p className="mt-8 text-xs leading-5 text-(--ui-text-tertiary)">
-        Jarvis asks before consequential actions such as sending, publishing, purchasing, or deleting important data.
+        Connecting an account or app grants access to that source, not blanket approval for every action. Some actions
+        can run without a separate prompt; review your approval setting before using a connection.
       </p>
     </ConsumerSettingsLayout>
   )
