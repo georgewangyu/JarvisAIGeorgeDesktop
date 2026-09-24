@@ -22,6 +22,7 @@ export interface JarvisCodexOAuthCommand {
 }
 
 let activeLogin: ChildProcess | null = null
+let loginPending = false
 
 function safeFailure(output: string): string {
   if (/authorization timed out waiting for the local callback/i.test(output)) {
@@ -60,19 +61,26 @@ export function registerJarvisCodexOAuth({
   spawnProcess = spawn
 }: JarvisCodexOAuthDeps): void {
   ipcMain.handle('jarvis:codex-oauth:start', async (): Promise<JarvisCodexOAuthResult> => {
-    if (activeLogin && activeLogin.exitCode === null) {
+    if (loginPending || (activeLogin && activeLogin.exitCode === null)) {
       return { ok: false, message: 'ChatGPT sign-in is already open in your browser.' }
     }
 
+    // Reserve the attempt before runtime discovery awaits. Otherwise two
+    // windows can both pass the guard and launch separate browser flows.
+    loginPending = true
     let runtime: JarvisCodexOAuthCommand | null
 
     try {
       runtime = await resolveCommand()
     } catch {
+      loginPending = false
+
       return { ok: false, message: 'The Jarvis local engine is not ready yet.' }
     }
 
     if (!runtime) {
+      loginPending = false
+
       return { ok: false, message: 'The Jarvis local engine is not ready yet.' }
     }
 
@@ -89,6 +97,7 @@ export function registerJarvisCodexOAuth({
       try {
         child = spawnProcess(runtime.command, runtime.args, options)
       } catch {
+        loginPending = false
         resolve({ ok: false, message: 'ChatGPT sign-in could not start. Please try again.' })
 
         return
@@ -106,23 +115,21 @@ export function registerJarvisCodexOAuth({
       child.once('error', () => {
         if (activeLogin === child) {
           activeLogin = null
+          loginPending = false
         }
 
         resolve({ ok: false, message: 'ChatGPT sign-in could not start. Please try again.' })
       })
       child.once('exit', code => {
-        if (code !== 0) {
-          if (activeLogin === child) {
-            activeLogin = null
-          }
+        if (activeLogin === child) {
+          activeLogin = null
+          loginPending = false
+        }
 
+        if (code !== 0) {
           resolve({ ok: false, message: safeFailure(output) })
 
           return
-        }
-
-        if (activeLogin === child) {
-          activeLogin = null
         }
 
         resolve({ ok: true })

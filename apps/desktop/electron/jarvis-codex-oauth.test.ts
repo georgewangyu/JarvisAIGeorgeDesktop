@@ -13,6 +13,48 @@ function childProcessFixture() {
 }
 
 describe('Jarvis Codex OAuth', () => {
+  it('allows one pending start and permits retry after that sign-in is declined', async () => {
+    let handler: (() => Promise<{ message?: string; ok: boolean }>) | undefined
+    const ipcMain = { handle: vi.fn((_channel: string, callback: typeof handler) => { handler = callback }) }
+    let releaseDiscovery!: () => void
+    const discovery = new Promise<void>(resolve => { releaseDiscovery = resolve })
+
+    const resolveCommand = vi.fn(async () => {
+      await discovery
+
+      return { args: ['auth', 'add', 'openai-codex', '--browser'], command: '/usr/local/bin/hermes', cwd: '/fixture/oauth', env: {} }
+    })
+
+    const deniedChild = childProcessFixture()
+    const retryChild = childProcessFixture()
+    const spawnProcess = vi.fn().mockReturnValueOnce(deniedChild).mockReturnValueOnce(retryChild)
+
+    registerJarvisCodexOAuth({ ipcMain: ipcMain as never, resolveCommand, spawnProcess: spawnProcess as never })
+
+    const first = handler!()
+    await expect(handler!()).resolves.toEqual({
+      ok: false,
+      message: 'ChatGPT sign-in is already open in your browser.'
+    })
+    expect(resolveCommand).toHaveBeenCalledTimes(1)
+    releaseDiscovery()
+    await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledTimes(1))
+
+    deniedChild.stderr.emit('data', 'Authorization failed: access_denied')
+    deniedChild.exitCode = 1
+    deniedChild.emit('exit', 1)
+    await expect(first).resolves.toEqual({
+      ok: false,
+      message: 'Sign-in was declined in the browser. Try again when you are ready.'
+    })
+
+    const retry = handler!()
+    await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledTimes(2))
+    retryChild.exitCode = 0
+    retryChild.emit('exit', 0)
+    await expect(retry).resolves.toEqual({ ok: true })
+  })
+
   it('uses the resolved Hermes runtime command and working directory', async () => {
     let handler: (() => Promise<{ message?: string; ok: boolean }>) | undefined
 
