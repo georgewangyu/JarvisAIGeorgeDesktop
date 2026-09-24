@@ -57,7 +57,7 @@ export const PendingApprovalStack: FC = () => {
   return (
     <motion.section
       animate={{ paddingBlock: requests.length ? 8 : 0 }}
-      aria-label={t.assistant.approval.jumpToApproval}
+      aria-label={requests.length ? t.assistant.approval.jumpToApproval : undefined}
       className={cn(
         'min-w-0',
         placement === 'floating' ? 'sticky bottom-4 z-10 mt-auto w-full max-w-xl self-center' : 'w-full max-w-xl'

@@ -70,6 +70,7 @@ describe('PendingApprovalStack', () => {
     const { container } = render(<PendingApprovalStack />)
 
     expect(container.querySelector('[data-approval-stack]')).not.toBeNull()
+    expect(screen.queryByRole('region', { name: 'Approval needed' })).toBeNull()
     expect(container.querySelector('[data-stack-active="true"]')).toBeNull()
     expect(handleApprovalKey(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }))).toBe(false)
   })
@@ -78,6 +79,7 @@ describe('PendingApprovalStack', () => {
     setRequest('chmod -R 777 /tmp/x')
     render(<PendingApprovalStack />)
 
+    expect(screen.getByRole('region', { name: 'Approval needed' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Run/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Reject/ })).toBeTruthy()
   })
@@ -104,6 +106,9 @@ describe('PendingApprovalStack', () => {
     expect(hasOpenServerRequest('srq-approval')).toBe(false)
     expect(request).not.toHaveBeenCalledWith('approval.respond', expect.anything())
     expect($approvalRequest.get()).toBeNull()
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Approval needed' })).toBeNull()
+    })
   })
 
   it('hands focus back to the surface the user was in before clicking Run', async () => {
@@ -214,6 +219,9 @@ describe('PendingApprovalStack', () => {
     expect(hasOpenServerRequest('srq-approval')).toBe(false)
     expect(request).not.toHaveBeenCalledWith('approval.respond', expect.anything())
     expect($approvalRequest.get()).toBeNull()
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Approval needed' })).toBeNull()
+    })
   })
 
   it('offers "Always allow" in the options menu by default', async () => {
