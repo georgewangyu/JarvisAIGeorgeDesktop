@@ -90,7 +90,7 @@ export function ConsumerFeedEditions() {
     setError(null)
 
     try {
-      const edition = await generateFeedEdition(profile, text, retry?.id)
+      const edition = await generateFeedEdition(profile, text, retry?.id, retry ? [] : lovedEditions)
 
       if (activeScope.current !== scope) {return}
 
@@ -162,7 +162,7 @@ export function ConsumerFeedEditions() {
             </Button>
           </div>
         </div>
-        <p className="mt-4 text-xs text-(--ui-text-tertiary)">Love is saved on this Mac; it does not change future briefings.</p>
+        <p className="mt-4 text-xs text-(--ui-text-tertiary)">Loved briefings can guide the next generation when you choose Generate. You can undo Love at any time.</p>
       </div>
       <Dialog onOpenChange={setEditingPrompt} open={editingPrompt}>
         <DialogContent className="sm:max-w-xl">
@@ -200,6 +200,7 @@ export function ConsumerFeedEditions() {
                   <span>{item.status === 'generating' ? 'Working' : item.status === 'completed' ? 'Ready' : item.status === 'interrupted' ? 'Interrupted' : item.status === 'denied' ? 'Needs access' : 'Failed'}</span>
                 </div>
                 <h3 className="mt-3 line-clamp-2 text-xl font-semibold leading-snug tracking-tight text-(--ui-text-primary)">{item.prompt}</h3>
+                {(item.feedback_applied_count ?? 0) > 0 ? <p className="mt-2 text-xs text-(--ui-text-tertiary)">Guided by {item.feedback_applied_count} loved {item.feedback_applied_count === 1 ? 'briefing' : 'briefings'}</p> : null}
                 {item.status === 'completed' && item.content ? <div className="mt-5 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div> : null}
                 {item.status === 'generating' ? <p className="mt-5 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}
                 {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-5 text-sm text-destructive" role="alert">{item.error || 'This briefing did not finish.'}</p>}

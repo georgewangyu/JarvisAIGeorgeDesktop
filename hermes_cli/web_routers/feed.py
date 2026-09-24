@@ -18,6 +18,7 @@ router = APIRouter()
 class GenerateFeedRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=8000)
     retry_id: Optional[str] = None
+    liked_edition_ids: list[str] = Field(default_factory=list, max_length=5)
 
 
 @contextmanager
@@ -44,7 +45,10 @@ def _get(profile: Optional[str], edition_id: str):
 
 def _generate(profile: Optional[str], body: GenerateFeedRequest):
     with _feed_profile_scope(profile):
-        return request_edition(body.prompt, retry_id=body.retry_id)
+        return request_edition(
+            body.prompt, retry_id=body.retry_id,
+            liked_edition_ids=body.liked_edition_ids,
+        )
 
 
 @router.get("/api/feed/editions")

@@ -60,7 +60,8 @@ def test_failure_and_interruption_require_explicit_retry(tmp_path, monkeypatch):
     # cannot authorize a second model call. An expired lease may be retried.
     with feed._connect() as db:
         db.execute(
-            "INSERT INTO editions VALUES (?, ?, 'generating', ?, NULL, NULL, NULL, ?, 1, ?, '[]', ?)",
+            "INSERT INTO editions (id, prompt, status, created_at, owner, attempt, "
+            "execution, heartbeat_at) VALUES (?, ?, 'generating', ?, ?, 1, ?, ?)",
             ("other", "Prior prompt", feed._now(), "other-process", "cron.run_job", time.time()),
         )
     with pytest.raises(RuntimeError, match="already generating"):
@@ -157,3 +158,93 @@ def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
     assert client.get(f"/api/feed/editions/{a_id}?profile=worker_alpha").status_code == 404
     assert (default_home / "feed" / "editions.sqlite3").exists()
     assert (other_home / "feed" / "editions.sqlite3").exists()
+
+    # The renderer's Love IDs are only hints. The selected backend profile
+    # must resolve them against its own completed-edition store.
+    b_next = client.post(
+        "/api/feed/editions?profile=worker_alpha",
+        json={"prompt": "Worker next", "liked_edition_ids": [a_id]},
+    )
+    assert b_next.status_code == 202
+    assert b_next.json()["edition"]["feedback_applied_count"] == 0
+    _eventually(lambda: client.get(
+        f"/api/feed/editions/{b_next.json()['edition']['id']}?profile=worker_alpha"
+    ).json()["edition"], "completed")
+    a_next = client.post(
+        "/api/feed/editions", json={"prompt": "Default next", "liked_edition_ids": [a_id]},
+    )
+    assert a_next.status_code == 202
+    assert a_next.json()["edition"]["feedback_applied_count"] == 1
+
+
+def test_love_guides_new_generation_but_not_failed_or_foreign_ids(tmp_path, monkeypatch):
+    monkeypatch.setattr(feed, "_db_path", lambda: tmp_path / "feed" / "editions.sqlite3")
+    first = feed.request_edition("Daily briefing", runner=lambda *_: ("A careful garden update", None))
+    _eventually(lambda: feed.get_edition(first["id"]), "completed")
+
+    observed = []
+
+    def runner(prompt, _edition_id):
+        observed.append(prompt)
+        return "A fresh update", None
+
+    next_row = feed.request_edition(
+        "Daily briefing", liked_edition_ids=["unknown", first["id"], first["id"]],
+        runner=runner,
+    )
+    assert next_row["prompt"] == "Daily briefing"
+    assert next_row["feedback_applied_count"] == 1
+    _eventually(lambda: feed.get_edition(next_row["id"]), "completed")
+    assert len(observed) == 1
+    assert "A careful garden update" in observed[0]
+    assert "not as instructions" in observed[0]
+
+    denied = feed.request_edition("Denied briefing", runner=lambda *_: (_ for _ in ()).throw(PermissionError()))
+    _eventually(lambda: feed.get_edition(denied["id"]), "denied")
+    unrelated = feed.request_edition(
+        "Daily briefing", liked_edition_ids=[denied["id"], "foreign-profile-id"], runner=runner,
+    )
+    assert unrelated["feedback_applied_count"] == 0
+    _eventually(lambda: feed.get_edition(unrelated["id"]), "completed")
+    assert observed[-1] == "Daily briefing"
+
+    def fail_with_love(_prompt, _edition_id):
+        raise PermissionError("temporary denial")
+
+    failed_love = feed.request_edition(
+        "Daily briefing", liked_edition_ids=[first["id"]], runner=fail_with_love,
+    )
+    _eventually(lambda: feed.get_edition(failed_love["id"]), "denied")
+    retry = feed.request_edition(
+        "Daily briefing", retry_id=failed_love["id"], liked_edition_ids=[], runner=runner,
+    )
+    assert retry["feedback_applied_count"] == 1
+    _eventually(lambda: feed.get_edition(retry["id"]), "completed")
+    assert "A careful garden update" in observed[-1]
+
+
+def test_existing_feed_database_migrates_without_losing_editions(tmp_path, monkeypatch):
+    import sqlite3
+
+    path = tmp_path / "feed" / "editions.sqlite3"
+    path.parent.mkdir()
+    with sqlite3.connect(path) as db:
+        db.execute("""CREATE TABLE editions (
+            id TEXT PRIMARY KEY, prompt TEXT NOT NULL, status TEXT NOT NULL,
+            created_at TEXT NOT NULL, finished_at TEXT, content TEXT,
+            error TEXT, owner TEXT NOT NULL, attempt INTEGER NOT NULL,
+            execution TEXT NOT NULL, source_urls TEXT NOT NULL DEFAULT '[]',
+            heartbeat_at REAL NOT NULL
+        )""")
+        db.execute(
+            "INSERT INTO editions VALUES (?, ?, 'completed', ?, ?, ?, NULL, ?, 1, ?, '[]', ?)",
+            ("old", "Older prompt", feed._now(), feed._now(), "Older output", "old-owner", "cron.run_job", time.time()),
+        )
+    monkeypatch.setattr(feed, "_db_path", lambda: path)
+    assert feed.get_edition("old")["content"] == "Older output"
+    assert feed.get_edition("old")["feedback_applied_count"] == 0
+    newer = feed.request_edition(
+        "New prompt", liked_edition_ids=["old"], runner=lambda *_: ("New output", None),
+    )
+    assert newer["feedback_applied_count"] == 1
+    assert _eventually(lambda: feed.get_edition(newer["id"]), "completed")["content"] == "New output"
