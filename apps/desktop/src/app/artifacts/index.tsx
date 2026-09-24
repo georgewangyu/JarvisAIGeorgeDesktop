@@ -4,7 +4,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { TitlebarIcon } from '@/app/shell/titlebar-icon'
-import { formatRefValue } from '@/components/assistant-ui/directive-text'
 import { ZoomableImage } from '@/components/chat/zoomable-image'
 import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
@@ -39,6 +38,7 @@ import { downloadGatewayMediaFile, isArtifactFilePath, isRemoteGateway } from '@
 import { normalize } from '@/lib/text'
 import { fmtDayTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
+import type { ComposerAttachment } from '@/store/composer'
 import { notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile } from '@/store/profile'
 
@@ -74,18 +74,28 @@ function artifactKey(artifact: ArtifactRecord): string {
   return `${artifact.profile || 'default'}:${artifact.id}`
 }
 
-function discussionPrompt(artifacts: readonly ArtifactRecord[], activeProfile: string): string {
+function discussionPrompt(artifacts: readonly ArtifactRecord[], activeProfile: string): {
+  prompt: string
+  attachments: ComposerAttachment[]
+} {
+  const attachments: ComposerAttachment[] = []
+  const remote = isRemoteGateway()
+
   const references = artifacts.map(artifact => {
     const path = artifact.value
 
-    // @file is expanded by the agent gateway on submit. Only offer that read
-    // for a file owned by this chat's profile and a path its parser can quote
-    // without letting a transcript-supplied value inject another directive.
+    // A Library path may be outside the new chat's workspace. Stage local text
+    // files with the normal file.attach path, which returns a scoped @file ref.
+    // Remote artifact paths are not necessarily visible on this Mac, so keep
+    // those reference-only until a backend-owned attach route exists.
     if (artifact.kind === 'file' &&
+      !remote &&
       (artifact.profile || 'default') === activeProfile &&
       isArtifactFilePath(path) && READABLE_TEXT_FILE_RE.test(path) && !path.startsWith('file:') &&
       ![...path].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 || '`"\''.includes(char))) {
-      return `- ${JSON.stringify(artifact.label)} — @file:${formatRefValue(path)}`
+      attachments.push({ id: `library:${artifactKey(artifact)}`, kind: 'file', label: artifact.label, path })
+
+      return `- ${JSON.stringify(artifact.label)} (read only if its attachment chip is present)`
     }
 
     const location = artifact.kind === 'link'
@@ -95,11 +105,11 @@ function discussionPrompt(artifacts: readonly ArtifactRecord[], activeProfile: s
     return `- ${JSON.stringify(artifact.label)}${location ? ` — ${JSON.stringify(location)}` : ''} (reference only)`
   })
 
-  return [
-    'Help me discuss these Library entries from earlier chats. The @file references below will be read from this chat’s connected workspace when I send this message; tell me if a file is missing or unreadable. Other entries are references only. Do not claim to have read a reference-only entry. Ask me for missing context.',
+  return { prompt: [
+    'Help me discuss these Library entries from earlier chats. Text files with attachment chips will be staged when I send this message. If a chip is missing or a file is unreadable, ask me to reattach it. Other entries are references only; do not claim to have read them.',
     '',
     ...references
-  ].join('\n')
+  ].join('\n'), attachments }
 }
 
 function pageRangeLabel(total: number, page: number, pageSize: number, a: Translations['artifacts']): string {
@@ -612,7 +622,10 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                 <Button disabled={currentPageArtifacts.length === 0} onClick={toggleCurrentPage} size="sm" variant="ghost">
                   {allCurrentPageSelected ? 'Clear page' : 'Select all on page'}
                 </Button>
-                <Button disabled={selectedArtifacts.length === 0} onClick={() => startConsumerDraft(discussionPrompt(selectedArtifacts, activeProfile), navigate)} size="sm" variant="secondary">
+                <Button disabled={selectedArtifacts.length === 0} onClick={() => {
+                  const discussion = discussionPrompt(selectedArtifacts, activeProfile)
+                  startConsumerDraft(discussion.prompt, navigate, discussion.attachments)
+                }} size="sm" variant="secondary">
                   Discuss selected
                 </Button>
                 <Button onClick={() => { setSelectedKeys(new Set()); setSelecting(false) }} size="sm" variant="ghost">

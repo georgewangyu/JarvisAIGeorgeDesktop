@@ -581,6 +581,7 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
     if isinstance(prompt, str) and "@" in prompt:
         from agent.context_references import preprocess_context_references
         from agent.model_metadata import get_model_context_length
+        from pathlib import Path
         ctx_len = get_model_context_length(
             getattr(agent, "model", "") or _resolve_model(),
             base_url=getattr(agent, "base_url", "") or "",
@@ -588,7 +589,9 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
             provider=getattr(agent, "provider", "") or "",
             config_context_length=getattr(agent, "_config_context_length", None))
         ctx = preprocess_context_references(
-            prompt, cwd=cwd, allowed_root=cwd, context_length=ctx_len)
+            prompt, cwd=cwd, allowed_root=cwd,
+            allowed_extra_roots=(Path(session.get("profile_home") or _hermes_home) / "attachments",),
+            context_length=ctx_len)
         if ctx.blocked:
             _emit(
                 "error", sid, {"message": "\n".join(ctx.warnings) or "Context injection refused."})

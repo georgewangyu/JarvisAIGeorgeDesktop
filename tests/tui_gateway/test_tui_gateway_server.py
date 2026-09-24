@@ -11466,8 +11466,7 @@ def test_prompt_submit_expands_context_refs(monkeypatch):
             injected_tokens=0,
         )
     )
-    fake_meta = types.ModuleType("agent.model_metadata")
-    fake_meta.get_model_context_length = lambda *args, **kwargs: 100000
+    import agent.model_metadata as model_metadata
 
     server._sessions["sid"] = _session(agent=_Agent())
     monkeypatch.setattr(server.threading, "Thread", _ImmediateThread)
@@ -11475,7 +11474,7 @@ def test_prompt_submit_expands_context_refs(monkeypatch):
     monkeypatch.setattr(server, "make_stream_renderer", lambda cols: None)
     monkeypatch.setattr(server, "render_message", lambda raw, cols: None)
     monkeypatch.setitem(sys.modules, "agent.context_references", fake_ctx)
-    monkeypatch.setitem(sys.modules, "agent.model_metadata", fake_meta)
+    monkeypatch.setattr(model_metadata, "get_model_context_length", lambda *args, **kwargs: 100000)
 
     server.handle_request(
         {
@@ -11617,6 +11616,67 @@ def test_file_attach_copies_gateway_visible_file_outside_workspace(monkeypatch, 
         assert resp["result"]["uploaded"] is True
         assert resp["result"]["ref_text"] == f"@file:{stored}"
         assert stored.read_text(encoding="utf-8") == "outside workspace"
+    finally:
+        server._sessions.pop("sid", None)
+
+
+def test_file_attach_rejects_protected_source_path(monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    home = tmp_path / "home"
+    secret = tmp_path / ".env"
+    secret.write_text("SECRET=never-stage-this", encoding="utf-8")
+    fake_cli = types.ModuleType("cli")
+    fake_cli._detect_file_drop = lambda raw: None
+    fake_cli._split_path_input = lambda raw: (raw, "")
+    fake_cli._resolve_attachment_path = lambda raw: secret
+
+    server._sessions["sid"] = _session(cwd=str(workspace), profile_home=str(home))
+    monkeypatch.setitem(sys.modules, "cli", fake_cli)
+    try:
+        resp = server.handle_request({
+            "id": "1", "method": "file.attach",
+            "params": {"session_id": "sid", "path": str(secret)},
+        })
+        assert "error" in resp
+        assert not (home / "attachments" / secret.name).exists()
+    finally:
+        server._sessions.pop("sid", None)
+
+
+def test_file_attach_staged_reference_expands_only_for_owning_profile(monkeypatch, tmp_path):
+    from agent.context_references import preprocess_context_references
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    owner_home = tmp_path / "owner"
+    other_home = tmp_path / "other"
+    source = tmp_path / "selected.md"
+    source.write_text("amber-orbit-42", encoding="utf-8")
+    fake_cli = types.ModuleType("cli")
+    fake_cli._detect_file_drop = lambda raw: None
+    fake_cli._split_path_input = lambda raw: (raw, "")
+    fake_cli._resolve_attachment_path = lambda raw: source
+
+    server._sessions["sid"] = _session(cwd=str(workspace), profile_home=str(owner_home))
+    monkeypatch.setitem(sys.modules, "cli", fake_cli)
+    try:
+        resp = server.handle_request({
+            "id": "1", "method": "file.attach",
+            "params": {"session_id": "sid", "path": str(source)},
+        })
+        ref = resp["result"]["ref_text"]
+        owner = preprocess_context_references(
+            f"Discuss {ref}", cwd=workspace, allowed_root=workspace,
+            allowed_extra_roots=(owner_home / "attachments",), context_length=8192,
+        )
+        other = preprocess_context_references(
+            f"Discuss {ref}", cwd=workspace, allowed_root=workspace,
+            allowed_extra_roots=(other_home / "attachments",), context_length=8192,
+        )
+        assert "amber-orbit-42" in owner.message
+        assert "amber-orbit-42" not in other.message
+        assert any("outside the allowed workspace" in warning for warning in other.warnings)
     finally:
         server._sessions.pop("sid", None)
 

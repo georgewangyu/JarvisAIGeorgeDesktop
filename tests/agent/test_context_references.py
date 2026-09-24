@@ -72,6 +72,33 @@ def test_parse_typed_references_ignores_emails_and_handles():
     assert refs[2].target == "2"
 
 
+def test_staged_attachment_root_is_narrow_and_symlink_safe(tmp_path: Path):
+    from agent.context_references import preprocess_context_references
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    attachments = tmp_path / "profile" / "attachments"
+    attachments.mkdir(parents=True)
+    selected = attachments / "selected.md"
+    selected.write_text("amber-orbit-42", encoding="utf-8")
+    outside = tmp_path / "outside.md"
+    outside.write_text("NEVER-INLINE-OUTSIDE", encoding="utf-8")
+    (attachments / "escape.md").symlink_to(outside)
+
+    allowed = preprocess_context_references(
+        f"Read @file:{selected}", cwd=workspace, allowed_root=workspace,
+        allowed_extra_roots=(attachments,), context_length=8192,
+    )
+    denied = preprocess_context_references(
+        f"Read @file:{outside} and @file:{attachments / 'escape.md'}",
+        cwd=workspace, allowed_root=workspace,
+        allowed_extra_roots=(attachments,), context_length=8192,
+    )
+    assert "amber-orbit-42" in allowed.message
+    assert "NEVER-INLINE-OUTSIDE" not in denied.message
+    assert len(denied.warnings) == 2
+
+
 
 
 

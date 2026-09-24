@@ -155,6 +155,9 @@ def _stage_session_file_attachment(
                 found = _resolve_attachment_path(path_token)
                 resolved = Path(found).resolve() if found is not None else None
     if resolved is not None:
+        from agent.file_safety import get_read_block_error
+        if get_read_block_error(str(resolved)) is not None:
+            raise ValueError("file cannot be attached from a protected path")
         try:
             resolved.relative_to(workspace)
             return resolved, False

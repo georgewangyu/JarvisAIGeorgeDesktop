@@ -44,10 +44,10 @@ it('selects indexed entries on the visible page and prepares editable file reads
   fireEvent.click(screen.getByRole('button', { name: 'Discuss selected' }))
 
   const draft = takeSessionDraft(null)
-  expect(draft.text).toContain('"alpha.md" — @file:/tmp/alpha.md')
+  expect(draft.text).toContain('"alpha.md" (read only if its attachment chip is present)')
   expect(draft.text).toContain('"beta.pdf" — "/tmp/beta.pdf" (reference only)')
   expect(draft.text).toContain('when I send this message')
-  expect(draft.attachments).toEqual([])
+  expect(draft.attachments).toEqual([expect.objectContaining({ kind: 'file', label: 'alpha.md', path: '/tmp/alpha.md' })])
   expect($freshSessionRequest.get()).toBe(1)
 })
 
@@ -61,7 +61,7 @@ it('does not turn another profile’s Library file into a readable reference', a
 
   const draft = takeSessionDraft(null)
   expect(draft.text).toContain('"alpha.md" — "/tmp/alpha.md" (reference only)')
-  expect(draft.text).not.toContain('@file:/tmp/alpha.md')
+  expect(draft.attachments).toEqual([])
 })
 
 it('keeps the empty selection honest and resets on filter, profile and index changes', async () => {
@@ -104,5 +104,6 @@ it('preserves an existing draft and offers explicit recovery before adding selec
   expect(recovery?.action?.label).toBe('Add to draft')
   recovery?.action?.onClick()
   expect(takeSessionDraft(null).text).toContain('Unfinished thought\n\nHelp me discuss')
+  expect(takeSessionDraft(null).attachments).toEqual([expect.objectContaining({ path: '/tmp/alpha.md' })])
   expect($freshSessionRequest.get()).toBe(1)
 })

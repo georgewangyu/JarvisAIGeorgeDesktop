@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/components/ui/input'
 import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
-import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
+import { type ComposerAttachment, stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
 import { $goalsBySession, setSessionGoal } from '@/store/goals'
@@ -142,12 +142,16 @@ export function ConsumerFeedView() {
   )
 }
 
-export function startConsumerDraft(prompt: string, navigate: ReturnType<typeof useNavigate>): void {
+export function startConsumerDraft(
+  prompt: string,
+  navigate: ReturnType<typeof useNavigate>,
+  attachments: ComposerAttachment[] = []
+): void {
   const addToDraft = () => {
     const current = takeSessionDraft(null)
     const text = current.text.trim() ? `${current.text.trimEnd()}\n\n${prompt}` : prompt
 
-    stashSessionDraft(null, text, current.attachments)
+    stashSessionDraft(null, text, [...current.attachments, ...attachments])
     requestFreshSession()
     navigate(NEW_CHAT_ROUTE)
   }
