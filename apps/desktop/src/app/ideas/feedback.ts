@@ -7,6 +7,11 @@ export type IdeaFeedbackById = Record<string, IdeaFeedback>
 
 const STORAGE_PREFIX = 'jarvis.desktop.ideaFeedback.v1'
 const FEEDBACK = new Set<IdeaFeedback>(['saved', 'done', 'not-interested'])
+const GOAL_ID = /^goal:[A-Za-z0-9_-]{1,128}$/
+
+function validIdeaId(id: string): boolean {
+  return IDEA_IDS.has(id) || GOAL_ID.test(id)
+}
 
 export function ideaFeedbackKey(profile: string, connectionId: null | string): string {
   const connectionScope = connectionId === null ? 'local' : `remote.${encodeURIComponent(connectionId.trim())}`
@@ -33,7 +38,7 @@ export function readIdeaFeedback(profile: string, connectionId: null | string): 
   }
 
   return Object.fromEntries(
-    Object.entries(value).filter(([id, feedback]) => IDEA_IDS.has(id) && validFeedback(feedback))
+    Object.entries(value).filter(([id, feedback]) => validIdeaId(id) && validFeedback(feedback))
   )
 }
 
@@ -44,7 +49,7 @@ export function setIdeaFeedback(
   ideaId: string,
   feedback: IdeaFeedback | null
 ): boolean {
-  if (!IDEA_IDS.has(ideaId) || (feedback !== null && !validFeedback(feedback))) {
+  if (!validIdeaId(ideaId) || (feedback !== null && !validFeedback(feedback))) {
     return false
   }
 

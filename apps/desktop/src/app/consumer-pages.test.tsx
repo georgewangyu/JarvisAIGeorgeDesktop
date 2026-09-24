@@ -119,6 +119,24 @@ it('offers selected-profile saved goals as editable Ideas without sending a prom
   expect(request).toHaveBeenCalledTimes(1)
 })
 
+it('saves a goal-derived Idea choice without starting a chat', async () => {
+  $gateway.set({ request: async () => ({ goals: [
+    { session_id: 'test-goal', session_title: 'Walk weekly', goal: { title: 'Walk weekly', status: 'active' } }
+  ] }) } as never)
+
+  render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+
+  fireEvent.pointerDown(await screen.findByRole('button', { name: 'Feedback for Make progress on Walk weekly' }), {
+    button: 0, ctrlKey: false, pointerType: 'mouse'
+  })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Save for later' }))
+
+  expect(readIdeaFeedback('default', null)['goal:test-goal']).toBe('saved')
+  expect(screen.getByRole('heading', { name: 'Saved for later' })).toBeTruthy()
+  expect($freshSessionRequest.get()).toBe(0)
+  expect(takeSessionDraft(null).text).toBe('')
+})
+
 it('never shows a delayed goal suggestion from a previous profile', async () => {
   let resolveOld: (value: unknown) => void = () => undefined
   const oldRequest = vi.fn(() => new Promise(resolve => { resolveOld = resolve }))

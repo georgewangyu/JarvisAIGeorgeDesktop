@@ -15,6 +15,20 @@ it('persists reversible choices per profile and connection across a fresh read',
   expect(readIdeaFeedback('default', null)).toEqual({ 'catch-up': 'done' })
 })
 
+it('persists feedback for a saved-goal suggestion without accepting arbitrary ids', () => {
+  expect(setIdeaFeedback('default', null, 'goal:synthetic-goal_1', 'saved')).toBe(true)
+  expect(readIdeaFeedback('default', null)).toEqual({ 'goal:synthetic-goal_1': 'saved' })
+  expect(readIdeaFeedback('other', null)).toEqual({})
+  expect(setIdeaFeedback('default', null, 'goal:../../other', 'done')).toBe(false)
+  expect(setIdeaFeedback('default', null, `goal:${'x'.repeat(129)}`, 'done')).toBe(false)
+
+  migrateIdeaFeedbackForProfile('default', 'renamed')
+  expect(readIdeaFeedback('renamed', null)).toEqual({ 'goal:synthetic-goal_1': 'saved' })
+  expect(readIdeaFeedback('default', null)).toEqual({})
+  expect(setIdeaFeedback('renamed', null, 'goal:synthetic-goal_1', null)).toBe(true)
+  expect(readIdeaFeedback('renamed', null)).toEqual({})
+})
+
 it('ignores unknown or malformed persisted choices and rejects unknown idea ids', () => {
   window.localStorage.setItem(ideaFeedbackKey('default', null), JSON.stringify({ 'plan-day': 'saved', retired: 'done', 'catch-up': 'invalid' }))
   expect(readIdeaFeedback('default', null)).toEqual({ 'plan-day': 'saved' })
