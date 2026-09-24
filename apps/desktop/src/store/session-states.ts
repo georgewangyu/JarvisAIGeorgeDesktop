@@ -35,6 +35,7 @@ import { resolveRememberedActivePane, workspaceScopeKey } from '@/components/pan
 import type { WorkspaceMode } from '@/contrib/types'
 import { stableArray } from '@/lib/stable-array'
 import { readJson, writeJson } from '@/lib/storage'
+import { dropApprovalRecoveryForProfile, migrateApprovalRecoveryForProfile } from '@/store/approval-recovery'
 import type { SessionInfo } from '@/types/hermes'
 
 import { $activeGatewayProfile, normalizeProfileKey } from './profile'
@@ -2024,6 +2025,7 @@ export function dropTilesForProfile(
   persistTiles()
 
   if (!route || route.mode === 'local') {
+    dropApprovalRecoveryForProfile(name)
     dropFeedPreferencesForProfile(name)
     dropIdeaFeedbackForProfile(name)
   }
@@ -2085,6 +2087,7 @@ export function migrateTilesForProfile(oldProfile: string, newProfile: string): 
   migrateTranscriptTailsForProfile(from, to)
   migrateRememberedNavigationForProfile(from, to)
   migrateSessionOwnerHintsForProfile(from, to)
+  migrateApprovalRecoveryForProfile(from, to)
   migrateIdeaFeedbackForProfile(from, to)
   migrateFeedPreferencesForProfile(from, to)
 }

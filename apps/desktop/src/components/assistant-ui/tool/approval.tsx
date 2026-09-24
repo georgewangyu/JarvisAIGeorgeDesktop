@@ -24,6 +24,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { ChevronDown, Loader2 } from '@/lib/icons'
 import { releaseApprovalKey } from '@/lib/keybinds/approval-keys'
 import { cn } from '@/lib/utils'
+import { $approvalRecoveryReceipts, dismissApprovalRecovery } from '@/store/approval-recovery'
 import { $gateway } from '@/store/gateway'
 import { reconnectAction } from '@/store/gateway-reconnect'
 import { notifyError } from '@/store/notifications'
@@ -35,6 +36,8 @@ import {
   sessionApprovalRequests,
   sessionApprovalStackSize
 } from '@/store/prompts'
+import { isSessionOwnerRoute } from '@/store/session-request-router'
+import { knownOwnerForSession, storedSessionIdForRuntimeId } from '@/store/session-states'
 import { setToolDisclosureOpen } from '@/store/tool-view'
 
 import { isApprovalActivity } from './approval-activity'
@@ -49,15 +52,27 @@ export const ApprovalPlacementContext = createContext<'inline' | 'floating'>('in
 export const PendingApprovalStack: FC = () => {
   const { t } = useI18n()
   const placement = useContext(ApprovalPlacementContext)
-  const sessionId = useStore(useSessionView().$runtimeId)
+  const view = useSessionView()
+  const sessionId = useStore(view.$runtimeId)
+  const storedId = useStore(view.$storedId)
   const requests = useStore(useMemo(() => sessionApprovalRequests(sessionId), [sessionId]))
   const total = useStore(useMemo(() => sessionApprovalStackSize(sessionId), [sessionId]))
+  const receipts = useStore($approvalRecoveryReceipts)
   const reduced = useReducedMotion()
+  const owner = knownOwnerForSession(storedId ?? sessionId)
+  const durableId = storedId ?? (sessionId ? storedSessionIdForRuntimeId(sessionId) ?? sessionId : null)
+
+  const interrupted = isSessionOwnerRoute(owner) && durableId
+    ? receipts.some(receipt =>
+        receipt.connectionId === owner.connectionId && receipt.profile === owner.profile &&
+        receipt.storedSessionId === durableId && receipt.state === 'interrupted'
+      )
+    : false
 
   return (
     <motion.section
-      animate={{ paddingBlock: requests.length ? 8 : 0 }}
-      aria-label={requests.length ? t.assistant.approval.jumpToApproval : undefined}
+      animate={{ paddingBlock: requests.length || interrupted ? 8 : 0 }}
+      aria-label={requests.length ? t.assistant.approval.jumpToApproval : interrupted ? 'Approval interrupted' : undefined}
       className={cn(
         'min-w-0',
         placement === 'floating' ? 'sticky bottom-4 z-10 mt-auto w-full max-w-xl self-center' : 'w-full max-w-xl'
@@ -70,6 +85,17 @@ export const PendingApprovalStack: FC = () => {
     >
       <ApprovalActivity floating={placement === 'floating'} visible={requests.length > 0} />
       <ApprovalQueue floating={placement === 'floating'} requests={requests} total={total} />
+      {interrupted && isSessionOwnerRoute(owner) && durableId ? (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm" role="status">
+          <p className="font-medium">Approval interrupted</p>
+          <p className="mt-1 text-(--ui-text-secondary)">
+            This approval is no longer available after reconnecting. Its outcome is unknown; check the chat and any affected files before asking Jarvis to try again. Jarvis did not retry it automatically.
+          </p>
+          <Button onClick={() => dismissApprovalRecovery(owner, durableId)} size="inline" variant="textStrong">
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
     </motion.section>
   )
 }

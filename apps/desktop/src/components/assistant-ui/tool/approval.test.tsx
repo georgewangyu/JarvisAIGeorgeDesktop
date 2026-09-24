@@ -5,10 +5,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import type { HermesGateway } from '@/hermes'
 import { handleApprovalKey, releaseApprovalKey } from '@/lib/keybinds/approval-keys'
+import { dismissApprovalRecovery, noteApprovalPending, reconcileApprovalRecovery } from '@/store/approval-recovery'
 import { $gateway } from '@/store/gateway'
 import { $approvalRequest, clearAllPrompts, sessionApprovalRequests, setApprovalRequest } from '@/store/prompts'
 import { hasOpenServerRequest, rememberServerRequest, resetServerRequestsForTests } from '@/store/server-requests'
 import { $activeSessionId } from '@/store/session'
+import { _resetSessionOwnerHintsForTests, setSessionOwnerHint } from '@/store/session'
 import { stubMenuDomApis, stubResizeObserver } from '@/test/jsdom'
 
 import { PendingApprovalStack } from './approval'
@@ -63,9 +65,26 @@ afterEach(() => {
   resetServerRequestsForTests()
   $activeSessionId.set(null)
   $gateway.set(null)
+  dismissApprovalRecovery({ connectionId: 'local', profile: 'default' }, 'sess-1')
+  _resetSessionOwnerHintsForTests({ storage: true })
 })
 
 describe('PendingApprovalStack', () => {
+  it('shows a non-actionable recovery receipt only in its owning chat', () => {
+    const owner = { connectionId: 'local', profile: 'default' }
+    setSessionOwnerHint('sess-1', owner)
+    noteApprovalPending(owner, 'sess-1', 'sess-1', 'request-1')
+    reconcileApprovalRecovery(owner, 'sess-1', new Set())
+    $activeSessionId.set('sess-1')
+    render(<PendingApprovalStack />)
+
+    expect(screen.getByRole('status').textContent).toContain('Approval interrupted')
+    expect(screen.queryByRole('button', { name: /Run/ })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('retains an empty host without consuming keyboard input', () => {
     const { container } = render(<PendingApprovalStack />)
 

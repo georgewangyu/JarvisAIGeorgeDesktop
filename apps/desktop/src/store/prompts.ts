@@ -1,11 +1,13 @@
 import { atom, computed, type ReadableAtom } from 'nanostores'
 
+import { noteApprovalAnswered, noteApprovalPending, reconcileApprovalRecovery } from './approval-recovery'
 import { $clarifyRequest, $clarifyRequests } from './clarify'
 import { isSessionGone, isSessionGoneForBackgroundPolling, markSessionGone } from './runtime-gone'
 import { respondToServerRequest } from './server-requests'
 import { $activeSessionId } from './session'
 import { ambientRequestFor } from './session-gone-latch'
-import { requestForOwnedSession } from './session-states'
+import { isSessionOwnerRoute } from './session-request-router'
+import { knownOwnerForSession, requestForOwnedSession, storedSessionIdForRuntimeId } from './session-states'
 
 // Blocking interactive prompts the gateway raises mid-turn. Each is a
 // server→client JSON-RPC request (`tui_gateway/server_requests.py`) the Python
@@ -228,6 +230,15 @@ export const $approvalRequest = computed(
 export const setApprovalRequest = approval.set
 export const clearApprovalRequest = approval.clear
 
+function approvalOwner(sessionId: string | null) {
+  if (!sessionId) {return null}
+  const owner = knownOwnerForSession(sessionId)
+
+  return isSessionOwnerRoute(owner)
+    ? { owner, storedSessionId: storedSessionIdForRuntimeId(sessionId) ?? sessionId }
+    : null
+}
+
 export async function receiveApprovalRequest(gateway: ApprovalGateway | null, request: ApprovalRequest): Promise<void> {
   // A prompt restored from `approval.pending` must not clobber the live server
   // request that already carries the same queue entry (it knows how to answer).
@@ -243,6 +254,12 @@ export async function receiveApprovalRequest(gateway: ApprovalGateway | null, re
   }
 
   setApprovalRequest(request)
+
+  const route = approvalOwner(request.sessionId)
+
+  if (route && request.requestId && request.sessionId) {
+    noteApprovalPending(route.owner, route.storedSessionId, request.sessionId, request.requestId)
+  }
 
   if (gateway && request.requestId && request.sessionId) {
     try {
@@ -302,6 +319,11 @@ export async function replayPendingApproval(gateway: ApprovalGateway | null, ses
   }
 
   const ids = new Set(result.approvals.map(pending => pending.request_id))
+  const route = approvalOwner(sessionId)
+
+  if (route) {
+    reconcileApprovalRecovery(route.owner, route.storedSessionId, new Set([...ids].filter((id): id is string => typeof id === 'string')))
+  }
 
   for (const request of previous ?? EMPTY_APPROVALS) {
     if (request.requestId && !ids.has(request.requestId)) {
@@ -343,7 +365,15 @@ export async function answerApproval(
   choice: string,
   all = false
 ): Promise<void> {
+  const route = approvalOwner(request.sessionId)
+
+  const answered = () => {
+    if (route && request.requestId) {noteApprovalAnswered(route.owner, route.storedSessionId, request.requestId)}
+  }
+
   if (respondToServerRequest(request.serverRequestId, { choice, ...(all ? { all: true } : {}) })) {
+    answered()
+
     return
   }
 
@@ -357,6 +387,7 @@ export async function answerApproval(
     ...(request.requestId ? { request_id: request.requestId } : {}),
     session_id: request.sessionId ?? undefined
   })
+  answered()
 }
 
 /** The prompt request for one specific session — the tile counterpart of the
