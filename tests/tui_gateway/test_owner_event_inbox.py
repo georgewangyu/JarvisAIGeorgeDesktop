@@ -46,17 +46,21 @@ def test_owner_event_admission_is_durable_and_exact(tmp_path):
     assert owner_event_receipt(tmp_path, source="scheduler", event_id="tick-8") is None
 
 
-def test_jarvis_event_requires_the_exact_live_desktop_owner(tmp_path):
+def test_jarvis_event_defers_without_a_live_desktop_owner(tmp_path):
     from hermes_cli.active_sessions import try_acquire_active_session
     from hermes_state import SessionDB
     from tools.bot_live_delivery import claim_pending_delivery, find_jarvis_live_owner
-    from tui_gateway.owner_event_inbox import admit_jarvis_event, owner_event_receipt
+    from tui_gateway.owner_event_inbox import (
+        admit_jarvis_event, adopt_deferred_jarvis_events, owner_event_receipt,
+    )
 
     db = SessionDB(db_path=tmp_path / "state.db")
     db.create_session(session_id="main", source="desktop")
     db.set_session_title("main", "Jarvis")
-    with pytest.raises(RuntimeError, match="no live desktop owner"):
-        admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Review today")
+    deferred = admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Review today")
+    assert deferred["status"] == "deferred" and "owner" not in deferred
+    assert claim_pending_delivery(tmp_path, dict(profile_home=str(tmp_path.resolve()), session_id="main",
+                                                 lease_id="wrong", live_session_id="wrong")) is None
     lease, refusal = try_acquire_active_session(
         session_id="main", surface="desktop", config={}, registry_home=tmp_path,
         metadata={"live_session_id": "runtime", "bot_live_delivery_consumer": True},
@@ -65,8 +69,11 @@ def test_jarvis_event_requires_the_exact_live_desktop_owner(tmp_path):
     try:
         owner = find_jarvis_live_owner(tmp_path)
         assert owner and owner["lease_id"] == lease.lease_id
+        assert adopt_deferred_jarvis_events(tmp_path, dict(owner, lease_id="wrong")) == 0
+        assert adopt_deferred_jarvis_events(tmp_path, owner) == 1
+        assert adopt_deferred_jarvis_events(tmp_path, owner) == 0
         admitted = admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Review today")
-        assert admitted["status"] == "queued"
+        assert admitted["status"] == "queued" and admitted["id"] == deferred["id"]
         assert admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Review today") == admitted
         assert claim_pending_delivery(tmp_path, owner)["id"] == admitted["id"]
     finally:
@@ -76,8 +83,59 @@ def test_jarvis_event_requires_the_exact_live_desktop_owner(tmp_path):
     assert admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Review today")["id"] == admitted["id"]
     with pytest.raises(ValueError, match="different payload"):
         admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Changed event")
-    with pytest.raises(RuntimeError, match="no live desktop owner"):
-        admit_jarvis_event(tmp_path, source="calendar", event_id="two", text="Review tomorrow")
+    assert admit_jarvis_event(tmp_path, source="calendar", event_id="two",
+                              text="Review tomorrow")["status"] == "deferred"
+
+
+def test_offline_jarvis_event_is_adopted_by_restarted_idle_poller(tmp_path):
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from hermes_state import SessionDB
+    from tui_gateway import session_notifications
+    from tui_gateway.method_ctx import rebind
+    from tui_gateway.owner_event_inbox import admit_jarvis_event, owner_event_receipt
+    from tui_gateway.session_lifecycle import _session_turn_admission
+
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+    deferred = admit_jarvis_event(tmp_path, source="calendar", event_id="offline", text="Review today")
+    assert deferred["status"] == "deferred"
+    observed = subprocess.run([
+        sys.executable, "-c",
+        "import json,sys; from tui_gateway.owner_event_inbox import owner_event_receipt; "
+        "print(json.dumps(owner_event_receipt(sys.argv[1],source='calendar',event_id='offline')))",
+        str(tmp_path),
+    ], check=True, capture_output=True, text=True)
+    assert json.loads(observed.stdout)["status"] == "deferred"
+    lease, refusal = try_acquire_active_session(
+        session_id="main", surface="desktop", config={}, registry_home=tmp_path,
+        metadata={"live_session_id": "restarted", "bot_live_delivery_consumer": True},
+    )
+    assert refusal is None
+    calls = []
+
+    def submit(_rid, _sid, _session, text, **kwargs):
+        calls.append(text)
+        kwargs["terminal_callback"]({"status": "settled", "text": "One concise result"})
+        return True
+
+    poll = rebind(session_notifications._poll_bot_live_delivery_once, {
+        "_session_home": lambda _session: tmp_path,
+        "_session_turn_admission": _session_turn_admission,
+        "_run_prompt_submit": submit,
+        "_notif_release_turn": lambda session: session.update(running=False),
+    })
+    session = {"source": "desktop", "history_lock": threading.RLock(), "agent": object(),
+               "session_key": "main", "active_session_lease": SimpleNamespace(
+                   lease_id=lease.lease_id, released=False)}
+    try:
+        assert poll("restarted", session) is True
+        assert poll("restarted", session) is False
+        assert calls == ["[Event from calendar; id offline]\nReview today"]
+        assert owner_event_receipt(tmp_path, source="calendar", event_id="offline")["status"] == "settled"
+    finally:
+        lease.release()
+        db.close()
 
 
 @pytest.mark.parametrize("title,source,consumer", [
@@ -89,6 +147,7 @@ def test_jarvis_event_refuses_lookalike_or_nonconsumer_owner(tmp_path, title, so
     from hermes_cli.active_sessions import try_acquire_active_session
     from hermes_state import SessionDB
     from tools.bot_live_delivery import find_jarvis_live_owner
+    from tui_gateway.owner_event_inbox import admit_jarvis_event
 
     db = SessionDB(db_path=tmp_path / "state.db")
     db.create_session(session_id="lookalike", source=source)
@@ -100,9 +159,61 @@ def test_jarvis_event_refuses_lookalike_or_nonconsumer_owner(tmp_path, title, so
     assert refusal is None
     try:
         assert find_jarvis_live_owner(tmp_path) is None
+        if title == "Jarvis" and source == "desktop":
+            assert admit_jarvis_event(tmp_path, source="calendar", event_id="one",
+                                      text="Review today")["status"] == "deferred"
+        else:
+            with pytest.raises(RuntimeError, match="no desktop owner"):
+                admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Review today")
     finally:
         lease.release()
         db.close()
+
+
+def test_archived_jarvis_chat_cannot_receive_offline_events(tmp_path):
+    from hermes_state import SessionDB
+    from tui_gateway.owner_event_inbox import admit_jarvis_event
+
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+    db.set_session_archived("main", True)
+    db.close()
+    with pytest.raises(RuntimeError, match="no desktop owner"):
+        admit_jarvis_event(tmp_path, source="calendar", event_id="one", text="Review today")
+
+
+def test_deferred_jarvis_events_remain_in_their_own_profile(tmp_path):
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from hermes_state import SessionDB
+    from tui_gateway.owner_event_inbox import (
+        admit_jarvis_event, adopt_deferred_jarvis_events, owner_event_receipt,
+    )
+
+    homes = [tmp_path / "profile-a", tmp_path / "profile-b"]
+    for home in homes:
+        home.mkdir()
+        db = SessionDB(db_path=home / "state.db")
+        db.create_session(session_id="main", source="desktop")
+        db.set_session_title("main", "Jarvis")
+        db.close()
+        assert admit_jarvis_event(home, source="calendar", event_id="same-id",
+                                  text="Profile-local reminder")["status"] == "deferred"
+    lease, refusal = try_acquire_active_session(
+        session_id="main", surface="desktop", config={}, registry_home=homes[0],
+        metadata={"live_session_id": "runtime-a", "bot_live_delivery_consumer": True},
+    )
+    assert refusal is None
+    try:
+        owner_a = {"profile_home": str(homes[0].resolve()), "session_id": "main",
+                   "lease_id": lease.lease_id, "live_session_id": "runtime-a"}
+        assert adopt_deferred_jarvis_events(homes[0], owner_a) == 1
+        with pytest.raises(ValueError, match="different profile home"):
+            adopt_deferred_jarvis_events(homes[1], owner_a)
+        assert owner_event_receipt(homes[1], source="calendar", event_id="same-id")["status"] == "deferred"
+        assert owner_event_receipt(homes[0], source="calendar", event_id="same-id")["status"] == "queued"
+    finally:
+        lease.release()
 
 
 def test_jarvis_event_admission_to_idle_turn_and_restart_receipt(tmp_path):

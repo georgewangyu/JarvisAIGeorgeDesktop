@@ -175,6 +175,9 @@ def _manual_run_delivery_note(deliver: str, refreshed: Dict[str, Any]) -> str:
         queued = refreshed.get("last_delivery_queued") or {}
         if queued:
             target = "Jarvis main chat" if "jarvis-main" in queued else "Bot Chat"
+            jarvis_receipt = queued.get("jarvis-main") if isinstance(queued, dict) else None
+            if isinstance(jarvis_receipt, dict) and jarvis_receipt.get("status") == "deferred":
+                return " (output saved for Jarvis main chat when the app reopens; completion unverified, do not resend)"
             return f" (output queued for {target}; completion unverified, do not resend)"
         return " (output was delivered there by the job itself)"
     return f" (⚠ delivery FAILED: {err[:200]})"

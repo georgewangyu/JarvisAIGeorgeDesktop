@@ -601,6 +601,9 @@ def _poll_bot_live_delivery_once(sid: str, session: dict) -> bool:
                 or owner.get("live_session_id") != sid
                 or owner.get("session_id") != session.get("session_key")):
             return False
+        if jarvis_owner:
+            from tui_gateway.owner_event_inbox import adopt_deferred_jarvis_events
+            adopt_deferred_jarvis_events(home, owner)
         # The mailbox matches each envelope to this pinned lease/live id and compression lineage.
         claimed = claim_pending_delivery(home, owner)
         if claimed is None:

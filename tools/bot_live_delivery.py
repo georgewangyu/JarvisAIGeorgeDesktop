@@ -62,14 +62,8 @@ def find_canonical_live_owner(profile_home: Path | str) -> dict[str, Any] | None
     return None
 
 
-def find_jarvis_live_owner(profile_home: Path | str) -> dict[str, Any] | None:
-    """Find the one live desktop owner of the permanent Jarvis conversation.
-
-    A titled row alone is not enough: the compression tip must hold a live
-    desktop lease whose poller advertises mailbox consumption. An inactive app
-    has no owner, so event producers must not pretend that it can wake one.
-    """
-    from hermes_cli.active_sessions import active_session_registry_snapshot
+def find_jarvis_main_session_id(profile_home: Path | str) -> str | None:
+    """Resolve the durable permanent desktop chat, even while the app is closed."""
     from hermes_state import SessionDB
 
     home = Path(profile_home).resolve()
@@ -80,9 +74,22 @@ def find_jarvis_live_owner(profile_home: Path | str) -> dict[str, Any] | None:
         row = db.get_session_by_title(JARVIS_MAIN_CHAT_TITLE)
         if not row or row.get("archived") or (row.get("source") or "").lower() != "desktop":
             return None
-        session_id = db.get_compression_tip(row["id"])
+        return db.get_compression_tip(row["id"])
     finally:
         db.close()
+
+
+def find_jarvis_live_owner(profile_home: Path | str) -> dict[str, Any] | None:
+    """Find the one live desktop owner of the permanent Jarvis conversation.
+
+    A titled row alone is not enough: the compression tip must hold a live
+    desktop lease whose poller advertises mailbox consumption. An inactive app
+    has no owner, so event producers must not pretend that it can wake one.
+    """
+    from hermes_cli.active_sessions import active_session_registry_snapshot
+
+    home = Path(profile_home).resolve()
+    session_id = find_jarvis_main_session_id(home)
     if not session_id:
         return None
     for entry in active_session_registry_snapshot(registry_home=home):

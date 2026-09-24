@@ -577,7 +577,7 @@ def cron_delivery_targets() -> list[dict]:
     except Exception:
         logger.debug("cron_delivery_targets: profile listing unavailable", exc_info=True)
     # Explicit opt-in: delivery to the permanent chat of this local desktop profile.
-    targets.append({"id": JARVIS_MAIN_PLATFORM, "name": "Jarvis main chat (app open)",
+    targets.append({"id": JARVIS_MAIN_PLATFORM, "name": "Jarvis main chat (on next open)",
                     "home_target_set": True, "home_env_var": None})
     return targets
 
@@ -1002,10 +1002,10 @@ def parse_bot_chat_deliver_token(part: str) -> Optional[str]:
 
 
 def _deliver_to_jarvis_main(job: dict, content: str, *, for_failure: bool = False) -> Optional[str]:
-    """Admit one explicit scheduled result into this profile's live Jarvis chat.
+    """Admit one explicit scheduled result into this profile's Jarvis chat.
 
     Never create a chat, wake a closed app, or use the Bot Chat CLI fallback. A
-    queued/claimed receipt is recorded as unverified until the owner settles it.
+    deferred/queued/claimed receipt is unverified until the owner settles it.
     """
     from hermes_constants import get_hermes_home
     from tui_gateway.owner_event_inbox import admit_jarvis_event
@@ -1034,6 +1034,8 @@ def _deliver_to_jarvis_main(job: dict, content: str, *, for_failure: bool = Fals
         "status": receipt["status"], "delivery_id": receipt["id"]}
     if receipt["status"] == "settled":
         return None
+    if receipt["status"] == "deferred":
+        return f"Jarvis main chat awaiting app reopen (receipt {receipt['id']}): completion unverified"
     if receipt["status"] in {"queued", "claimed"}:
         return f"Jarvis main chat {receipt['status']} (receipt {receipt['id']}): completion unverified"
     return f"Jarvis main chat {receipt['status']} (receipt {receipt['id']}): not completed"
@@ -1285,13 +1287,16 @@ def _cron_delivery_notify_enabled(cfg: Optional[dict]) -> bool:
 
 
 def _record_delivery_verification(job: dict, unverified_targets: list) -> None:
-    """Persist ``last_delivery_unverified``: list of ``platform:chat_id`` targets acked with no
-    evidence, or None, alongside queued Bot Chat receipts. Never raises (bookkeeping must not fail a
-    delivery)."""
+    """Persist unverified targets and durable owner-mailbox receipts.
+
+    Deferred Jarvis receipts are admitted, not failed or completed: retaining
+    their exact IDs lets the UI say they await the app instead of implying a send.
+    Never raises (bookkeeping must not fail a delivery).
+    """
     new_value = list(unverified_targets) or None
     queued = {target: receipt for target, receipt in
               job.get("_bot_chat_delivery_receipts", {}).items()
-              if receipt["status"] in ("queued", "claimed")} or None
+              if receipt["status"] in ("deferred", "queued", "claimed")} or None
     values = {key: value for key, value in {
         "last_delivery_unverified": new_value, "last_delivery_queued": queued,
     }.items() if (job.get(key) or None) != value}
@@ -2037,7 +2042,7 @@ def _deliver_result(
             suppressed_targets += job.pop("_notification_all_targets_suppressed", False)
             if jarvis_error:
                 receipt = job.get("_bot_chat_delivery_receipts", {}).get(JARVIS_MAIN_PLATFORM)
-                if not receipt or receipt["status"] not in ("queued", "claimed"):
+                if not receipt or receipt["status"] not in ("deferred", "queued", "claimed"):
                     delivery_errors.append(jarvis_error)
             continue
 

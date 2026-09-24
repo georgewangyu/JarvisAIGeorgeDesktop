@@ -1,4 +1,4 @@
-"""Durable admission for events addressed to an exact live assistant owner.
+"""Durable admission for events addressed to an exact assistant owner.
 
 This is an adapter over the existing live-owner mailbox. Its receipt proves
 admission to that owner's inbox, not that a model turn ran or a reply arrived.
@@ -14,7 +14,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from tools.bot_live_delivery import deliver_to_live_owner, find_jarvis_live_owner, read_delivery_result
+from tools.bot_live_delivery import (
+    deliver_to_live_owner, find_jarvis_live_owner, find_jarvis_main_session_id,
+    read_delivery_result,
+)
 
 
 def _event_delivery_id(source: str, event_id: str) -> str:
@@ -45,11 +48,11 @@ def admit_owner_event(
 def admit_jarvis_event(
     profile_home: Path | str, *, source: str, event_id: str, text: str,
 ) -> dict[str, Any]:
-    """Admit an event to the currently live permanent desktop chat only.
+    """Admit an event to the permanent desktop chat, without waking a closed app.
 
-    This does not start a backend or promise delivery after the Mac app exits.
-    An identical retry returns its original receipt even after the owner exits;
-    a new event without a live owner is refused rather than queued for a wrong chat.
+    An identical retry returns its original receipt after the owner exits. If
+    that chat exists but has no live lease, its receipt stays deferred until a
+    new exact owner adopts it. A missing or non-desktop chat is refused.
     """
     if not isinstance(text, str) or not text.strip():
         raise ValueError("event text is required")
@@ -60,9 +63,75 @@ def admit_jarvis_event(
             raise ValueError("event id already belongs to a different payload")
         return existing
     owner = find_jarvis_live_owner(profile_home)
-    if owner is None:
-        raise RuntimeError("the Jarvis main chat has no live desktop owner")
-    return admit_owner_event(profile_home, owner, source=source, event_id=event_id, text=text)
+    if owner is not None:
+        return admit_owner_event(profile_home, owner, source=source, event_id=event_id, text=text)
+    return _defer_jarvis_event(profile_home, source=source, event_id=event_id, text=text)
+
+
+def _defer_jarvis_event(
+    profile_home: Path | str, *, source: str, event_id: str, text: str,
+) -> dict[str, Any]:
+    import time
+    from tools.bot_live_delivery import _locked, _next_sequence, _read, _write
+
+    home = Path(profile_home).resolve()
+    session_id = find_jarvis_main_session_id(home)
+    if session_id is None:
+        raise RuntimeError("the Jarvis main chat has no desktop owner")
+    key = _event_delivery_id(source, event_id)
+    message = f"[Event from {source}; id {event_id}]\n{text}"
+    with _locked(home) as root:
+        path = root / f"{key}.json"
+        existing = _read(path)
+        if existing is not None:
+            if existing.get("message") != message:
+                raise ValueError("event id already belongs to a different payload")
+            return existing
+        if find_jarvis_main_session_id(home) != session_id:
+            raise RuntimeError("the Jarvis main chat changed during event admission")
+        record = dict(delivery_id=key, id=key, profile_home=str(home),
+                      target_session_id=session_id, message=message, status="deferred",
+                      created_at=time.time_ns(), sequence=_next_sequence(root))
+        _write(path, record)
+        return record
+
+
+def adopt_deferred_jarvis_events(
+    profile_home: Path | str, owner: dict[str, Any],
+) -> int:
+    """Pin offline receipts to this live Jarvis lease before the idle poller claims.
+
+    Only the exact permanent chat's compression lineage may adopt a ticket.
+    A claimed or settled receipt is never moved or replayed.
+    """
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import _locked, _owner, _scan_read, _write
+
+    home = Path(profile_home).resolve()
+    pinned = _owner(home, owner)
+    if find_jarvis_live_owner(home) != pinned:
+        return 0
+    if find_jarvis_main_session_id(home) != pinned["session_id"]:
+        return 0
+    db = SessionDB(db_path=home / "state.db", read_only=True)
+    try:
+        with _locked(home) as root:
+            adopted = 0
+            for path in root.glob("*.json"):
+                record = _scan_read(path)
+                if (record is None or record.get("status") != "deferred"
+                        or record.get("profile_home") != str(home)):
+                    continue
+                target = record.get("target_session_id")
+                if (not isinstance(target, str)
+                        or db.get_compression_tip(target) != pinned["session_id"]):
+                    continue
+                record.update(owner=pinned, **pinned, status="queued")
+                _write(path, record)
+                adopted += 1
+            return adopted
+    finally:
+        db.close()
 
 
 def owner_event_receipt(
