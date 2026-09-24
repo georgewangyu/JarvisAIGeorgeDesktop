@@ -851,6 +851,7 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
     // timeline projection history uses instead of as a user bubble (#112144).
     // `toChatMessages` yields nothing for `hidden`, so the prompt is omitted.
     const displayKind = projection.inflight?.display_kind
+
     const typed = displayKind
       ? toChatMessages([
           {
@@ -917,7 +918,11 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
     inflightAssistant || inflightStreaming || inflightError || (inflightUser && queuedUser)
   )
 
-  const projectAssistantDump = wantsAssistantRow && !(turnAlreadyStructured && !inflightError)
+  // A classified failure already stamped on this turn's saved reply survives
+  // process restart. Live resume may also retain the old inflight failure;
+  // do not show a second card beside the durable one.
+  const savedFailureOfCurrentTurn = Boolean(inflightError && liveAssistantOfCurrentTurn?.errorSurface)
+  const projectAssistantDump = wantsAssistantRow && !savedFailureOfCurrentTurn && !(turnAlreadyStructured && !inflightError)
 
   const pushCorrection = (correction: string, index: number): void => {
     if (persistedInLatestRun(correction)) {

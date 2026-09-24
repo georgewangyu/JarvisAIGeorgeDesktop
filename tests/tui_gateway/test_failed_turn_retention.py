@@ -208,6 +208,32 @@ def test_returned_error_result_carries_error_surface(emits, turn_env):
     assert snapshot["error_surface"]["layer"] == "provider"
 
 
+def test_returned_error_stamps_saved_reply_for_restart(emits, turn_env):
+    stamped = []
+    db = types.SimpleNamespace(mark_latest_turn_failure=lambda *args: stamped.append(args))
+    agent = types.SimpleNamespace(
+        session_id="session-key",
+        provider="openrouter",
+        model="test/model",
+        _session_db=db,
+        run_conversation=lambda *a, **k: {
+            "final_response": "saved failure",
+            "error": "format refused",
+            "failed": True,
+            "failure_reason": "format_error",
+        },
+        clear_interrupt=lambda: None,
+    )
+    session = _session(agent=agent, running=True)
+    server._start_inflight_turn(session, "synthetic request")
+
+    server._run_prompt_submit("rid", "sid", session, "synthetic request")
+
+    assert len(stamped) == 1
+    assert stamped[0][0:2] == ("session-key", "saved failure")
+    assert stamped[0][2]["code"] == "format_error"
+
+
 def test_returned_error_without_reason_omits_no_frame(emits, turn_env):
     """Legacy result dicts (no failure_reason) still get a best-effort
     descriptor — never a crash, never a missing terminal frame."""

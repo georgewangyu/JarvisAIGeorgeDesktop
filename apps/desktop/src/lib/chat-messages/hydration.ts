@@ -1,6 +1,7 @@
 import { skillInvocationText } from '@hermes/shared'
 
 import { extractImageRefs } from '@/lib/embedded-images'
+import { parseErrorSurface } from '@/lib/error-surface'
 import { dedupeGeneratedImageEchoesInParts } from '@/lib/generated-images'
 import type { MessageReaction, SessionMessage } from '@/types/hermes'
 
@@ -428,6 +429,12 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
     }
 
     const reactions = messageReactions(message.display_metadata)
+
+    const failureSurface =
+      message.role === 'assistant'
+        ? parseErrorSurface(parseDisplayMetadata(message.display_metadata)?.turn_failure)
+        : null
+
     // Gateway resume names the durable row id `row_id`; the REST transcript
     // prefetch ships the same messages.id as a numeric `id`. Either one lets
     // reactions address this exact row later.
@@ -444,6 +451,7 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
       timestamp: earliestTimestamp(message.timestamp, ...parts.map(part => part.timestamp)),
       ...(rowId !== undefined ? { rowId } : {}),
       ...(reactions.length ? { reactions } : {}),
+      ...(failureSurface ? { error: displayContent || 'Assistant turn failed', errorSurface: failureSurface } : {}),
       ...(extractedAttachmentRefs ? { attachmentRefs: extractedAttachmentRefs } : {})
     })
 

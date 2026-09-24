@@ -387,6 +387,35 @@ class SessionMessagesMixin:
             return True
         return self._execute_write(_do)
 
+    def mark_latest_turn_failure(self, session_id: str, content: str, surface: Dict[str, Any]) -> bool:
+        """Persist only the classified failure on this turn's assistant row.
+
+        Never stamp an older identical reply: the row must follow the latest user
+        input. Keep other display metadata (notably reactions) intact.
+        """
+        if not session_id or not content or not isinstance(surface, dict):
+            return False
+        descriptor = {key: surface[key] for key in ("layer", "code", "retryable", "provider", "model",
+            "auth_kind", "provider_label", "api_key_env", "resets_at") if key in surface}
+        if not all(key in descriptor for key in ("layer", "code", "retryable")):
+            return False
+
+        def _do(conn):
+            row = conn.execute(
+                "SELECT id, display_metadata FROM messages WHERE session_id = ? AND role = 'assistant' "
+                "AND content = ? AND active = 1 AND id > COALESCE((SELECT MAX(id) FROM messages "
+                "WHERE session_id = ? AND role = 'user' AND active = 1), 0) "
+                "ORDER BY id DESC LIMIT 1",
+                (session_id, self._encode_content(content), session_id)).fetchone()
+            if row is None:
+                return False
+            metadata = self._decode_display_metadata(row["display_metadata"]) or {}
+            metadata["turn_failure"] = descriptor
+            conn.execute(_SET_DISPLAY_META_SQL, (self._encode_display_metadata(metadata), row["id"]))
+            return True
+
+        return self._execute_write(_do)
+
     def _reaction_list(self, meta: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Well-formed (dict) reactions stored under ``REACTIONS_METADATA_KEY``."""
         reactions = (meta or {}).get(self.REACTIONS_METADATA_KEY)

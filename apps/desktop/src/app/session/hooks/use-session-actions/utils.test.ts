@@ -1264,6 +1264,30 @@ describe('preserveLocalPendingTurnMessages', () => {
 })
 
 describe('appendLiveSessionProjection', () => {
+  it('does not duplicate a saved failure card with the retained live failure', () => {
+    const stored = [
+      msg('user', 'user', 'synthetic request'),
+      msg('saved-failure', 'assistant', 'The provider refused the format.', {
+        error: 'The provider refused the format.',
+        errorSurface: { layer: 'provider', code: 'format_error', retryable: false }
+      })
+    ]
+
+    const restored = appendLiveSessionProjection(stored, {
+      session_id: 'runtime-1',
+      inflight: {
+        user: 'synthetic request',
+        assistant: '',
+        error: 'format refused',
+        error_surface: { layer: 'provider', code: 'format_error', retryable: false },
+        streaming: false
+      }
+    })
+
+    expect(restored.filter(message => message.error)).toHaveLength(1)
+    expect(restored.filter(message => message.role === 'assistant')).toHaveLength(1)
+  })
+
   // A synthetic starting prompt keeps the display typing its persisted row
   // will get: on reconnect it renders as the same timeline event as history,
   // never as a user bubble; a real user quoting the marker text stays a user
