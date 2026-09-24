@@ -1262,9 +1262,15 @@ export function useGatewayBoot({
         // round-trip must not hang "Starting Hermes…" forever. Initial boot
         // rides out a full backend cold spawn, so it gets the shared 45s
         // backend-boot budget, not the 20s reconnect budget.
+        // First-run setup can clone and prepare the fork-owned Python runtime
+        // after the user chooses Get started. The ordinary 45-second backend
+        // budget is shorter than that install, and used to latch a false hard
+        // failure over the still-running consumer permission journey.
+        const bootstrap = await desktop.getBootstrapState?.().catch(() => null)
+        const installing = Boolean(bootstrap?.setupChoice || bootstrap?.active)
         const conn = await withTimeout(
           getWindowBackend(true),
-          BACKEND_BOOT_WAIT_TIMEOUT_MS,
+          installing ? 15 * 60_000 : BACKEND_BOOT_WAIT_TIMEOUT_MS,
           'Timed out connecting to Hermes backend'
         )
 

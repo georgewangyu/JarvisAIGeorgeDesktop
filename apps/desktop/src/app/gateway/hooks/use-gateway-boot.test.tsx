@@ -1570,6 +1570,32 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
     expect($desktopBoot.get().error).toBeTruthy()
   })
 
+  it('keeps first-run installation within its own budget instead of failing at the ordinary backend timeout', async () => {
+    const desktop = Object.assign(fakeDesktop(), {
+      getBootstrapState: vi.fn(async () => ({ active: true, setupChoice: null }))
+    })
+    desktop.getConnection = vi.fn(() => new Promise(resolve => {
+      setTimeout(() => resolve(primaryConn), 50_000)
+    }))
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+
+    render(<Harness />)
+    await flushAsync()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(45_000)
+    })
+    expect($desktopBoot.get().error).toBeNull()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000)
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    await flushAsync()
+    expect($gatewayState.get()).toBe('open')
+    expect($desktopBoot.get().error).toBeNull()
+  })
+
   it('softSwitch(): a getConnection() that hangs on a connection-apply switch does not latch $gatewaySwitching forever (#93454)', async () => {
     // Repro: main applies a new connection (onConnectionApplied), softSwitch()
     // re-dials via getConnection(), and the IPC round-trip wedges. Without an
