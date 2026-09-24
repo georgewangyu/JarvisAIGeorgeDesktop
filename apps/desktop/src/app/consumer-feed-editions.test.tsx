@@ -138,6 +138,29 @@ it('shows safe load failure copy and recovers on explicit Retry load', async () 
   expect(screen.queryByRole('alert')).toBeNull()
 })
 
+it('labels generated links as unverified on completed editions only', async () => {
+  const linked = {
+    ...edition,
+    content: 'Read [release notes](https://example.test/release).',
+    source_urls: ['https://example.test/release']
+  }
+
+  vi.mocked(getFeedEditions).mockResolvedValue([linked])
+
+  const view = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+
+  expect(await screen.findByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeTruthy()
+  expect(screen.getByRole('link', { name: 'release notes' }).getAttribute('href')).toBe('https://example.test/release')
+
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...linked, content: null, error: 'Provider unavailable', status: 'failed'
+  }])
+  view.unmount()
+  render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+  expect(await screen.findByText('Provider unavailable')).toBeTruthy()
+  expect(screen.queryByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeNull()
+})
+
 it('shows durable failed editions and retries only by explicit choice with the original prompt', async () => {
   vi.mocked(getFeedEditions).mockResolvedValue([{ ...edition, content: null, error: 'Provider unavailable', status: 'failed' }])
   vi.mocked(generateFeedEdition).mockResolvedValue({ ...edition, content: null, error: null, status: 'generating', attempt: 2 })
@@ -146,6 +169,7 @@ it('shows durable failed editions and retries only by explicit choice with the o
   expect(await screen.findByText('Provider unavailable')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   expect(await screen.findByText('Jarvis is preparing this briefing…')).toBeTruthy()
+  expect(screen.queryByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeNull()
   expect(generateFeedEdition).toHaveBeenCalledWith('default', 'What matters today?', 'edition-1', [])
 })
 

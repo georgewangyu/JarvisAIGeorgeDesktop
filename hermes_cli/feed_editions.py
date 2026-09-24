@@ -16,6 +16,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from hermes_constants import get_hermes_home
 
@@ -67,6 +68,28 @@ def _row(row: sqlite3.Row) -> dict:
     item["source_urls"] = json.loads(item["source_urls"])
     item["source_urls_verified"] = False
     return item
+
+
+def _mentioned_urls(content: str) -> list[str]:
+    """Keep usable web links from generated text without treating them as sources."""
+    urls = set()
+    for match in re.finditer(r"(?<![\w@/:])https?://[^\s<>()\[\]{}\"'`]+", content):
+        url = match.group().rstrip(".,;:!?")
+        try:
+            parsed = urlsplit(url)
+            host = parsed.hostname
+            # Reject credentials, malformed ports and hostname-shaped garbage.
+            if (parsed.scheme not in ("http", "https") or parsed.username or parsed.password
+                    or not host or "." not in host or not all(
+                        label and re.fullmatch(r"[A-Za-z0-9-]+", label)
+                        and not label.startswith("-") and not label.endswith("-")
+                        for label in host.split(".")
+                    ) or (parsed.port is not None and parsed.port == 0)):
+                continue
+        except ValueError:
+            continue
+        urls.add(url)
+    return sorted(urls)
 
 
 def _loved_context(db: sqlite3.Connection, edition_ids: list[str]) -> tuple[str, int]:
@@ -191,7 +214,7 @@ def _finish(edition_id: str, attempt: int, prompt: str, runner) -> None:
     finally:
         heartbeat_stop.set()
     # These are URLs printed by the agent, not independently verified sources.
-    source_urls = sorted(set(re.findall(r"https?://[^\s<>)\]]+", content or "")))
+    source_urls = _mentioned_urls(content or "")
     with _connect() as db:
         db.execute(
             "UPDATE editions SET status=?, content=?, error=?, source_urls=?, finished_at=? "

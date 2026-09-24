@@ -201,7 +201,10 @@ export function ConsumerFeedEditions() {
                 </div>
                 <h3 className="mt-3 line-clamp-2 text-xl font-semibold leading-snug tracking-tight text-(--ui-text-primary)">{item.prompt}</h3>
                 {(item.feedback_applied_count ?? 0) > 0 ? <p className="mt-2 text-xs text-(--ui-text-tertiary)">Guided by {item.feedback_applied_count} loved {item.feedback_applied_count === 1 ? 'briefing' : 'briefings'}</p> : null}
-                {item.status === 'completed' && item.content ? <div className="mt-5 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div> : null}
+                {item.status === 'completed' && item.content ? <>
+                  <p className="mt-4 text-xs text-(--ui-text-tertiary)">Sources have not been verified. Links in this generated briefing may be inaccurate.</p>
+                  <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div>
+                </> : null}
                 {item.status === 'generating' ? <p className="mt-5 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}
                 {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-5 text-sm text-destructive" role="alert">{item.error || 'This briefing did not finish.'}</p>}
                 <div className="mt-5 flex gap-3">

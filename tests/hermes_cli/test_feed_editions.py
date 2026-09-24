@@ -36,6 +36,7 @@ def test_explicit_generation_persists_output_and_refuses_duplicate(tmp_path, mon
     completed = _eventually(lambda: feed.get_edition(row["id"]), "completed")
     assert completed["content"].startswith("Release notes")
     assert completed["source_urls"] == ["https://example.test/release"]
+    assert completed["source_urls_verified"] is False
     assert completed["prompt"] == row["prompt"]
     assert feed.list_editions()[0]["id"] == row["id"]
 
@@ -80,6 +81,8 @@ def test_failure_and_interruption_require_explicit_retry(tmp_path, monkeypatch):
     row = feed.request_edition("Make a sourced digest", runner=denied)
     failed = _eventually(lambda: feed.get_edition(row["id"]), "denied")
     assert failed["content"] is None
+    assert failed["source_urls"] == []
+    assert failed["source_urls_verified"] is False
     assert "provider unavailable" in failed["error"]
     with pytest.raises(ValueError, match="original prompt"):
         feed.request_edition("Changed prompt", retry_id=row["id"], runner=denied)
@@ -90,6 +93,7 @@ def test_failure_and_interruption_require_explicit_retry(tmp_path, monkeypatch):
     )
     assert retried["id"] == row["id"]
     assert retried["attempt"] == 2
+    assert retried["source_urls"] == []
     assert _eventually(lambda: feed.get_edition(row["id"]), "completed")["content"] == "Verified output"
     with pytest.raises(ValueError, match="Only failed"):
         feed.request_edition("Make a sourced digest", retry_id=row["id"], runner=denied)
@@ -109,6 +113,23 @@ def test_failure_and_interruption_require_explicit_retry(tmp_path, monkeypatch):
     assert calls[0]["prompt"] == "Deliberate request"
     assert calls[0]["id"] == "abcdef123456"
     assert calls[0]["deliver"] == "local"
+
+
+def test_generated_urls_are_only_unverified_mentions(tmp_path, monkeypatch):
+    monkeypatch.setattr(feed, "_db_path", lambda: tmp_path / "feed" / "editions.sqlite3")
+    content = (
+        "Useful [release](https://example.test/release). "
+        "Repeated https://example.test/release. "
+        "Untrusted javascript:https://fake.test/claim "
+        "https://user:secret@private.test/path "
+        "https://bad.test:invalid/path and https:///missing-host"
+    )
+    row = feed.request_edition("Summarize", runner=lambda *_: (content, None))
+    completed = _eventually(lambda: feed.get_edition(row["id"]), "completed")
+
+    assert completed["content"] == content
+    assert completed["source_urls"] == ["https://example.test/release"]
+    assert completed["source_urls_verified"] is False
 
 
 def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
