@@ -1,9 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createClientSessionState } from '@/lib/chat-runtime'
 import { $gateway } from '@/store/gateway'
 import { $activeGatewayProfile } from '@/store/profile'
 import type { SessionDotState } from '@/store/session-dot-state'
+import { clearAllSessionStates, publishSessionState } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
 
 import { buildConsumerActivityRows, ConsumerActivity, openConsumerActivityRow } from './consumer-activity'
@@ -12,6 +14,7 @@ afterEach(() => {
   cleanup()
   $gateway.set(null as never)
   $activeGatewayProfile.set('default')
+  clearAllSessionStates()
 })
 
 const session = (id: string, title: string, lastActive: number): SessionInfo => ({
@@ -31,6 +34,26 @@ const session = (id: string, title: string, lastActive: number): SessionInfo => 
 })
 
 describe('consumer activity rows', () => {
+  it('opens the owning visible chat when a live approval needs input, then clears attention', async () => {
+    const openChat = vi.fn()
+    const visible = session('approval-chat', 'Plan a trip', 10)
+
+    const pending = {
+      ...createClientSessionState(null), storedSessionId: visible.id, busy: true, needsInput: true
+    }
+
+    act(() => publishSessionState('approval-runtime', pending))
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={openChat} sessions={[visible]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    expect(await screen.findByText('Plan a trip')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Plan a trip/ }))
+    expect(openChat).toHaveBeenCalledWith(visible.id, visible)
+
+    act(() => publishSessionState('approval-runtime', { ...pending, busy: false, needsInput: false }))
+    await waitFor(() => expect(screen.getByText('Finished — new update')).toBeTruthy())
+    expect(screen.queryByText('Needs your input')).toBeNull()
+  })
+
   it('shows only meaningful consumer states in priority order', () => {
     const sessions = [
       session('idle', 'Idle chat', 9),
