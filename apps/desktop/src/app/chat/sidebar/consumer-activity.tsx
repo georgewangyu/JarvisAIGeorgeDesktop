@@ -35,6 +35,9 @@ export interface ConsumerActivityRow {
 export interface UnavailableApprovalRow {
   id: string
   title: string
+  connectionId: string
+  profile: string
+  session: SessionInfo
 }
 
 /** A lost approval has no executable control. Surface it only beside a
@@ -48,25 +51,36 @@ export function buildUnavailableApprovalRows(
   for (const receipt of receipts) {
     if (receipt.state !== 'interrupted') {continue}
 
-    const session = sessions.find(candidate => {
+    const matchingSessions = sessions.filter(candidate => {
       const source = normalizeSessionSource(candidate.source)
 
-      return !isMessagingSource(source) &&
-        !['cron', 'kanban', 'oneshot', 'subagent', 'tool'].includes(source ?? '') &&
-        sessionMatchesStoredId(candidate, receipt.storedSessionId)
+      if (isMessagingSource(source) ||
+        ['cron', 'kanban', 'oneshot', 'subagent', 'tool'].includes(source ?? '') ||
+        !sessionMatchesStoredId(candidate, receipt.storedSessionId)) {
+        return false
+      }
+
+      const owner = sessionOwnerRouteFromRow(candidate) ?? knownOwnerForSession(candidate.id)
+
+      return isSessionOwnerRoute(owner) && owner.connectionId === receipt.connectionId && owner.profile === receipt.profile
     })
 
-    if (!session) {continue}
-    const owner = sessionOwnerRouteFromRow(session) ?? knownOwnerForSession(session.id)
+    // The stable session id is not globally unique across connections. Never
+    // pick the first same-id row and never guess when owner rows are ambiguous.
+    if (matchingSessions.length !== 1) {continue}
+    const session = matchingSessions[0]
 
-    if (!isSessionOwnerRoute(owner) || owner.connectionId !== receipt.connectionId || owner.profile !== receipt.profile) {
-      continue
-    }
-
-    const previous = latestBySession.get(session.id)
+    const ownerKey = JSON.stringify([receipt.connectionId, receipt.profile, session.id])
+    const previous = latestBySession.get(ownerKey)
 
     if (!previous || previous.seenAt < receipt.seenAt) {
-      latestBySession.set(session.id, { row: { id: session.id, title: sessionTitle(session) }, seenAt: receipt.seenAt })
+      latestBySession.set(ownerKey, {
+        row: {
+          id: session.id, title: sessionTitle(session),
+          connectionId: receipt.connectionId, profile: receipt.profile, session
+        },
+        seenAt: receipt.seenAt
+      })
     }
   }
 
@@ -367,8 +381,8 @@ export function ConsumerActivity({
         {unavailableApprovals.map(row => (
           <button
             className="flex w-full flex-col border-t border-(--ui-stroke-tertiary) px-3 py-3 text-left hover:bg-(--ui-control-hover-background)"
-            key={row.id}
-            onClick={() => onOpenChat(row.id, sessionById.get(row.id))}
+            key={JSON.stringify([row.connectionId, row.profile, row.id])}
+            onClick={() => onOpenChat(row.id, row.session)}
             type="button"
           >
             <span className="text-sm font-medium text-foreground">{row.title}</span>

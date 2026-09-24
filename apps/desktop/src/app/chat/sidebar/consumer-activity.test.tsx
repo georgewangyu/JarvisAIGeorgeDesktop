@@ -73,7 +73,9 @@ describe('consumer activity rows', () => {
     reconcileApprovalRecovery(local, worker.id, new Set())
 
     const rows = buildUnavailableApprovalRows([worker, visible], $approvalRecoveryReceipts.get())
-    expect(rows).toEqual([{ id: visible.id, title: 'Plan a trip' }])
+    expect(rows).toEqual([{
+      id: visible.id, title: 'Plan a trip', connectionId: 'local', profile: 'default', session: visible
+    }])
 
     const onOpenChat = vi.fn()
     render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={onOpenChat} sessions={[worker, visible]} />)
@@ -81,6 +83,37 @@ describe('consumer activity rows', () => {
     expect(screen.getByText('Approval no longer available · Review chat before retrying')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Plan a trip/ }))
     expect(onOpenChat).toHaveBeenCalledWith(visible.id, visible)
+  })
+
+  it('finds the exact approval owner when a foreign chat has the same stored id first', () => {
+    const foreign = { ...session('shared-id', 'Foreign chat', 20), connection_id: 'remote', profile: 'default' }
+    const local = { ...session('shared-id', 'My chat', 10), connection_id: 'local', profile: 'default' }
+
+    const receipt = {
+      connectionId: 'local', profile: 'default', storedSessionId: 'shared-id',
+      runtimeSessionId: 'runtime-local', requestId: 'request-local',
+      state: 'interrupted' as const, seenAt: 1
+    }
+
+    expect(buildUnavailableApprovalRows([foreign, local], [receipt])).toEqual([{
+      id: 'shared-id', title: 'My chat', connectionId: 'local', profile: 'default', session: local
+    }])
+
+    expect(buildUnavailableApprovalRows([foreign, local, { ...local }], [receipt])).toEqual([])
+
+    const foreignReceipt = { ...receipt, connectionId: 'remote', requestId: 'request-remote', seenAt: 2 }
+    expect(buildUnavailableApprovalRows([foreign, local], [receipt, foreignReceipt])).toEqual([
+      { id: 'shared-id', title: 'Foreign chat', connectionId: 'remote', profile: 'default', session: foreign },
+      { id: 'shared-id', title: 'My chat', connectionId: 'local', profile: 'default', session: local }
+    ])
+
+    const onOpenChat = vi.fn()
+    act(() => $approvalRecoveryReceipts.set([receipt, foreignReceipt]))
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={onOpenChat} sessions={[foreign, local]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    fireEvent.click(screen.getByRole('button', { name: /My chat/ }))
+    expect(onOpenChat).toHaveBeenCalledWith('shared-id', local)
+    act(() => $approvalRecoveryReceipts.set([]))
   })
 
   it('opens the owning visible chat when a live approval needs input, then clears attention', async () => {
