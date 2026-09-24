@@ -33,6 +33,8 @@ const copy = {
     appInventory: 'Apps on this Mac',
     appInventoryDetail:
       'Jarvis can see which apps are installed, but cannot read or use them yet.',
+    appInventoryCalendarConnectedDetail:
+      'Calendar is connected for this profile. Other listed apps are detection only and cannot be read or used yet.',
     appPending: 'Not connected',
     title: 'Settings',
     intro: 'Make Jarvis feel at home on your Mac.',
@@ -77,6 +79,7 @@ const copy = {
     },
     appInventory: 'このMacのアプリ',
     appInventoryDetail: 'インストール済みのアプリは確認できますが、Jarvisはまだその内容を読んだり操作したりできません。',
+    appInventoryCalendarConnectedDetail: 'このプロファイルではカレンダーが接続されています。ほかのアプリは検出のみで、内容の読み取りや操作はまだできません。',
     appPending: '未接続',
     title: '設定',
     intro: 'Macで使いやすいJarvisに。',
@@ -121,6 +124,7 @@ const copy = {
     },
     appInventory: '这台 Mac 上的应用',
     appInventoryDetail: 'Jarvis 可以识别已安装的应用，但目前还不能读取或操作这些应用。',
+    appInventoryCalendarConnectedDetail: '日历已连接到此配置文件。其他列出的应用仅被检测到，目前无法读取或操作。',
     appPending: '未连接',
     title: '设置',
     intro: '让 Jarvis 更适合你的 Mac。',
@@ -165,6 +169,7 @@ const copy = {
     },
     appInventory: '這台 Mac 上的應用程式',
     appInventoryDetail: 'Jarvis 可以辨識已安裝的應用程式，但目前還不能讀取或操作這些應用程式。',
+    appInventoryCalendarConnectedDetail: '日曆已連線至此設定檔。其他列出的應用程式僅被偵測到，目前無法讀取或操作。',
     appPending: '未連線',
     title: '設定',
     intro: '讓 Jarvis 更適合你的 Mac。',

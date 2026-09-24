@@ -503,7 +503,9 @@ export function ConnectionsView() {
       {appsMatch ? (
         <section className="mt-9">
           <h2 className="text-sm font-semibold">Apps</h2>
-          <p className="mt-1 text-sm text-(--ui-text-tertiary)">{s.appInventoryDetail}</p>
+          <p className="mt-1 text-sm text-(--ui-text-tertiary)">
+            {calendar?.connected ? s.appInventoryCalendarConnectedDetail : s.appInventoryDetail}
+          </p>
           <div className="mt-3 overflow-hidden rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
             {calendarMatch ? (
               <>

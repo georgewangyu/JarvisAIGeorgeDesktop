@@ -209,6 +209,7 @@ it('shows detected local apps without claiming their access is connected', async
   expect(screen.getByText('App detection only. WhatsApp access is not connected yet.')).toBeTruthy()
   expect(screen.getByText('Not installed')).toBeTruthy()
   expect(screen.getAllByText('Detected')).toHaveLength(3)
+  expect(screen.getByText(/cannot read or use them yet/)).toBeTruthy()
 
   for (const detected of screen.getAllByText('Detected')) {
     expect(detected.className).not.toContain('text-emerald')
@@ -265,6 +266,7 @@ it('does not read or request Calendar access during status check, and disconnect
 
   fireEvent.click(within(section).getByRole('button', { name: 'Connect' }))
   await waitFor(() => expect(within(section).getByText('Connected')).toBeTruthy())
+  expect(within(section).getByText('Calendar is connected for this profile. Other listed apps are detection only and cannot be read or used yet.')).toBeTruthy()
   fireEvent.click(within(section).getByRole('button', { name: 'View upcoming' }))
   await waitFor(() => expect(list).toHaveBeenCalledOnce())
   expect(within(section).getByText('No events in the next 7 days.')).toBeTruthy()
@@ -272,6 +274,7 @@ it('does not read or request Calendar access during status check, and disconnect
 
   fireEvent.click(within(section).getByRole('button', { name: 'Disconnect' }))
   await waitFor(() => expect(within(section).getByText('Not connected')).toBeTruthy())
+  expect(within(section).queryByText(/Calendar is connected for this profile/)).toBeNull()
   expect(within(section).queryByRole('button', { name: 'View upcoming' })).toBeNull()
   expect(within(section).queryByRole('button', { name: 'Create event' })).toBeNull()
 })
