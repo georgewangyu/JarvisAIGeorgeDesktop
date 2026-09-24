@@ -8,7 +8,7 @@ import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { useJarvisCopy } from '@/i18n/jarvis'
 import { triggerHaptic } from '@/lib/haptics'
-import { Ear, EarOff, iconSize, Layers3, Loader2, Square } from '@/lib/icons'
+import { Ear, EarOff, iconSize, Layers3, Loader2, Mic, Square } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { $hudMode, closeHud, resetHudLayout } from '@/store/hud'
 import { $wakeWord, toggleWakeWord } from '@/store/wake-word'
@@ -113,10 +113,23 @@ export function ComposerControls({
   // even the menu goes: at `minimal` the row is the send button and nothing
   // else, which is the one thing that must survive every width.
   const foldedVoice = hudMode || foldVoice || consumer
+  const directDictation = consumer && !hudMode && !foldVoice
+
+  const dictationLabel =
+    voiceStatus === 'recording'
+      ? c.stopDictation
+      : voiceStatus === 'starting'
+        ? c.startingDictation
+        : voiceStatus === 'stopping'
+          ? c.stoppingDictation
+          : voiceStatus === 'transcribing'
+            ? c.transcribingDictation
+            : c.voiceDictation
 
   const voiceControls = foldedVoice ? (
     <VoiceMenu
       autoSpeak={autoSpeak}
+      directDictation={directDictation}
       disabled={disabled}
       onDictate={onDictate}
       onStartConversation={conversation.onStart}
@@ -168,6 +181,31 @@ export function ComposerControls({
               {compactModelPill ? null : <ReasoningPill disabled={disabled} model={state.model} />}
             </>
           )}
+          {directDictation ? (
+            <Tip label={dictationLabel} placement="control">
+              <Button
+                aria-label={dictationLabel}
+                aria-pressed={voiceStatus === 'recording'}
+                className={cn(GHOST_ICON_BTN, (state.voice.active || voiceStatus !== 'idle') && ACTIVE_ICON_BTN)}
+                disabled={disabled || !state.voice.enabled || (voiceStatus !== 'idle' && voiceStatus !== 'recording')}
+                onClick={() => {
+                  triggerHaptic(voiceStatus === 'recording' ? 'close' : 'open')
+                  onDictate()
+                }}
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                {voiceStatus === 'recording' ? (
+                  <Square className={cn('fill-current', iconSize.xs)} />
+                ) : voiceStatus === 'starting' || voiceStatus === 'stopping' || voiceStatus === 'transcribing' ? (
+                  <Loader2 className={cn('animate-spin', iconSize.sm)} />
+                ) : (
+                  <Mic className={iconSize.sm} />
+                )}
+              </Button>
+            </Tip>
+          ) : null}
           {voiceControls}
         </>
       )}

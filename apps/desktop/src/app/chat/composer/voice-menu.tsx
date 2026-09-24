@@ -25,6 +25,7 @@ import { VoiceEngineRows } from './voice-engine-rows'
 export interface VoiceMenuProps {
   autoSpeak: boolean
   disabled: boolean
+  directDictation?: boolean
   state: ChatBarState
   voiceStatus: VoiceStatus
   onDictate: () => void
@@ -50,6 +51,7 @@ export interface VoiceMenuProps {
 export function VoiceMenu({
   autoSpeak,
   disabled,
+  directDictation = false,
   state,
   voiceStatus,
   onDictate,
@@ -65,7 +67,7 @@ export function VoiceMenu({
   const wakeListening = wake.listening
   // Anything live keeps the trigger lit, so a folded menu can never look idle
   // while the mic is open.
-  const active = dictating || wakeListening || autoSpeak
+  const active = (!directDictation && dictating) || wakeListening || autoSpeak
 
   const dictationLabel =
     voiceStatus === 'recording'
@@ -79,11 +81,11 @@ export function VoiceMenu({
         : c.voiceDictation
 
   const wakeLabel = wakeListening ? c.wakeWordListening(phrase) : c.wakeWordOff(phrase)
-  const triggerLabel = dictating ? dictationLabel : wakeListening ? wakeLabel : c.voiceControls
+  const triggerLabel = !directDictation && dictating ? dictationLabel : wakeListening ? wakeLabel : c.voiceControls
 
   return (
     <DropdownMenu>
-      <Tip label={wake.notice && !dictating ? `${triggerLabel} — ${wake.notice}` : triggerLabel} placement="control">
+      <Tip label={wake.notice && (directDictation || !dictating) ? `${triggerLabel} — ${wake.notice}` : triggerLabel} placement="control">
         <DropdownMenuTrigger asChild>
           <Button
             aria-label={triggerLabel}
@@ -93,14 +95,14 @@ export function VoiceMenu({
             type="button"
             variant="ghost"
           >
-            {voiceStatus === 'recording' ? (
+            {!directDictation && voiceStatus === 'recording' ? (
               <Square className={cn('fill-current', iconSize.xs)} />
-            ) : voiceStatus === 'starting' || voiceStatus === 'stopping' || voiceStatus === 'transcribing' ? (
+            ) : !directDictation && (voiceStatus === 'starting' || voiceStatus === 'stopping' || voiceStatus === 'transcribing') ? (
               <Loader2 className={cn('animate-spin', iconSize.sm)} />
             ) : wakeListening ? (
               <Ear className={iconSize.sm} />
             ) : (
-              <Codicon name="mic" size="0.875rem" />
+              directDictation ? <AudioLines className={iconSize.sm} /> : <Codicon name="mic" size="0.875rem" />
             )}
           </Button>
         </DropdownMenuTrigger>
@@ -123,20 +125,22 @@ export function VoiceMenu({
         {/* Checkbox items, because all three are toggles the user is reading
             the CURRENT state of — the reason they were pressed-state buttons
             before. A plain row would fold that state away with the menu. */}
-        <DropdownMenuCheckboxItem
-          checked={dictating}
-          className={dropdownMenuRow}
-          disabled={disabled || !state.voice.enabled || (voiceStatus !== 'idle' && voiceStatus !== 'recording')}
-          onSelect={event => {
-            // Keep the menu open: dictation is a mode you watch, and closing
-            // on select hides the recording state the trigger just entered.
-            event.preventDefault()
-            triggerHaptic(dictating ? 'close' : 'open')
-            onDictate()
-          }}
-        >
-          {dictationLabel}
-        </DropdownMenuCheckboxItem>
+        {directDictation ? null : (
+          <DropdownMenuCheckboxItem
+            checked={dictating}
+            className={dropdownMenuRow}
+            disabled={disabled || !state.voice.enabled || (voiceStatus !== 'idle' && voiceStatus !== 'recording')}
+            onSelect={event => {
+              // Keep the menu open: dictation is a mode you watch, and closing
+              // on select hides the recording state the trigger just entered.
+              event.preventDefault()
+              triggerHaptic(dictating ? 'close' : 'open')
+              onDictate()
+            }}
+          >
+            {dictationLabel}
+          </DropdownMenuCheckboxItem>
+        )}
         <DropdownMenuCheckboxItem
           checked={autoSpeak}
           className={dropdownMenuRow}

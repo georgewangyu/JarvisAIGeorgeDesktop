@@ -152,6 +152,49 @@ describe('narrow tiles', () => {
 })
 
 describe('consumer composer', () => {
+  it('starts and stops dictation directly while keeping advanced voice settings separate', () => {
+    const onDictate = vi.fn()
+    const enabledState = { ...state, voice: { active: false, enabled: true } }
+    const view = renderControls({ consumer: true, onDictate, state: enabledState })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Voice dictation' }))
+    expect(onDictate).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Voice' })).toBeTruthy()
+
+    view.rerender(
+      <I18nProvider configClient={null} initialLocale="en">
+        <ComposerControls
+          autoSpeak={false}
+          busy={false}
+          busyAction="stop"
+          canSubmit={true}
+          consumer={true}
+          conversation={{ active: false, level: 0, muted: false, onEnd: vi.fn(), onStart: vi.fn(), onStopTurn: vi.fn(), onToggleMute: vi.fn(), status: 'idle' }}
+          disabled={false}
+          hasComposerPayload={true}
+          onDictate={onDictate}
+          onQueue={vi.fn()}
+          onToggleAutoSpeak={vi.fn()}
+          state={{ ...enabledState, voice: { active: true, enabled: true } }}
+          voiceStatus="recording"
+        />
+      </I18nProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }))
+    expect(onDictate).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('button', { name: 'Voice' })).toBeTruthy()
+  })
+
+  it('reports dictation transitions and prevents another click during a pending phase', () => {
+    const onDictate = vi.fn()
+    renderControls({ consumer: true, onDictate, state: { ...state, voice: { active: true, enabled: true } }, voiceStatus: 'starting' })
+    const button = screen.getByRole('button', { name: 'Opening microphone' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    fireEvent.click(button)
+    expect(onDictate).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Voice' })).toBeTruthy()
+  })
+
   it('keeps the primary voice action without the extra engine dropdown', () => {
     renderControls({ consumer: true, hasComposerPayload: false })
     expect(screen.getByLabelText('Start voice conversation')).toBeTruthy()
