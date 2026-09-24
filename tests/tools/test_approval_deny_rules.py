@@ -251,6 +251,25 @@ class TestDenyOrdering:
         "env_type",
         ["docker", "singularity", "modal", "daytona", "vercel_sandbox"],
     )
+    def test_container_backend_cannot_skip_hardline(
+            self, guard, env_type, deny_config, clean_env, monkeypatch):
+        deny_config(["*"], mode="off")
+        monkeypatch.setattr(mod, "_YOLO_MODE_FROZEN", True)
+
+        result = guard("rm -rf /", env_type)
+
+        assert result["approved"] is False
+        assert result.get("hardline") is True
+        assert result.get("user_deny") is None
+
+    @pytest.mark.parametrize(
+        "guard",
+        [mod.check_dangerous_command, mod.check_all_command_guards],
+    )
+    @pytest.mark.parametrize(
+        "env_type",
+        ["docker", "singularity", "modal", "daytona", "vercel_sandbox"],
+    )
     def test_container_backend_still_skips_non_denied_command(
             self, guard, env_type, deny_config, clean_env):
         deny_config(["*chmod*"])

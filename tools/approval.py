@@ -1107,7 +1107,7 @@ def check_dangerous_command(command: str, env_type: str,
     a Docker sandbox that bind-mounts host paths must not skip approval.
     Returns ``{"approved": True/False, "message": str or None, ...}``."""
     if _should_skip_container_guards(env_type, has_host_access=has_host_access):
-        return _user_deny_block(command) or _approved()
+        return _floor_block(command) or _approved()
     blocked = _floor_block(command)
     if blocked is not None:
         return blocked
@@ -1200,7 +1200,7 @@ def check_all_command_guards(command: str, env_type: str,
     force=True replay cannot bypass one check when only the other was shown to the user.
     ``has_host_access``: a Docker sandbox with bind-mounted host paths takes the normal flow."""
     if _should_skip_container_guards(env_type, has_host_access=has_host_access):
-        return _user_deny_block(command) or _approved()
+        return _floor_block(command) or _approved()
 
     blocked = _floor_block(command, sudo_guard=True)
     if blocked is not None:
