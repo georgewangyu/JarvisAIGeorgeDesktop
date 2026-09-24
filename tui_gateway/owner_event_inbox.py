@@ -70,3 +70,55 @@ def owner_event_receipt(
 ) -> dict[str, Any] | None:
     """Inspect the exact event receipt after a producer or backend restart."""
     return read_delivery_result(profile_home, _event_delivery_id(source, event_id))
+
+
+def interrupted_jarvis_event_receipts(profile_home: Path | str) -> list[dict[str, Any]]:
+    """Describe claimed turns from a *retired* Jarvis lease without replaying them.
+
+    The result is intentionally metadata-only. A claim may have performed an
+    action before its process exited, so neither inspecting nor displaying it
+    may turn it back into queued work. A later consumer can offer a separately
+    reviewed retry, but must give that retry a new event identity.
+    """
+    from hermes_cli.active_sessions import active_session_registry_snapshot
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import _locked, _root, _scan_read
+
+    home = Path(profile_home).resolve()
+    if not _root(home).is_dir():
+        return []
+    owner = find_jarvis_live_owner(home)
+    if owner is None:
+        return []
+    live_leases = {
+        entry["lease_id"] for entry in active_session_registry_snapshot(
+            registry_home=home, strict=True)
+    }
+    db = SessionDB(db_path=home / "state.db", read_only=True)
+    try:
+        with _locked(home) as root:
+            interrupted = []
+            for path in root.glob("*.json"):
+                receipt = _scan_read(path)
+                if receipt is None or receipt.get("status") != "claimed":
+                    continue
+                pinned = receipt.get("owner")
+                if not isinstance(pinned, dict):
+                    continue
+                if (pinned.get("profile_home") != str(home)
+                        or pinned.get("lease_id") in live_leases
+                        or pinned.get("live_session_id") == owner["live_session_id"]):
+                    continue
+                original_session = pinned.get("session_id")
+                if not isinstance(original_session, str) or not original_session:
+                    continue
+                if db.get_compression_tip(original_session) != owner["session_id"]:
+                    continue
+                interrupted.append({
+                    "delivery_id": receipt["delivery_id"],
+                    "claimed_at": receipt.get("claimed_at"),
+                    "status": "outcome_unknown",
+                })
+    finally:
+        db.close()
+    return sorted(interrupted, key=lambda item: (item["claimed_at"] or 0, item["delivery_id"]))

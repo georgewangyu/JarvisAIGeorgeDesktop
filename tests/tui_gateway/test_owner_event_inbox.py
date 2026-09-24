@@ -161,3 +161,70 @@ def test_jarvis_event_admission_to_idle_turn_and_restart_receipt(tmp_path):
         str(tmp_path),
     ], check=True, capture_output=True, text=True)
     assert json.loads(observed.stdout)["status"] == "settled"
+
+
+def test_interrupted_jarvis_claim_is_reported_without_replay(tmp_path):
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import claim_pending_delivery, complete_delivery, find_jarvis_live_owner
+    from tui_gateway.owner_event_inbox import (
+        admit_jarvis_event, interrupted_jarvis_event_receipts, owner_event_receipt,
+    )
+
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+
+    def acquire(live_id):
+        lease, refusal = try_acquire_active_session(
+            session_id="main", surface="desktop", config={}, registry_home=tmp_path,
+            metadata={"live_session_id": live_id, "bot_live_delivery_consumer": True},
+        )
+        assert refusal is None
+        return lease
+
+    first_lease = acquire("first-runtime")
+    try:
+        first = admit_jarvis_event(tmp_path, source="calendar", event_id="first", text="Check event")
+        owner = find_jarvis_live_owner(tmp_path)
+        assert claim_pending_delivery(tmp_path, owner)["id"] == first["id"]
+        assert interrupted_jarvis_event_receipts(tmp_path) == []  # The old owner is still live.
+    finally:
+        first_lease.release()
+
+    assert interrupted_jarvis_event_receipts(tmp_path) == []  # No replacement owner yet.
+    second_lease = acquire("second-runtime")
+    try:
+        unknown = interrupted_jarvis_event_receipts(tmp_path)
+        assert unknown == [{
+            "delivery_id": first["id"],
+            "claimed_at": owner_event_receipt(tmp_path, source="calendar", event_id="first")["claimed_at"],
+            "status": "outcome_unknown",
+        }]
+        assert claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path)) is None
+        assert owner_event_receipt(tmp_path, source="calendar", event_id="first")["status"] == "claimed"
+
+        next_event = admit_jarvis_event(tmp_path, source="calendar", event_id="second", text="New event")
+        assert claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path))["id"] == next_event["id"]
+        complete_delivery(tmp_path, next_event["id"], status="settled", reply="Done")
+        assert interrupted_jarvis_event_receipts(tmp_path) == unknown
+
+        other_home = tmp_path / "other-profile"
+        other_home.mkdir()
+        other_db = SessionDB(db_path=other_home / "state.db")
+        other_db.create_session(session_id="main", source="desktop")
+        other_db.set_session_title("main", "Jarvis")
+        other_lease, refusal = try_acquire_active_session(
+            session_id="main", surface="desktop", config={}, registry_home=other_home,
+            metadata={"live_session_id": "other-runtime", "bot_live_delivery_consumer": True},
+        )
+        assert refusal is None
+        try:
+            assert interrupted_jarvis_event_receipts(other_home) == []
+            assert interrupted_jarvis_event_receipts(tmp_path) == unknown
+        finally:
+            other_lease.release()
+            other_db.close()
+    finally:
+        second_lease.release()
+        db.close()
