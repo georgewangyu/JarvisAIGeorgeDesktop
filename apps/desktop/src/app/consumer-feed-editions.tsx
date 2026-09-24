@@ -1,25 +1,36 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { type FeedEdition, generateFeedEdition, getFeedEditions } from '@/api/feed'
 import { MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $connection } from '@/store/session'
 
+import { feedEditionLovedKey, readLovedFeedEditions, setFeedEditionLoved } from './feed/edition-feedback'
+import { groupFeedEditionsByDay } from './feed/group-editions'
+import { readFeedPrompt, saveFeedPrompt } from './feed/prompt'
 import { NEW_CHAT_ROUTE } from './routes'
-
-const DEFAULT_PROMPT = 'Give me a concise briefing about what matters today. Use only information and sources you can actually access. Identify sources when available; if there is not enough information, say so.'
 
 export function ConsumerFeedEditions() {
   const navigate = useNavigate()
   const profile = useStore($activeGatewayProfile)
   const connection = useStore($connection)
   const connectionId = connection?.mode === 'remote' ? (connection.connectionId || connection.baseUrl) : null
-  const scope = `${profile}\u0000${connectionId ?? 'local'}`
-  const [prompt, setPrompt] = useState(DEFAULT_PROMPT)
+  const scope = feedEditionLovedKey(profile, connectionId)
+  const activeScope = useRef(scope)
+  activeScope.current = scope
+  const [promptSnapshot, setPromptSnapshot] = useState(() => ({ scope, value: readFeedPrompt(profile, connectionId) }))
+  const prompt = promptSnapshot.scope === scope ? promptSnapshot.value : readFeedPrompt(profile, connectionId)
+  const [editingPrompt, setEditingPrompt] = useState(false)
+  const [promptDraft, setPromptDraft] = useState(prompt)
+  const [promptError, setPromptError] = useState('')
+  const [lovedSnapshot, setLovedSnapshot] = useState(() => ({ scope, ids: readLovedFeedEditions(profile, connectionId) }))
+  const lovedEditions = lovedSnapshot.scope === scope ? lovedSnapshot.ids : readLovedFeedEditions(profile, connectionId)
+  const [feedbackError, setFeedbackError] = useState('')
   const [snapshot, setSnapshot] = useState<{ items: FeedEdition[]; scope: string }>({ items: [], scope })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -27,6 +38,17 @@ export function ConsumerFeedEditions() {
   const [refresh, setRefresh] = useState(0)
   const items = snapshot.scope === scope ? snapshot.items : []
   const generating = items.some(item => item.status === 'generating')
+
+  useEffect(() => {
+    setPromptSnapshot({ scope, value: readFeedPrompt(profile, connectionId) })
+    setPromptDraft(readFeedPrompt(profile, connectionId))
+    setPromptError('')
+    setEditingPrompt(false)
+    setLovedSnapshot({ scope, ids: readLovedFeedEditions(profile, connectionId) })
+    setFeedbackError('')
+    setBusy(false)
+    setError(null)
+  }, [connectionId, profile, scope])
 
   useEffect(() => {
     let cancelled = false
@@ -39,8 +61,8 @@ export function ConsumerFeedEditions() {
           setError(null)
         }
       })
-      .catch(err => {
-        if (!cancelled) {setError(err instanceof Error ? err.message : 'Could not load Feed editions.')}
+      .catch(() => {
+        if (!cancelled) {setError('Could not load Feed editions. Check your connection and try again.')}
       })
       .finally(() => {
         if (!cancelled) {setLoading(false)}
@@ -70,15 +92,48 @@ export function ConsumerFeedEditions() {
     try {
       const edition = await generateFeedEdition(profile, text, retry?.id)
 
+      if (activeScope.current !== scope) {return}
+
       setSnapshot(current => ({
-        items: [edition, ...current.items.filter(item => item.id !== edition.id)],
+        items: [edition, ...(current.scope === scope ? current.items : []).filter(item => item.id !== edition.id)],
         scope
       }))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start this Feed edition.')
+    } catch {
+      if (activeScope.current === scope) {setError('Could not start this Feed edition. Check your connection and try again.')}
     } finally {
-      setBusy(false)
+      if (activeScope.current === scope) {setBusy(false)}
     }
+  }
+
+  const editPrompt = () => {
+    setPromptDraft(prompt)
+    setPromptError('')
+    setEditingPrompt(true)
+  }
+
+  const savePrompt = () => {
+    if (!saveFeedPrompt(profile, connectionId, promptDraft)) {
+      setPromptError('Could not save Feed instructions on this Mac. Check the text and try again.')
+
+      return
+    }
+
+    setPromptSnapshot({ scope, value: promptDraft.trim() })
+    setEditingPrompt(false)
+    setPromptError('')
+  }
+
+  const toggleLove = (editionId: string) => {
+    const loved = !lovedEditions.includes(editionId)
+
+    if (!setFeedEditionLoved(profile, connectionId, editionId, loved)) {
+      setFeedbackError('Could not save that choice on this Mac. Please try again.')
+
+      return
+    }
+
+    setLovedSnapshot({ scope, ids: readLovedFeedEditions(profile, connectionId) })
+    setFeedbackError('')
   }
 
   const discuss = (edition: FeedEdition) => {
@@ -95,44 +150,68 @@ export function ConsumerFeedEditions() {
 
   return (
     <section aria-label="Feed editions" className="space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight">Your briefing</h2>
-        <p className="mt-1 text-sm text-(--ui-text-tertiary)">Write what you want Jarvis to cover. Generate runs your connected AI once and saves the result here.</p>
-      </div>
-      <div className="rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-4">
-        <label className="sr-only" htmlFor="feed-generation-prompt">What should this briefing cover?</label>
-        <textarea
-          className="min-h-28 w-full resize-y bg-transparent text-sm leading-6 outline-none placeholder:text-(--ui-text-tertiary)"
-          id="feed-generation-prompt"
-          maxLength={8000}
-          onChange={event => setPrompt(event.target.value)}
-          value={prompt}
-        />
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-xs text-(--ui-text-tertiary)">Check generated claims and links before acting on them.</span>
-          <Button disabled={!prompt.trim() || busy || generating} onClick={() => void generate()} size="sm">
-            {busy || generating ? 'Generating…' : 'Generate'}
-          </Button>
+      <div className="rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-6 py-6 shadow-sm">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-(--ui-text-tertiary)">Your Feed instructions</h2>
+        <p className="mt-5 whitespace-pre-wrap text-base leading-7 text-(--ui-text-primary)">{prompt}</p>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <span className="text-xs text-(--ui-text-tertiary)">Generated claims and links need your review.</span>
+          <div className="flex gap-2">
+            <Button onClick={editPrompt} size="sm" variant="secondary">Edit</Button>
+            <Button disabled={busy || generating} onClick={() => void generate()} size="sm">
+              {busy || generating ? 'Generating…' : 'Generate'}
+            </Button>
+          </div>
         </div>
+        <p className="mt-4 text-xs text-(--ui-text-tertiary)">Love is saved on this Mac; it does not change future briefings.</p>
       </div>
+      <Dialog onOpenChange={setEditingPrompt} open={editingPrompt}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Feed instructions</DialogTitle>
+            <DialogDescription>Choose what Jarvis should cover in future briefings. This preference stays on this Mac for this profile.</DialogDescription>
+          </DialogHeader>
+          <label className="text-sm font-medium" htmlFor="feed-generation-prompt">What should your Feed cover?</label>
+          <textarea
+            className="min-h-40 w-full resize-y rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-tertiary) p-4 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            id="feed-generation-prompt"
+            maxLength={8000}
+            onChange={event => setPromptDraft(event.target.value)}
+            value={promptDraft}
+          />
+          {promptError && <p className="text-sm text-destructive" role="alert">{promptError}</p>}
+          <DialogFooter>
+            <Button onClick={() => setEditingPrompt(false)} variant="secondary">Cancel</Button>
+            <Button disabled={!promptDraft.trim() || promptDraft.trim() === prompt} onClick={savePrompt}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {error && <div className="flex items-center gap-3 text-sm text-destructive" role="alert"><span>{error}</span><Button onClick={() => setRefresh(value => value + 1)} size="sm" variant="text">Retry load</Button></div>}
+      {feedbackError && <p className="text-sm text-destructive" role="alert">{feedbackError}</p>}
       {loading && items.length === 0 ? <p className="text-sm text-(--ui-text-tertiary)" role="status">Loading briefings…</p> : null}
       {!loading && items.length === 0 && !error ? <p className="text-sm text-(--ui-text-tertiary)">No briefings yet. Generate one when you’re ready.</p> : null}
-      {items.map(item => (
-        <article className="rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5" key={item.id}>
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-semibold">Briefing · {new Date(item.created_at).toLocaleDateString()}</h3>
-            <span className="text-xs text-(--ui-text-tertiary)">{item.status === 'generating' ? 'Working' : item.status === 'completed' ? 'Ready' : item.status === 'interrupted' ? 'Interrupted' : item.status === 'denied' ? 'Needs access' : 'Failed'}</span>
+      {groupFeedEditionsByDay(items).map(day => (
+        <section aria-label={day.label} className="pt-4" key={day.key}>
+          <h2 className="border-b border-(--ui-stroke-tertiary) pb-3 text-xs font-semibold uppercase tracking-[0.14em] text-(--ui-text-tertiary)">{day.label}</h2>
+          <div className="divide-y divide-(--ui-stroke-tertiary)">
+            {day.editions.map(item => (
+              <article className="py-7 first:pt-6" key={item.id}>
+                <div className="flex items-center justify-between gap-4 text-xs text-(--ui-text-tertiary)">
+                  <span className="font-medium">Jarvis briefing</span>
+                  <span>{item.status === 'generating' ? 'Working' : item.status === 'completed' ? 'Ready' : item.status === 'interrupted' ? 'Interrupted' : item.status === 'denied' ? 'Needs access' : 'Failed'}</span>
+                </div>
+                <h3 className="mt-3 line-clamp-2 text-xl font-semibold leading-snug tracking-tight text-(--ui-text-primary)">{item.prompt}</h3>
+                {item.status === 'completed' && item.content ? <div className="mt-5 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div> : null}
+                {item.status === 'generating' ? <p className="mt-5 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}
+                {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-5 text-sm text-destructive" role="alert">{item.error || 'This briefing did not finish.'}</p>}
+                <div className="mt-5 flex gap-3">
+                  {item.status === 'completed' && <Button aria-pressed={lovedEditions.includes(item.id)} onClick={() => toggleLove(item.id)} size="sm" variant="text">{lovedEditions.includes(item.id) ? 'Loved' : 'Love'}</Button>}
+                  {item.status === 'completed' && <Button onClick={() => discuss(item)} size="sm" variant="textStrong">Discuss</Button>}
+                  {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <Button disabled={busy || generating} onClick={() => void generate(item)} size="sm" variant="textStrong">Try again</Button>}
+                </div>
+              </article>
+            ))}
           </div>
-          <p className="mt-2 text-xs text-(--ui-text-tertiary)">Your prompt: {item.prompt}</p>
-          {item.status === 'completed' && item.content ? <div className="mt-4 text-sm leading-6"><MarkdownTextContent isRunning={false} text={item.content} /></div> : null}
-          {item.status === 'generating' ? <p className="mt-4 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}
-          {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-4 text-sm text-destructive" role="alert">{item.error || 'This briefing did not finish.'}</p>}
-          <div className="mt-4 flex gap-3">
-            {item.status === 'completed' && <Button onClick={() => discuss(item)} size="sm" variant="textStrong">Discuss</Button>}
-            {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <Button disabled={busy || generating} onClick={() => void generate(item)} size="sm" variant="textStrong">Try again</Button>}
-          </div>
-        </article>
+        </section>
       ))}
     </section>
   )

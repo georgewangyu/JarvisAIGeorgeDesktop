@@ -52,9 +52,15 @@ export function ConsumerFeedUpdates() {
   const connection = useStore($connection)
   const changeTick = useStore($cronChangeTick)
   const [retry, setRetry] = useState(0)
-  const [state, setState] = useState<FeedUpdateState>({ kind: 'loading' })
   const connectionId = connection?.mode === 'remote' ? (connection.connectionId || connection.baseUrl) : null
   const feedbackScope = feedLovedKey(profile, connectionId)
+
+  const [snapshot, setSnapshot] = useState<{ scope: string; state: FeedUpdateState }>({
+    scope: feedbackScope,
+    state: { kind: 'loading' }
+  })
+
+  const state: FeedUpdateState = snapshot.scope === feedbackScope ? snapshot.state : { kind: 'loading' }
 
   const [lovedSnapshot, setLovedSnapshot] = useState<{ scope: string; ids: string[] }>(() => ({
     scope: feedbackScope,
@@ -92,16 +98,16 @@ export function ConsumerFeedUpdates() {
     let cancelled = false
 
     if (selectedJobs.length === 0) {
-      setState({ items: [], kind: 'ready', partialFailure: false })
+      setSnapshot({ scope: feedbackScope, state: { items: [], kind: 'ready', partialFailure: false } })
 
       return
     }
 
-    setState({ kind: 'loading' })
+    setSnapshot({ scope: feedbackScope, state: { kind: 'loading' } })
     void Promise.all(selectedJobs.map(async job => {
       const runs = await getCronJobRuns(job.id, FEED_RUN_LIMIT)
 
-      const outcomes = await Promise.all(runs.filter(run => !run.is_active).map(async run => {
+      const outcomes = await Promise.all(runs.filter(run => !run.is_active && (!run.profile || run.profile === profile)).map(async run => {
         try {
           const owner = { profile: run.profile || profile, connectionId: connection?.connectionId }
           const result = await getSessionMessages(run.id, owner, { limit: 100, order: 'latest' }, { passive: true })
@@ -124,9 +130,12 @@ export function ConsumerFeedUpdates() {
           .sort((a, b) => b.time - a.time)
 
         const partialFailure = results.some(result => result.failed)
-        setState(items.length === 0 && partialFailure
-          ? { kind: 'error' }
-          : { items, kind: 'ready', partialFailure })
+        setSnapshot({
+          scope: feedbackScope,
+          state: items.length === 0 && partialFailure
+            ? { kind: 'error' }
+            : { items, kind: 'ready', partialFailure }
+        })
       })
 
     return () => {
@@ -134,7 +143,7 @@ export function ConsumerFeedUpdates() {
     }
     // ID and run time identify the lookup; cron.changed also refreshes it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobSignature, profile, connection?.connectionId, changeTick, retry])
+  }, [jobSignature, profile, connectionId, changeTick, retry])
 
   if (jobs.length === 0) {
     return null

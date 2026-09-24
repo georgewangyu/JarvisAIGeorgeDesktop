@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
@@ -81,6 +81,38 @@ it('does not invent a Feed update when an automation has no completed answer', a
   $cronJobs.set([{ id: 'quiet', name: 'Quiet task', enabled: true }])
   vi.mocked(getCronJobRuns).mockResolvedValue([])
 
+  render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+
+  expect(await screen.findByText('Completed automations will appear here after they produce an answer.')).toBeTruthy()
+  expect(getSessionMessages).not.toHaveBeenCalled()
+})
+
+it('does not show a prior profile update while the next profile loads', async () => {
+  $cronJobs.set([{ id: 'personal-job', name: 'Personal briefing', enabled: true }])
+  vi.mocked(getCronJobRuns).mockImplementation(async id => [makeSessionInfo({
+    id: `${id}-run`,
+    is_active: false,
+    last_active: 100,
+    profile: id === 'personal-job' ? 'default' : 'work'
+  })])
+  vi.mocked(getSessionMessages).mockImplementation(async id => ({
+    messages: [{ role: 'assistant', content: id === 'personal-job-run' ? 'Personal answer.' : 'Work answer.' }]
+  }) as never)
+  render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
+
+  expect(await screen.findByText('Personal answer.')).toBeTruthy()
+  act(() => { $activeGatewayProfile.set('work') })
+  expect(screen.queryByText('Personal answer.')).toBeNull()
+  act(() => { $cronJobs.set([{ id: 'work-job', name: 'Work briefing', enabled: true }]) })
+  expect(await screen.findByText('Work answer.')).toBeTruthy()
+  expect(screen.queryByText('Personal answer.')).toBeNull()
+})
+
+it('refuses a run explicitly owned by another profile', async () => {
+  $cronJobs.set([{ id: 'shared-id', name: 'Briefing', enabled: true }])
+  vi.mocked(getCronJobRuns).mockResolvedValue([
+    makeSessionInfo({ id: 'other-profile-run', is_active: false, profile: 'work', last_active: 100 })
+  ])
   render(<MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>)
 
   expect(await screen.findByText('Completed automations will appear here after they produce an answer.')).toBeTruthy()
