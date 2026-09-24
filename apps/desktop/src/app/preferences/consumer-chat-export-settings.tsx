@@ -53,7 +53,7 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
       <p className="mt-2 max-w-xl text-sm text-muted-foreground">
         Download visible Jarvis conversations from this Mac. This export includes chat text, which may contain personal details. It does not include files, credentials, or other agent data.
       </p>
-      <Button className="mt-4" disabled={!local} onClick={() => {setError(''); setOpen(true)}} variant="secondary">
+      <Button className="mt-4" disabled={!local} onClick={() => {setError(''); setResult(''); setOpen(true)}} variant="secondary">
         Download chat history
       </Button>
       {!local && <p className="mt-2 text-xs text-muted-foreground">Available when Jarvis is running on this Mac.</p>}

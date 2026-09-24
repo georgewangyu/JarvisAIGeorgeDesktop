@@ -57,3 +57,23 @@ it('reports an export refusal without claiming a saved file and permits retry', 
   fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
   expect(await screen.findByText('1 chat saved to the location you chose.')).toBeTruthy()
 })
+
+it('retires a previous success before a new export that the backend refuses', async () => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { selectSavePath: pick }
+  pick.mockResolvedValue('/synthetic/chat-history.jsonl')
+  exportChats.mockResolvedValueOnce({ ok: true, chats: 2, messages: 4 }).mockResolvedValueOnce({ ok: false })
+  render(<ConsumerChatExportSettings profile="synthetic" />)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Download chat history' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
+  expect(await screen.findByRole('status')).toHaveProperty('textContent', '2 chats saved to the location you chose.')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Download chat history' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
+
+  expect((await screen.findByRole('alert')).textContent).toContain('Could not save chat history')
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByText('2 chats saved to the location you chose.')).toBeNull()
+  expect(exportChats).toHaveBeenNthCalledWith(2, 'synthetic', '/synthetic/chat-history.jsonl')
+})
