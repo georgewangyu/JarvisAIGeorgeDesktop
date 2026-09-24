@@ -2924,7 +2924,7 @@
     },
     {
       "name": "session.goals.create",
-      "summary": "Persist a passive consumer goal without starting an agent turn or autonomous loop.",
+      "summary": "Persist a passive consumer goal, optionally linked to an existing visible chat, without starting an agent turn or autonomous loop.",
       "params": [
         {
           "name": "params",
@@ -25897,6 +25897,18 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "source_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Session Id"
           }
         },
         "required": [

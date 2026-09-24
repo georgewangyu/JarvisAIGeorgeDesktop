@@ -78,6 +78,7 @@ import { useSessionView } from './session-view'
 import { OPEN_CONSUMER_CHATS_EVENT } from './sidebar'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
+import { TrackChatGoal } from './track-chat-goal'
 import {
   backfillOlderTranscriptPage,
   mergeOlderTranscriptPage,
@@ -171,14 +172,19 @@ function ChatHeader({
           <span>Chats</span>
         </button>
         <span className="consumer-chat-title">{title === NEW_SESSION_TITLE ? 'Jarvis' : title}</span>
-        <button
-          className="consumer-header-pill consumer-automations-trigger"
-          onClick={() => navigate(CRON_ROUTE)}
-          type="button"
-        >
-          <Codicon aria-hidden name="watch" size="0.9rem" />
-          <span>Automations</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {activeStoredSession && activeStoredSession.message_count > 0 ? (
+            <TrackChatGoal sessionId={activeStoredSession.id} sessionTitle={title} />
+          ) : null}
+          <button
+            className="consumer-header-pill consumer-automations-trigger"
+            onClick={() => navigate(CRON_ROUTE)}
+            type="button"
+          >
+            <Codicon aria-hidden name="watch" size="0.9rem" />
+            <span>Automations</span>
+          </button>
+        </div>
       </header>
     )
   }

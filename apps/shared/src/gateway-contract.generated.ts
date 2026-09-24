@@ -856,6 +856,7 @@ export interface WaitBarrierTarget {
 export interface SessionGoalCreateParams {
   profile?: string | null
   title: string
+  source_session_id?: string | null
 }
 export interface SessionGoalCreateResult {
   goal: SessionGoalListRow
@@ -4542,7 +4543,7 @@ export interface RpcMethods {
   'session.foreign.list': { params: SessionForeignListParams; result: SessionForeignListResult }
   /** Preview a foreign session's tail before importing it. */
   'session.foreign.preview': { params: SessionForeignIdParams; result: SessionForeignPreviewResult }
-  /** Persist a passive consumer goal without starting an agent turn or autonomous loop. */
+  /** Persist a passive consumer goal, optionally linked to an existing visible chat, without starting an agent turn or autonomous loop. */
   'session.goals.create': { params: SessionGoalCreateParams; result: SessionGoalCreateResult }
   /** List persisted goals for visible conversations without resuming agent sessions. */
   'session.goals.list': { params: SessionGoalsListParams; result: SessionGoalsListResult }

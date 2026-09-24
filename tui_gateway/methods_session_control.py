@@ -219,7 +219,7 @@ def _(rid, params: dict) -> dict:
             # This is the same visible-conversation boundary as session.list.
             # A bounded recent window prevents a large history from blocking the UI.
             rows = db.list_sessions_rich(source=None, limit=500, order_by_last_active=True, compact_rows=True)
-            denied = frozenset(INTERNAL_LISTING_SOURCES)
+            denied = frozenset(INTERNAL_LISTING_SOURCES) | {"subagent", "cron"}
             for row in rows:
                 if (row.get("source") or "").strip().lower() in denied:
                     continue
@@ -246,31 +246,54 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     """Save a passive consumer goal. Creation never starts the autonomous /goal loop."""
     from hermes_cli.goals import GoalState
+    from hermes_state_sessions import INTERNAL_LISTING_SOURCES
 
     raw_title = params.get("title")
     title = raw_title.strip() if isinstance(raw_title, str) else ""
     if not title or len(title) > 200:
         return _err(rid, 4004, "goal title must be 1–200 characters")
 
+    source_id = params.get("source_session_id")
+    if source_id is not None and (not isinstance(source_id, str) or not source_id.strip()):
+        return _err(rid, 4004, "source_session_id must name a chat")
+
     with _profile_db(params, writer=True) as db:
         if db is None:
             return _err(rid, 5031, "session store unavailable")
-        session_id = f"desktop-goal-{uuid.uuid4().hex}"
+        denied = frozenset(INTERNAL_LISTING_SOURCES) | {"subagent", "cron"}
+        try:
+            source_row = None
+            if source_id is not None:
+                source_id = source_id.strip()
+                source_row = db.get_session(source_id)
+                if (not source_row or source_row.get("hidden") or source_row.get("archived") or
+                        (source_row.get("source") or "").strip().lower() in denied):
+                    return _err(rid, 4004, "chat is not available for goal tracking")
+                session_id = db.get_compression_tip(source_id) or source_id
+                if db.get_meta(f"goal:{session_id}"):
+                    return _err(rid, 4004, "chat already has a goal")
+            else:
+                session_id = f"desktop-goal-{uuid.uuid4().hex}"
+        except Exception as exc:
+            logger.debug("session.goals.create validation failed: %s", exc, exc_info=True)
+            return _err(rid, 5031, "could not inspect chat for goal tracking")
         state = GoalState(goal=title, status="paused", paused_reason="consumer_tracking", created_at=time.time())
         try:
-            db.create_session(session_id, source="desktop")
-            if not db.set_session_title(session_id, title):
-                raise RuntimeError("could not title goal session")
+            if source_row is None:
+                db.create_session(session_id, source="desktop")
+                if not db.set_session_title(session_id, title):
+                    raise RuntimeError("could not title goal session")
             db.set_meta(f"goal:{session_id}", state.to_json())
             return _ok(rid, {"goal": {"session_id": session_id,
-                                         "session_title": title,
+                                         "session_title": (source_row.get("title") or "") if source_row else title,
                                          "goal": _safe_goal_snapshot(state)}})
         except Exception as exc:
             # Only this newly minted, otherwise empty session may be compensated.
-            try:
-                db.delete_session(session_id)
-            except Exception:
-                logger.warning("Could not compensate failed goal create", exc_info=True)
+            if source_row is None:
+                try:
+                    db.delete_session(session_id)
+                except Exception:
+                    logger.warning("Could not compensate failed goal create", exc_info=True)
             logger.debug("session.goals.create failed: %s", exc, exc_info=True)
             return _err(rid, 5031, "could not save goal")
 
@@ -290,10 +313,11 @@ def _(rid, params: dict) -> dict:
     with _profile_db(params, writer=True) as db:
         if db is None:
             return _err(rid, 5031, "session store unavailable")
+        denied = frozenset(INTERNAL_LISTING_SOURCES) | {"subagent", "cron"}
         try:
             row = db.get_session(session_id)
             if (not row or row.get("hidden") or row.get("archived") or
-                    (row.get("source") or "").strip().lower() in INTERNAL_LISTING_SOURCES):
+                    (row.get("source") or "").strip().lower() in denied):
                 return _err(rid, 4004, "goal is not available")
             tip = db.get_compression_tip(session_id) or session_id
             meta_key = f"goal:{tip}"

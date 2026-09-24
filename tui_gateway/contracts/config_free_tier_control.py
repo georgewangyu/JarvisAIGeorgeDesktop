@@ -424,6 +424,7 @@ method("session.goals.list", params=SessionGoalsListParams, result=SessionGoalsL
 
 class SessionGoalCreateParams(ProfileParams):
     title: str
+    source_session_id: str | None = None
 
 
 class SessionGoalCreateResult(Result):
@@ -431,7 +432,7 @@ class SessionGoalCreateResult(Result):
 
 
 method("session.goals.create", params=SessionGoalCreateParams, result=SessionGoalCreateResult,
-       doc="Persist a passive consumer goal without starting an agent turn or autonomous loop.")
+       doc="Persist a passive consumer goal, optionally linked to an existing visible chat, without starting an agent turn or autonomous loop.")
 
 
 class SessionGoalSetCompletedParams(ProfileParams):

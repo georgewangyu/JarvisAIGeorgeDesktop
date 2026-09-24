@@ -170,6 +170,48 @@ def test_consumer_goal_create_rejects_blank_or_oversized_title(server):
     assert _call(server, "session.goals.list")["result"]["goals"] == []
 
 
+def test_consumer_goal_can_track_an_existing_chat_without_replacing_its_history(server):
+    from hermes_cli.goals import GoalState
+
+    db = server._get_db()
+    db.create_session("clarified-chat", source="desktop")
+    db.set_session_title("clarified-chat", "A walk plan")
+    db.append_message("clarified-chat", "user", "I want to walk more regularly")
+    db.append_message("clarified-chat", "assistant", "What schedule feels realistic?")
+    original = db.get_session("clarified-chat")
+    original_messages = db.get_messages_as_conversation("clarified-chat")
+
+    response = _call(server, "session.goals.create", title="Walk three times a week",
+                     source_session_id="clarified-chat")
+
+    assert "error" not in response
+    assert response["result"]["goal"]["session_id"] == "clarified-chat"
+    assert response["result"]["goal"]["session_title"] == "A walk plan"
+    assert db.get_session("clarified-chat") == original
+    assert db.get_messages_as_conversation("clarified-chat") == original_messages
+    assert GoalState.from_json(db.get_meta("goal:clarified-chat")).paused_reason == "consumer_tracking"
+    assert [row["session_id"] for row in _call(server, "session.goals.list")["result"]["goals"]] == ["clarified-chat"]
+    assert _call(server, "session.goals.set_completed", session_id="clarified-chat", completed=True)["result"]["goal"]["goal"]["status"] == "done"
+    assert not server._sessions
+
+
+def test_consumer_goal_refuses_missing_hidden_internal_and_duplicate_chat(server):
+    db = server._get_db()
+    db.create_session("hidden-chat", source="desktop")
+    db.set_session_hidden("hidden-chat", True)
+    db.create_session("worker-chat", source="subagent")
+    db.create_session("visible-chat", source="desktop")
+
+    for source_id in ("missing-chat", "hidden-chat", "worker-chat", " ", 7):
+        response = _call(server, "session.goals.create", title="A goal", source_session_id=source_id)
+        assert response["error"]["code"] == 4004
+
+    assert "error" not in _call(server, "session.goals.create", title="A goal", source_session_id="visible-chat")
+    duplicate = _call(server, "session.goals.create", title="Another goal", source_session_id="visible-chat")
+    assert duplicate["error"]["code"] == 4004
+    assert len(_call(server, "session.goals.list")["result"]["goals"]) == 1
+
+
 def test_goals_completion_toggle_persists_without_resuming_agent(server):
     from hermes_cli.goals import GoalState
 

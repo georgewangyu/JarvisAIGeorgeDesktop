@@ -525,7 +525,7 @@ export function ConsumerGoalsView() {
           <section className="max-w-2xl">
             <h2 className="text-xl font-semibold tracking-tight">Create a goal</h2>
             <p className="mt-2 text-sm leading-6 text-(--ui-text-secondary)">
-              Choose a topic. You and Jarvis can clarify the outcome in chat before tracking it here.
+              Choose a topic. After you clarify it with Jarvis, use Track goal in that chat to keep the conversation with your goal.
             </p>
             <div className="mt-6 space-y-1">
               {GOAL_STARTERS.map(starter => (
@@ -568,7 +568,7 @@ export function ConsumerGoalsView() {
                   {selectedStarter[0] === 'Something else' ? 'Create a goal' : `Create a ${selectedStarter[0].toLowerCase()} goal`}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-(--ui-text-secondary)" id="goal-setup-description">
-                  Jarvis can help you shape this goal in chat. The message stays editable until you send it.
+                  Jarvis can help you shape this goal in chat. The message stays editable until you send it; Track goal there to save the conversation.
                 </p>
               </div>
               <Button aria-label="Close goal setup" disabled={savingGoal} onClick={closeGoalSetup} size="sm" variant="ghost">Close</Button>
