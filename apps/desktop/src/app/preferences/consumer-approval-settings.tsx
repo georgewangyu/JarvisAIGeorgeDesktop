@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { $approvalModes, type ApprovalMode, setApprovalModeForProfile, syncApprovalModeForProfile } from '@/store/approval-mode'
@@ -9,7 +9,7 @@ import { requestGatewayForProfile } from '@/store/gateway'
 const OPTIONS: { description: string; label: string; mode: ApprovalMode }[] = [
   { mode: 'smart', label: 'Balanced', description: 'Handle routine actions and ask when approval is needed.' },
   { mode: 'manual', label: 'Ask more often', description: 'Ask before actions that require tool approval.' },
-  { mode: 'off', label: 'Fewer prompts', description: 'Skip normal tool approval prompts. Mac permissions and hard safety blocks still apply.' }
+  { mode: 'off', label: 'Fewer prompts', description: 'Skip normal tool approval prompts. Mac permissions still apply; some destructive terminal commands remain blocked.' }
 ]
 
 export function ConsumerApprovalSettings({ profile }: { profile: string }) {
@@ -18,6 +18,9 @@ export function ConsumerApprovalSettings({ profile }: { profile: string }) {
   const [state, setState] = useState<'error' | 'loading' | 'ready' | 'saving'>('loading')
   const [writeError, setWriteError] = useState(false)
   const [retry, setRetry] = useState(0)
+  const scopeEpoch = useRef(0)
+
+  useEffect(() => () => { scopeEpoch.current += 1 }, [profile])
 
   const request = useCallback((method: string, params?: Record<string, unknown>) =>
     requestGatewayForProfile(profile, method, params ?? {}, undefined, undefined, { spawnPriority: 'foreground' }), [profile])
@@ -47,24 +50,29 @@ export function ConsumerApprovalSettings({ profile }: { profile: string }) {
       return
     }
 
+    const epoch = scopeEpoch.current
+
     if (next === 'off' && !await confirm({
       title: 'Use fewer approval prompts?',
-      description: 'Jarvis will skip normal tool approval prompts for this AI profile. Mac permissions and hard safety blocks still apply. You can change this later.',
+      description: 'Jarvis will skip normal tool approval prompts for this AI profile. Mac permissions still apply; some destructive terminal commands remain blocked. You can change this later.',
       confirmLabel: 'Use fewer prompts'
     })) {
       return
     }
+
+    if (scopeEpoch.current !== epoch) {return}
 
     setWriteError(false)
     setState('saving')
 
     try {
       const saved = await setApprovalModeForProfile(request, profile, next)
-      setWriteError(saved !== next)
+
+      if (scopeEpoch.current === epoch) {setWriteError(saved !== next)}
     } catch {
-      setWriteError(true)
+      if (scopeEpoch.current === epoch) {setWriteError(true)}
     } finally {
-      setState('ready')
+      if (scopeEpoch.current === epoch) {setState('ready')}
     }
   }
 

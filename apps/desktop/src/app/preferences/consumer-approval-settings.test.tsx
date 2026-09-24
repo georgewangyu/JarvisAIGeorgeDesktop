@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
 import { $approvalModes } from '@/store/approval-mode'
@@ -61,8 +61,12 @@ it('requires explicit confirmation for fewer prompts and rolls back a refused wr
   render(<ConsumerApprovalSettings profile="work" />)
 
   const fewerPrompts = await screen.findByRole('radio', { name: /Fewer prompts/ })
+  expect(screen.getByText(/some destructive terminal commands remain blocked/)).toBeTruthy()
   fireEvent.click(fewerPrompts)
   await waitFor(() => expect(confirm).toHaveBeenCalledOnce())
+  expect(confirm).toHaveBeenCalledWith(expect.objectContaining({
+    description: expect.stringContaining('some destructive terminal commands remain blocked')
+  }))
   expect(requestGatewayForProfile).toHaveBeenCalledTimes(1)
 
   fireEvent.click(fewerPrompts)
@@ -70,6 +74,33 @@ it('requires explicit confirmation for fewer prompts and rolls back a refused wr
   expect(screen.getByRole('radio', { name: /Ask more often/ })).toHaveProperty('checked', true)
   expect(requestGatewayForProfile).toHaveBeenCalledWith(
     'work', 'config.set', { key: 'approvals.mode', value: 'off' }, undefined, undefined,
+    { spawnPriority: 'foreground' }
+  )
+})
+
+it('expires a pending fewer-prompts confirmation across an A→B→A profile switch', async () => {
+  let accept!: (value: boolean) => void
+  confirm.mockImplementation(() => new Promise<boolean>(resolve => {accept = resolve}))
+  requestGatewayForProfile.mockResolvedValue({ value: 'manual' })
+
+  const view = render(<ConsumerApprovalSettings profile="work" />)
+  fireEvent.click(await screen.findByRole('radio', { name: /Fewer prompts/ }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledOnce())
+
+  view.rerender(<ConsumerApprovalSettings profile="personal" />)
+  expect(await screen.findByRole('radio', { name: /Ask more often/ })).toHaveProperty('checked', true)
+  view.rerender(<ConsumerApprovalSettings profile="work" />)
+  await waitFor(() => expect(requestGatewayForProfile.mock.calls.filter(
+    ([profile, method]) => profile === 'work' && method === 'config.get'
+  )).toHaveLength(2))
+
+  await act(async () => {accept(true)})
+  expect(requestGatewayForProfile).not.toHaveBeenCalledWith(
+    'work', 'config.set', { key: 'approvals.mode', value: 'off' }, undefined, undefined,
+    { spawnPriority: 'foreground' }
+  )
+  expect(requestGatewayForProfile).not.toHaveBeenCalledWith(
+    'personal', 'config.set', { key: 'approvals.mode', value: 'off' }, undefined, undefined,
     { spawnPriority: 'foreground' }
   )
 })
