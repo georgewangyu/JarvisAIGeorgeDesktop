@@ -115,9 +115,13 @@ class TestDetectDangerousRm:
 
 
     def test_nonrecursive_verification_artifact_cleanup_is_not_dangerous(self):
+        # The exemption accepts only the canonical temp directory. On macOS,
+        # /tmp is an OS symlink to /private/tmp, so spell the operand as the
+        # detector sees it rather than weakening the symlink boundary.
+        canonical_temp = os.path.realpath("/tmp")
         with mock_patch("tempfile.gettempdir", return_value="/tmp"):
             for prefix in ("hermes-verify-", "hermes-ad-hoc-"):
-                assert detect_dangerous_command(f"rm -f /tmp/{prefix}example.py") == (
+                assert detect_dangerous_command(f"rm -f {canonical_temp}/{prefix}example.py") == (
                     False,
                     None,
                     None,
