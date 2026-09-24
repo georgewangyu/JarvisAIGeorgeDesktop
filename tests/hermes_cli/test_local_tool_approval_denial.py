@@ -10,10 +10,11 @@ def test_local_tool_approval_denial_releases_agent_and_gateway(monkeypatch):
 
     session_id = "synthetic-tool-approval-ui"
     session_key = "synthetic-tool-approval-agent"
+    mode = ["manual"]
     monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
     monkeypatch.setenv("HERMES_EXEC_ASK", "1")
     monkeypatch.setattr(approval, "_YOLO_MODE_FROZEN", False)
-    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "manual")
+    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: mode[0])
     server._sessions[session_id] = {"session_key": session_key, "history": []}
     approval.register_gateway_notify(
         session_key, lambda data: server._emit_approval_request(session_id, data)
@@ -46,6 +47,12 @@ def test_local_tool_approval_denial_releases_agent_and_gateway(monkeypatch):
         assert request["method"] == "approval"
         assert approval.has_blocking_approval(session_key)
         assert request["params"]["request_id"] == approval.list_gateway_approvals(session_key)[0]["request_id"]
+
+        # A settings change after a prompt is issued must not silently grant
+        # that already-pending action. The user still has to resolve it.
+        mode[0] = "off"
+        assert approval.has_blocking_approval(session_key)
+        assert len(server_requests.open_requests(session_id)) == 1
 
         # A supported local RPC response denies the pending tool call.
         reply = server.handle_request({
