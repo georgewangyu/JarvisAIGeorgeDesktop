@@ -1,9 +1,15 @@
 """The opt-in event consumer uses real profile stores, leases and gateway turns."""
 
 import contextlib
+import http.server
+import json
+import os
+import subprocess
+import sys
 import threading
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -206,3 +212,91 @@ def test_compute_host_mode_refuses_before_claim_or_model_call(tmp_path, monkeypa
     assert owner_event_receipt(home, source="test", event_id="same")["status"] == "deferred"
     assert [agent.session_api_calls for agent in agents] == [0]
     assert server._sessions == {}
+
+
+def test_module_entrypoint_settles_one_event_with_loopback_provider(tmp_path):
+    """The real ``python -m`` entrypoint carries its creation proof across imports."""
+    from tui_gateway.owner_event_inbox import owner_event_receipt
+
+    home, event = _profile(tmp_path, "default")
+    calls = []
+
+    class Provider(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_error(404)
+
+        def do_POST(self):
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            calls.append(request)
+            answer = {
+                "id": "chatcmpl-headless-test", "object": "chat.completion", "created": 1,
+                "model": "test-model", "choices": [{
+                    "index": 0, "message": {"role": "assistant", "content": "ONE_EVENT_SETTLED"},
+                    "finish_reason": "stop",
+                }],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25},
+            }
+            if request.get("stream"):
+                answer["object"] = "chat.completion.chunk"
+                answer["choices"][0]["delta"] = answer["choices"][0].pop("message")
+                raw = ("data: " + json.dumps(answer) + "\n\ndata: [DONE]\n\n").encode()
+                content_type = "text/event-stream"
+            else:
+                raw = json.dumps(answer).encode()
+                content_type = "application/json"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, _format, *_args):
+            pass
+
+    provider = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+    thread = threading.Thread(target=provider.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{provider.server_port}/v1"
+    (home / "config.yaml").write_text(
+        "model:\n  provider: custom\n  default: test-model\n"
+        f"  base_url: {base_url}\n  api_mode: chat_completions\n"
+        "memory:\n  memory_enabled: false\n  user_profile_enabled: false\n"
+        "terminal:\n  env: local\n",
+        encoding="utf-8",
+    )
+    clean = {key: os.environ[key] for key in ("PATH", "TMPDIR", "LANG") if key in os.environ}
+    clean.update({
+        "HERMES_HOME": str(home),
+        "HERMES_SHARED_AUTH_DIR": str(tmp_path / "shared-auth"),
+        "HERMES_MANAGED_DIR": str(tmp_path / "managed"),
+        "TERMINAL_CWD": str(tmp_path),
+        "OPENAI_BASE_URL": base_url,
+        "OPENAI_API_KEY": "local-test-only",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
+    })
+    command = [
+        sys.executable, "-m", "tui_gateway.headless_owner_event",
+        "--profile", "default", "--delivery-id", event["id"],
+        "--allow-headless", "--wait-seconds", "25",
+    ]
+    try:
+        result = subprocess.run(
+            command, cwd=tmp_path, env=clean, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=35,
+        )
+        repeat = subprocess.run(
+            command, cwd=tmp_path, env=clean, stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=10,
+        )
+    finally:
+        provider.shutdown()
+        provider.server_close()
+        thread.join(timeout=5)
+    receipt = owner_event_receipt(home, source="test", event_id="same")
+    assert result.returncode == 0, (result.stdout, result.stderr, receipt)
+    assert receipt["status"] == "settled"
+    assert "ONE_EVENT_SETTLED" in receipt["reply"]
+    assert repeat.returncode != 0
+    assert "not deferred" in repeat.stderr
+    assert len([call for call in calls if "messages" in call]) == 1
