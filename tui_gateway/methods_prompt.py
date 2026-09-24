@@ -779,9 +779,20 @@ def _(rid, params: dict) -> dict:
     ext = _sniff_image_ext(img_bytes, filename or (f"x{ext_hint}" if ext_hint else ""))
     if ext not in _allowed_image_extensions():
         return _err(rid, 4016, f"unsupported image extension: {ext}")
+    img_path = None
     try:
         img_path = _queue_attached_image(session, img_bytes, ext, prefix="upload")
+        from tui_gateway.consumer_artifact_ownership import record_uploaded_image
+        record_uploaded_image(
+            session.get("profile_home") or _hermes_home,
+            session.get("session_key"),
+            img_bytes,
+            ext,
+        )
     except Exception as e:
+        if img_path is not None:
+            with contextlib.suppress(ValueError):
+                session["attached_images"].remove(str(img_path))
         return _err(rid, 5027, f"write failed: {e}")
     return _ok(rid, _attached_image_result(
         session, img_path,
