@@ -17,6 +17,7 @@ import {
   webContents as electronWebContents,
   globalShortcut,
   ipcMain,
+  type IpcMainInvokeEvent,
   Menu,
   type MenuItemConstructorOptions,
   nativeTheme,
@@ -16315,7 +16316,20 @@ ipcMain.on('hermes:previewShortcutActive', (_event, active) => {
   previewShortcutActive = Boolean(active)
 })
 
-registerJarvisOnboardingPermissions({ ipcMain, shell, systemPreferences })
+const trustedJarvisRenderer = (event: IpcMainInvokeEvent) => {
+  const window = BrowserWindow.fromWebContents(event.sender)
+
+  return Boolean(window && !window.isDestroyed() && calendarRendererMatches(
+    event, DEV_SERVER || pathToFileURL(resolveRendererIndex()).toString()
+  ))
+}
+
+registerJarvisOnboardingPermissions({
+  ipcMain,
+  shell,
+  systemPreferences,
+  trustedSender: trustedJarvisRenderer
+})
 registerJarvisCalendar({
   appPath: app.getAppPath(),
   ipcMain,
@@ -16325,13 +16339,7 @@ registerJarvisCalendar({
     primaryProfileKey(),
     event.sender === mainWindow?.webContents
   ),
-  trustedSender: event => {
-    const window = BrowserWindow.fromWebContents(event.sender)
-
-    return Boolean(window && !window.isDestroyed() && calendarRendererMatches(
-      event, DEV_SERVER || pathToFileURL(resolveRendererIndex()).toString()
-    ))
-  },
+  trustedSender: trustedJarvisRenderer,
   userData: app.getPath('userData')
 })
 registerJarvisCodexOAuth({

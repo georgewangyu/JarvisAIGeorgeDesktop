@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import type { IpcMain, Shell, SystemPreferences } from 'electron'
+import type { IpcMain, IpcMainInvokeEvent, Shell, SystemPreferences } from 'electron'
 
 export type JarvisPermissionStatus = 'denied' | 'granted' | 'not-determined' | 'restricted' | 'unknown'
 
@@ -17,6 +17,7 @@ interface JarvisOnboardingPermissionDeps {
   ipcMain: IpcMain
   shell: Pick<Shell, 'openExternal'>
   systemPreferences: Pick<SystemPreferences, 'askForMediaAccess' | 'getMediaAccessStatus'>
+  trustedSender: (event: IpcMainInvokeEvent) => boolean
 }
 
 const MAC_APPS = {
@@ -78,11 +79,22 @@ function permissionSnapshot(
 export function registerJarvisOnboardingPermissions({
   ipcMain,
   shell,
-  systemPreferences
+  systemPreferences,
+  trustedSender
 }: JarvisOnboardingPermissionDeps): void {
-  ipcMain.handle('jarvis:onboarding-permissions:get', () => permissionSnapshot(systemPreferences))
+  const requireTrustedSender = (event: IpcMainInvokeEvent) => {
+    if (!trustedSender(event)) {throw new Error('Untrusted Jarvis permissions renderer')}
+  }
 
-  ipcMain.handle('jarvis:onboarding-permissions:open-full-disk-access', async () => {
+  ipcMain.handle('jarvis:onboarding-permissions:get', event => {
+    requireTrustedSender(event)
+
+    return permissionSnapshot(systemPreferences)
+  })
+
+  ipcMain.handle('jarvis:onboarding-permissions:open-full-disk-access', async event => {
+    requireTrustedSender(event)
+
     if (process.platform !== 'darwin') {
       return false
     }
@@ -92,7 +104,9 @@ export function registerJarvisOnboardingPermissions({
     return true
   })
 
-  ipcMain.handle('jarvis:onboarding-permissions:request-microphone', async () => {
+  ipcMain.handle('jarvis:onboarding-permissions:request-microphone', async event => {
+    requireTrustedSender(event)
+
     if (process.platform !== 'darwin' || typeof systemPreferences.askForMediaAccess !== 'function') {
       return false
     }
