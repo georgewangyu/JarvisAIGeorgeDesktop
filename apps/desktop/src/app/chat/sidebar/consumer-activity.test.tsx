@@ -2,19 +2,25 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createClientSessionState } from '@/lib/chat-runtime'
+import { $approvalRecoveryReceipts, dismissApprovalRecovery, noteApprovalPending, reconcileApprovalRecovery } from '@/store/approval-recovery'
 import { $gateway } from '@/store/gateway'
 import { $activeGatewayProfile } from '@/store/profile'
+import { _resetSessionOwnerHintsForTests, setSessionOwnerHint } from '@/store/session'
 import type { SessionDotState } from '@/store/session-dot-state'
 import { clearAllSessionStates, publishSessionState } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
 
-import { buildConsumerActivityRows, ConsumerActivity, openConsumerActivityRow } from './consumer-activity'
+import { buildConsumerActivityRows, buildUnavailableApprovalRows, ConsumerActivity, openConsumerActivityRow } from './consumer-activity'
 
 afterEach(() => {
   cleanup()
   $gateway.set(null as never)
   $activeGatewayProfile.set('default')
   clearAllSessionStates()
+  dismissApprovalRecovery({ connectionId: 'local', profile: 'default' }, 'approval-chat')
+  dismissApprovalRecovery({ connectionId: 'remote', profile: 'default' }, 'approval-chat')
+  dismissApprovalRecovery({ connectionId: 'local', profile: 'default' }, 'worker-chat')
+  _resetSessionOwnerHintsForTests({ storage: true })
 })
 
 const session = (id: string, title: string, lastActive: number): SessionInfo => ({
@@ -34,6 +40,31 @@ const session = (id: string, title: string, lastActive: number): SessionInfo => 
 })
 
 describe('consumer activity rows', () => {
+  it('links an unavailable approval only to its exact visible owner', () => {
+    const visible = session('approval-chat', 'Plan a trip', 10)
+    const worker = { ...session('worker-chat', 'Private worker', 9), source: 'subagent' }
+    const local = { connectionId: 'local', profile: 'default' }
+    const remote = { connectionId: 'remote', profile: 'default' }
+    setSessionOwnerHint(visible.id, local)
+    setSessionOwnerHint(worker.id, local)
+    noteApprovalPending(local, visible.id, visible.id, 'request-local')
+    noteApprovalPending(remote, visible.id, visible.id, 'request-remote')
+    noteApprovalPending(local, worker.id, worker.id, 'request-worker')
+    reconcileApprovalRecovery(local, visible.id, new Set())
+    reconcileApprovalRecovery(remote, visible.id, new Set())
+    reconcileApprovalRecovery(local, worker.id, new Set())
+
+    const rows = buildUnavailableApprovalRows([worker, visible], $approvalRecoveryReceipts.get())
+    expect(rows).toEqual([{ id: visible.id, title: 'Plan a trip' }])
+
+    const onOpenChat = vi.fn()
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={onOpenChat} sessions={[worker, visible]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    expect(screen.getByText('Approval no longer available · Review chat before retrying')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Plan a trip/ }))
+    expect(onOpenChat).toHaveBeenCalledWith(visible.id, visible)
+  })
+
   it('opens the owning visible chat when a live approval needs input, then clears attention', async () => {
     const openChat = vi.fn()
     const visible = session('approval-chat', 'Plan a trip', 10)

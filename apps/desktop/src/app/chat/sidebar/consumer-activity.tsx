@@ -11,14 +11,18 @@ import { sessionTitle } from '@/lib/chat-runtime'
 import { Activity, iconSize } from '@/lib/icons'
 import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
+import { $approvalRecoveryReceipts, type ApprovalRecoveryReceipt } from '@/store/approval-recovery'
 import { $gateway } from '@/store/gateway'
 import { $activeGatewayProfile } from '@/store/profile'
+import { sessionMatchesStoredId } from '@/store/session'
 import {
   $sessionDotStateById,
   type SessionDotState,
   sessionStatusBucket,
   type SessionStatusBucket
 } from '@/store/session-dot-state'
+import { isSessionOwnerRoute, sessionOwnerRouteFromRow } from '@/store/session-request-router'
+import { knownOwnerForSession } from '@/store/session-states'
 import type { CronJob, SessionInfo } from '@/types/hermes'
 
 export interface ConsumerActivityRow {
@@ -26,6 +30,50 @@ export interface ConsumerActivityRow {
   kind: 'automation' | 'chat'
   status: Exclude<SessionStatusBucket, 'draft' | 'idle'>
   title: string
+}
+
+export interface UnavailableApprovalRow {
+  id: string
+  title: string
+}
+
+/** A lost approval has no executable control. Surface it only beside a
+ *  visible consumer chat whose exact owner matches the persisted receipt. */
+export function buildUnavailableApprovalRows(
+  sessions: readonly SessionInfo[],
+  receipts: readonly ApprovalRecoveryReceipt[]
+): UnavailableApprovalRow[] {
+  const latestBySession = new Map<string, { row: UnavailableApprovalRow; seenAt: number }>()
+
+  for (const receipt of receipts) {
+    if (receipt.state !== 'interrupted') {continue}
+
+    const session = sessions.find(candidate => {
+      const source = normalizeSessionSource(candidate.source)
+
+      return !isMessagingSource(source) &&
+        !['cron', 'kanban', 'oneshot', 'subagent', 'tool'].includes(source ?? '') &&
+        sessionMatchesStoredId(candidate, receipt.storedSessionId)
+    })
+
+    if (!session) {continue}
+    const owner = sessionOwnerRouteFromRow(session) ?? knownOwnerForSession(session.id)
+
+    if (!isSessionOwnerRoute(owner) || owner.connectionId !== receipt.connectionId || owner.profile !== receipt.profile) {
+      continue
+    }
+
+    const previous = latestBySession.get(session.id)
+
+    if (!previous || previous.seenAt < receipt.seenAt) {
+      latestBySession.set(session.id, { row: { id: session.id, title: sessionTitle(session) }, seenAt: receipt.seenAt })
+    }
+  }
+
+  return [...latestBySession.values()]
+    .sort((a, b) => b.seenAt - a.seenAt)
+    .slice(0, 6)
+    .map(item => item.row)
 }
 
 export function openConsumerActivityRow(
@@ -120,6 +168,7 @@ export function ConsumerActivity({
 }) {
   const copy = useJarvisCopy()
   const states = useStore($sessionDotStateById)
+  const approvalReceipts = useStore($approvalRecoveryReceipts)
   const gateway = useStore($gateway)
   const profile = useStore($activeGatewayProfile)
   const [refreshIndex, setRefreshIndex] = useState(0)
@@ -220,8 +269,13 @@ export function ConsumerActivity({
     : []
 
   const rows = buildConsumerActivityRows(sessions, states, automationSessions)
+  const unavailableApprovals = buildUnavailableApprovalRows(sessions, approvalReceipts)
+  const unavailableIds = new Set(unavailableApprovals.map(row => row.id))
+  const visibleRows = rows.filter(row => !unavailableIds.has(row.id))
   const sessionById = new Map([...sessions, ...automationSessions].map(session => [session.id, session]))
-  const attentionCount = interrupted.filter(event => event.retry_status !== 'settled').length + rows.filter(row => row.status === 'needs-input').length
+
+  const attentionCount = interrupted.filter(event => event.retry_status !== 'settled').length +
+    visibleRows.filter(row => row.status === 'needs-input').length + unavailableApprovals.length
 
   return (
     <>
@@ -233,7 +287,7 @@ export function ConsumerActivity({
       <PopoverTrigger asChild>
         <Button aria-label={copy.activity} className="relative" size="icon-sm" variant="ghost">
           <Activity className={iconSize.sm} />
-          {rows.length > 0 || interrupted.length > 0 ? (
+          {visibleRows.length > 0 || interrupted.length > 0 || unavailableApprovals.length > 0 ? (
             <span
               aria-hidden="true"
               className={cn(
@@ -248,7 +302,7 @@ export function ConsumerActivity({
         <div className="px-3 pb-2 pt-3">
           <p className="text-sm font-medium">{copy.activity}</p>
           <p className="mt-0.5 text-xs text-(--ui-text-tertiary)">
-            {rows.length > 0 || interrupted.length > 0 ? copy.activityDetail : copy.activityReadyDetail}
+            {visibleRows.length > 0 || interrupted.length > 0 || unavailableApprovals.length > 0 ? copy.activityDetail : copy.activityReadyDetail}
           </p>
         </div>
         {interrupted.map(event => (
@@ -275,19 +329,30 @@ export function ConsumerActivity({
             {reviewError && !currentReview ? <p className="text-xs text-destructive" role="alert">{reviewError}</p> : null}
           </div>
         ))}
+        {unavailableApprovals.map(row => (
+          <button
+            className="flex w-full flex-col border-t border-(--ui-stroke-tertiary) px-3 py-3 text-left hover:bg-(--ui-control-hover-background)"
+            key={row.id}
+            onClick={() => onOpenChat(row.id, sessionById.get(row.id))}
+            type="button"
+          >
+            <span className="text-sm font-medium text-foreground">{row.title}</span>
+            <span className="mt-1 text-xs text-(--ui-text-secondary)">Approval no longer available · Review chat before retrying</span>
+          </button>
+        ))}
         {interruptedLoadError ? (
           <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3 text-xs text-(--ui-text-secondary)">
             Could not check interrupted activity.{' '}
             <Button onClick={() => setRefreshIndex(index => index + 1)} size="inline" variant="textStrong">Retry</Button>
           </div>
         ) : null}
-        {rows.length === 0 && interrupted.length === 0 && !interruptedLoadError ? (
+        {visibleRows.length === 0 && unavailableApprovals.length === 0 && interrupted.length === 0 && !interruptedLoadError ? (
           <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3 text-sm text-(--ui-text-secondary)">
             {copy.activityReady}
           </div>
-        ) : rows.length > 0 ? (
+        ) : visibleRows.length > 0 ? (
           <div className="border-t border-(--ui-stroke-tertiary) py-1">
-            {rows.map(row => (
+            {visibleRows.map(row => (
               <button
                 className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-(--ui-control-hover-background)"
                 key={row.id}

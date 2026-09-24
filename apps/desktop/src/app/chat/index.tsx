@@ -27,6 +27,7 @@ import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-s
 import { currentModelCapabilities, modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
+import { $approvalRecoveryReceipts } from '@/store/approval-recovery'
 import { migrateSessionDraft } from '@/store/composer'
 import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
 import { $introSplash } from '@/store/intro-splash'
@@ -75,6 +76,7 @@ import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { useSessionView } from './session-view'
+import { buildUnavailableApprovalRows } from './sidebar/consumer-activity'
 import { requestConsumerChats } from './sidebar/consumer-chats-request'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
@@ -140,6 +142,15 @@ function ChatHeader({
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const profiles = useStore($profiles)
+  const approvalReceipts = useStore($approvalRecoveryReceipts)
+  const activeProfile = useStore($activeGatewayProfile)
+  const connection = useStore($connection)
+  const connectionId = connection?.connectionId ?? (connection?.mode === 'local' ? 'local' : null)
+
+  const hasUnavailableApproval = Boolean(connectionId && buildUnavailableApprovalRows(
+    sessions,
+    approvalReceipts.filter(receipt => receipt.connectionId === connectionId && receipt.profile === activeProfile)
+  ).length)
 
   const activeStoredSession =
     (selectedSessionId && sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))) || null
@@ -164,12 +175,13 @@ function ChatHeader({
     return (
       <header className="consumer-chat-header" data-slot="consumer-chat-header">
         <button
-          className="consumer-header-pill consumer-chats-trigger"
+          className="consumer-header-pill consumer-chats-trigger relative"
           onClick={requestConsumerChats}
           type="button"
         >
           <Codicon aria-hidden name="menu" size="0.9rem" />
           <span>Chats</span>
+          {hasUnavailableApproval ? <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" /> : null}
         </button>
         <span className="consumer-chat-title">{title === NEW_SESSION_TITLE ? 'Jarvis' : title}</span>
         <div className="flex items-center gap-2">
