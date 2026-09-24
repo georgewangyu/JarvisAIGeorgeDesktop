@@ -387,6 +387,7 @@ import { missingRendererAssets } from './renderer-bundle'
 import { loadRendererLoadErrorPage } from './renderer-load-error-page'
 import { attachRendererConsoleCapture, formatRendererBoundaryReport } from './renderer-log'
 import { fetchRosterSourceData } from './roster-source-fetch'
+import { isJarvisRuntimeOrigin, mayReuseDiscoveredHermes } from './runtime-source-policy'
 import {
   classifyStoredSecret,
   readSecretStoragePolicy,
@@ -4822,6 +4823,26 @@ function readBootstrapMarker() {
 async function isActiveRuntimeUsable() {
   const venvPython = getVenvPython(VENV_ROOT)
 
+  // A generic Hermes install can import and serve successfully yet lack the
+  // Jarvis-owned Feed, Goals and event APIs. Packaged Jarvis must bootstrap its
+  // own fork instead of presenting broken consumer pages with HTTP 404s.
+  if (IS_PACKAGED) {
+    try {
+      const origin = execFileSync('git', ['-C', ACTIVE_HERMES_ROOT, 'remote', 'get-url', 'origin'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 3000
+      })
+
+      if (!isJarvisRuntimeOrigin(origin) ||
+        !fileExists(path.join(ACTIVE_HERMES_ROOT, 'hermes_cli', 'web_routers', 'feed.py'))) {
+        return false
+      }
+    } catch {
+      return false
+    }
+  }
+
   return (
     isHermesSourceRoot(ACTIVE_HERMES_ROOT) &&
     fileExists(venvPython) &&
@@ -5203,7 +5224,8 @@ async function resolveHermesBackend(backendArgs) {
   //    do NOT write a bootstrap marker; the user did this themselves and we
   //    don't want to take ownership of an install we didn't perform.
   //    HERMES_DESKTOP_IGNORE_EXISTING=1 forces the bootstrap path for testing.
-  if (process.env.HERMES_DESKTOP_IGNORE_EXISTING !== '1') {
+  if (process.env.HERMES_DESKTOP_HERMES ||
+    mayReuseDiscoveredHermes(IS_PACKAGED, process.env.HERMES_DESKTOP_IGNORE_EXISTING === '1')) {
     let hermesCommand = null
     const hermesOverride = process.env.HERMES_DESKTOP_HERMES
 
@@ -5279,7 +5301,7 @@ async function resolveHermesBackend(backendArgs) {
   //    take ownership.
   const python = await findSystemPython()
 
-  if (python) {
+  if (python && mayReuseDiscoveredHermes(IS_PACKAGED, process.env.HERMES_DESKTOP_IGNORE_EXISTING === '1')) {
     // Same smoke-test rationale as step 4: a system Python in the
     // SUPPORTED_VERSIONS range can be registered (PEP 514) without
     // having hermes_cli installed -- common on dev boxes that have
