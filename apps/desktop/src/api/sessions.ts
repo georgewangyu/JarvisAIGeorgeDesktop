@@ -39,6 +39,39 @@ export function exportConsumerChatHistory(profile: string, output: string): Prom
   })
 }
 
+export interface ConsumerUploadedImage {
+  artifact_id: string
+  session_id: string
+  kind: 'user_uploaded_image'
+  byte_size: number
+  extension: string
+}
+
+/** Metadata for verified uploads in visible local Desktop chats of one profile. */
+export function listConsumerUploadedImages(profile: string): Promise<{ images: ConsumerUploadedImage[] }> {
+  return hermesApi({
+    connectionId: 'local',
+    path: `/api/sessions/consumer-images?profile=${encodeURIComponent(profile)}`,
+    timeoutMs: 120_000
+  })
+}
+
+/** Write only those verified uploads to a new ZIP at the chosen Mac path. */
+export function exportConsumerUploadedImages(profile: string, output: string): Promise<{
+  ok: boolean
+  output: string
+  images: number
+  bytes: number
+}> {
+  return hermesApi({
+    body: { profile, output },
+    connectionId: 'local',
+    method: 'POST',
+    path: '/api/sessions/export-consumer-images',
+    timeoutMs: 120_000
+  })
+}
+
 function sessionScoped(scope?: ProfileScope): { connectionId?: string; profile?: string } {
   if (scope === undefined || scope === null) {
     return {}
