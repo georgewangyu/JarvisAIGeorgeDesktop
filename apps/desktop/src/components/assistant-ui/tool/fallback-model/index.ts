@@ -1320,6 +1320,7 @@ function dynamicTitle(
   part: ToolPart,
   args: Record<string, unknown>,
   result: Record<string, unknown>,
+  status: ToolStatus,
   fallback: ToolTitleParts
 ): ToolTitleParts {
   const skillTitle = skillActivityTitle(part)
@@ -1403,6 +1404,17 @@ function dynamicTitle(
     const command = shellCommand(args)
 
     if (command) {
+      if (status === 'error') {
+        const action = translateNow(
+          part.toolName === 'execute_code' ? 'assistant.tool.actions.codeFailed' : 'assistant.tool.actions.commandFailed'
+        )
+
+        return titledAction(
+          action,
+          translateNow('assistant.tool.titleTemplates.actionCommand', action, compactPreview(summarizeShellCommand(command), 160))
+        )
+      }
+
       const action =
         part.toolName === 'execute_code'
           ? verb(translateNow('assistant.tool.actions.runningCode'), translateNow('assistant.tool.actions.ranCode'))
@@ -1465,6 +1477,7 @@ export function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
     part,
     argsRecord,
     resultRecord,
+    status,
     titlePartsFromAction(baseTitle, part.result === undefined ? meta.pendingAction : undefined)
   )
 

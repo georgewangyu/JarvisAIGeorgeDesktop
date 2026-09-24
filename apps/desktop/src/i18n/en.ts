@@ -4366,7 +4366,9 @@ export const en: Translations = {
         ran: 'Ran',
         running: 'Running',
         ranCode: 'Ran code',
-        runningCode: 'Scripting'
+        runningCode: 'Scripting',
+        commandFailed: 'Command failed',
+        codeFailed: 'Code failed'
       },
       prefixes: {
         browser: 'Browser',

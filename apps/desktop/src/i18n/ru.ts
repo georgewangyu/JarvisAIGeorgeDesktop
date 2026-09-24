@@ -3790,7 +3790,9 @@ export const ru = defineLocale({
         ran: 'Выполнено',
         running: 'Выполняется',
         ranCode: 'Код выполнен',
-        runningCode: 'Скриптинг'
+        runningCode: 'Скриптинг',
+        commandFailed: 'Ошибка команды',
+        codeFailed: 'Ошибка выполнения кода'
       },
       prefixes: {
         browser: 'Браузер',

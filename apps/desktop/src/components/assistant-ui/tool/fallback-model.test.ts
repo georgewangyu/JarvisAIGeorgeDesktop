@@ -77,6 +77,25 @@ describe('buildToolView terminal exit-code status', () => {
     expect(view.status).toBe('error')
   })
 
+  it('does not claim failed terminal or code actions ran', () => {
+    const terminal = buildToolView(part({
+      args: { command: 'chmod 666 /tmp/synthetic-target' },
+      result: { exit_code: -1, error: 'Command failed with exit code -1.' },
+      toolName: 'terminal'
+    }), '')
+
+    const code = buildToolView(part({
+      args: { code: 'raise RuntimeError("synthetic")' },
+      result: { error: 'RuntimeError: synthetic' },
+      toolName: 'execute_code'
+    }), '')
+
+    expect(terminal.status).toBe('error')
+    expect(terminal.title).toBe('Command failed chmod 666 /tmp/synthetic-target')
+    expect(code.status).toBe('error')
+    expect(code.title).toBe('Code failed raise RuntimeError("synthetic")')
+  })
+
   // Explicit error signals still win regardless of output presence.
   it('keeps explicit error signals red even with output', () => {
     expect(terminal({ error: 'boom', exit_code: 0, output: 'partial' }).status).toBe('error')

@@ -3742,6 +3742,8 @@ export interface Translations {
         running: string
         ranCode: string
         runningCode: string
+        commandFailed: string
+        codeFailed: string
       }
       prefixes: {
         browser: string

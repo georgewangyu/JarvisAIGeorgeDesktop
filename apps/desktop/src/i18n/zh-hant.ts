@@ -3459,7 +3459,9 @@ export const zhHant = defineLocale({
         ran: '已執行',
         running: '正在執行',
         ranCode: '已執行程式碼',
-        runningCode: '正在撰寫腳本'
+        runningCode: '正在撰寫腳本',
+        commandFailed: '指令失敗',
+        codeFailed: '程式碼執行失敗'
       },
       prefixes: {
         browser: '瀏覽器',

@@ -3014,7 +3014,9 @@ export const ar = defineLocale({
         ran: 'تم التشغيل',
         running: 'جار التشغيل',
         ranCode: 'تم تشغيل الكود',
-        runningCode: 'جار البرمجة'
+        runningCode: 'جار البرمجة',
+        commandFailed: 'فشل الأمر',
+        codeFailed: 'فشل تشغيل الكود'
       },
       prefixes: {
         browser: 'المتصفح',

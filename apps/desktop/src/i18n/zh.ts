@@ -4266,7 +4266,9 @@ export const zh = defineLocale({
         ran: '已运行',
         running: '正在运行',
         ranCode: '已运行代码',
-        runningCode: '正在编写脚本'
+        runningCode: '正在编写脚本',
+        commandFailed: '命令失败',
+        codeFailed: '代码运行失败'
       },
       prefixes: {
         browser: '浏览器',
