@@ -7,14 +7,14 @@ Manual rehearsal, from the repo root with its Python environment::
     # saved "Synthetic approval rehearsal" chat before triggering.
     python tests/desktop/test_tool_approval_fixture.py trigger --root /tmp/hermes-approval-UNIQUE
     # Or send the exact text "Request the synthetic approval action." in that
-    # chat. The loopback model requests a terminal chmod confined to this
-    # fixture's sandbox-target directory; reject the approval card.
+    # chat. The loopback model requests a permission change on a dummy file in
+    # fixture's sandbox-target directory; approve or reject the card.
     python tests/desktop/test_tool_approval_fixture.py status --root /tmp/hermes-approval-UNIQUE
     python tests/desktop/test_tool_approval_fixture.py stop --root /tmp/hermes-approval-UNIQUE
 
 The explicit trigger uses a synthetic tool name with no executor. The model
 rehearsal uses a deterministic local mock to request a real terminal tool, but
-its only command targets test-owned sandbox-target. Deny the card in Desktop.
+its only command changes a dummy file inside a private test-owned directory.
 The status command reports the explicit trigger's gate state, not the model
 rehearsal; stop shuts down only this exact foreground fixture. No real model
 or account is used.
@@ -72,7 +72,7 @@ def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
         content = ("The synthetic action was denied and was not run." if denied
                    else "The synthetic command returned a result; check the tool row for its outcome.")
         return {"role": "assistant", "content": content}, "stop"
-    command = f"chmod -R 777 {root / 'sandbox-target'}"
+    command = f"chmod 666 {root / 'sandbox-target' / 'approval-marker'}"
     return {
         "role": "assistant", "content": None,
         "tool_calls": [{"index": 0, "id": "call_synthetic_approval", "type": "function",
@@ -123,6 +123,9 @@ def create_fixture(root: Path) -> dict:
     marker, home, state = paths(root)
     home.mkdir()
     (root / "sandbox-target").mkdir(mode=0o700)
+    marker_file = root / "sandbox-target" / "approval-marker"
+    marker_file.write_text("synthetic fixture\n", encoding="utf-8")
+    marker_file.chmod(0o600)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = int(probe.getsockname()[1])
@@ -146,7 +149,7 @@ def create_fixture(root: Path) -> dict:
         db.create_session(session_id, "desktop", cwd=str(root), profile_name="default")
         db.set_session_title(session_id, "Synthetic approval rehearsal")
         db.append_message(session_id, "user", "Show me the synthetic approval flow.")
-        db.append_message(session_id, "assistant", "Open this chat, then run the fixture trigger command. Deny the approval card; no tool will execute.")
+        db.append_message(session_id, "assistant", "Open this chat and send the exact synthetic approval prompt. It changes only a dummy file inside a private test directory; you can approve or reject it.")
     finally:
         db.close()
     data = {"kind": KIND, "root": str(root), "session_id": session_id,
@@ -192,7 +195,9 @@ def serve(root: Path) -> None:
     @app.get("/fixture/approval/status")
     def fixture_status(x_hermes_session_token: str | None = Header(default=None)):
         require_token(x_hermes_session_token)
-        return json.loads(state_path.read_text(encoding="utf-8"))
+        marker_file = root / "sandbox-target" / "approval-marker"
+        return {**json.loads(state_path.read_text(encoding="utf-8")),
+                "model_action_executed": marker_file.is_file() and (marker_file.stat().st_mode & 0o777) == 0o666}
 
     @app.get("/v1/models")
     def fixture_models():
@@ -277,6 +282,7 @@ def serve(root: Path) -> None:
         server.run()
     finally:
         approval.clear_session(data["session_id"])
+        (root / "sandbox-target" / "approval-marker").chmod(0o600)
         if worker is not None:
             worker.join(timeout=2)
 
@@ -300,6 +306,8 @@ def test_fixture_owns_only_a_new_root(tmp_path: Path) -> None:
     assert json.loads(paths(root)[2].read_text(encoding="utf-8")) == {
         "state": "ready", "tool_executed": False,
     }
+    assert ((root / "sandbox-target").stat().st_mode & 0o777) == 0o700
+    assert ((root / "sandbox-target" / "approval-marker").stat().st_mode & 0o777) == 0o600
     try:
         create_fixture(root)
     except ValueError:
@@ -316,7 +324,7 @@ def test_model_rehearsal_is_exact_and_test_owned(tmp_path: Path) -> None:
     assert finish_reason == "tool_calls"
     assert message["tool_calls"][0]["function"]["name"] == "terminal"
     assert json.loads(message["tool_calls"][0]["function"]["arguments"]) == {
-        "command": f"chmod -R 777 {root / 'sandbox-target'}",
+        "command": f"chmod 666 {root / 'sandbox-target' / 'approval-marker'}",
     }
     assert "finish_reason\": \"tool_calls" in fixture_sse(message, finish_reason)
     assert "data: [DONE]" in fixture_sse(message, finish_reason)
@@ -400,7 +408,7 @@ def test_loopback_gateway_denial_round_trip(tmp_path: Path) -> None:
                 time.sleep(0.02)
             assert request(root, "status") == {
                 "state": "denied", "outcome": "denied", "approved": False,
-                "pending": False, "tool_executed": False,
+                "pending": False, "tool_executed": False, "model_action_executed": False,
             }
         assert request(root, "stop") == {"stopping": True}
         assert child.wait(timeout=10) == 0
