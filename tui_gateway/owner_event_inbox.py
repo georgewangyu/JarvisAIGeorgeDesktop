@@ -11,6 +11,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import subprocess
+import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +22,8 @@ from tools.bot_live_delivery import (
     deliver_to_live_owner, find_jarvis_live_owner, find_jarvis_main_session_id,
     read_delivery_result,
 )
+
+log = logging.getLogger(__name__)
 
 
 def _event_delivery_id(source: str, event_id: str) -> str:
@@ -193,6 +199,51 @@ def owner_event_receipt(
 ) -> dict[str, Any] | None:
     """Inspect the exact event receipt after a producer or backend restart."""
     return read_delivery_result(profile_home, _event_delivery_id(source, event_id))
+
+
+def activate_deferred_jarvis_event(
+    profile_home: Path | str, delivery_id: str, *, allow_headless: bool = False,
+) -> int:
+    """Launch one exact deferred receipt in a fresh, target-profile process.
+
+    The producer must opt in. A failed launch leaves the receipt deferred; the
+    child's exclusive lease and atomic claim fence concurrent launch attempts.
+    This runs only when an already-running producer calls it, not as a watcher.
+    """
+    from hermes_cli.profiles import get_profile_dir
+    from tools.bot_live_delivery import _delivery_id
+    from tools.environments.local import served_profile_child_env
+
+    if not allow_headless:
+        raise ValueError("headless event activation requires explicit opt-in")
+    home = Path(profile_home).resolve()
+    key = _delivery_id(delivery_id)
+    receipt = read_delivery_result(home, key)
+    if (receipt is None or receipt.get("status") != "deferred"
+            or receipt.get("profile_home") != str(home)
+            or receipt.get("target_session_id") != find_jarvis_main_session_id(home)):
+        raise ValueError("event is not deferred for the exact Jarvis profile")
+    if home == get_profile_dir("default").resolve():
+        profile = "default"
+    elif home.parent.name == "profiles" and home == get_profile_dir(home.name).resolve():
+        profile = home.name
+    else:
+        raise ValueError("event home is not a registered local profile")
+    env = served_profile_child_env(target_home=home, inherit_credentials=True)
+    if Path(env.get("HERMES_HOME", "")).resolve() != home:
+        raise RuntimeError("activation child lacks the exact profile home")
+    process = subprocess.Popen(
+        [sys.executable, "-m", "tui_gateway.headless_owner_event",
+         "--profile", profile, "--expected-profile-home", str(home),
+         "--delivery-id", key, "--allow-headless"],
+        env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True,
+    )
+    try:
+        threading.Thread(target=process.wait, name="jarvis-event-child-reaper", daemon=True).start()
+    except RuntimeError:
+        log.warning("Jarvis event child started but its wait thread could not start")
+    return process.pid
 
 
 def interrupted_jarvis_event_receipts(profile_home: Path | str) -> list[dict[str, Any]]:

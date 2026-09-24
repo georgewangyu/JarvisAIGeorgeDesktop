@@ -128,6 +128,20 @@ def test_runner_refuses_shared_gateway_and_invalid_profile(tmp_path):
             server._sessions.pop("foreign", None)
 
 
+def test_runner_refuses_mismatched_expected_home_before_claim(tmp_path, monkeypatch):
+    from tui_gateway import server
+    from tui_gateway.headless_owner_event import run_one_deferred_event
+    from tui_gateway.owner_event_inbox import owner_event_receipt
+
+    home, event = _profile(tmp_path, "a")
+    monkeypatch.setattr(server, "_profile_home", lambda _name: home)
+    with pytest.raises(ValueError, match="exact event home"):
+        run_one_deferred_event(
+            "a", event["id"], allow_headless=True,
+            expected_profile_home=tmp_path / "other")
+    assert owner_event_receipt(home, source="test", event_id="same")["status"] == "deferred"
+
+
 def test_direct_rpc_cannot_spoof_reserved_headless_source(tmp_path, monkeypatch):
     from tui_gateway import server
 

@@ -31,7 +31,7 @@ class _DiscardTransport:
 
 def run_one_deferred_event(
     profile: str, delivery_id: str, *, allow_headless: bool = False,
-    wait_seconds: float = 120.0,
+    wait_seconds: float = 120.0, expected_profile_home: Path | str | None = None,
 ) -> dict[str, Any]:
     """Run at most one exact deferred event through the gateway session turn.
 
@@ -61,6 +61,8 @@ def run_one_deferred_event(
             raise RuntimeError("headless event consumption requires a fresh gateway process")
     resolved = server._profile_home(profile.strip())
     home = Path(resolved or server._hermes_home).resolve()
+    if expected_profile_home is not None and home != Path(expected_profile_home).resolve():
+        raise ValueError("resolved profile does not match the exact event home")
     receipt = read_delivery_result(home, delivery_id)
     if receipt is None:
         raise FileNotFoundError("exact event receipt not found in profile")
@@ -197,10 +199,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--delivery-id", required=True)
     parser.add_argument("--allow-headless", action="store_true")
     parser.add_argument("--wait-seconds", type=float, default=120.0)
+    parser.add_argument("--expected-profile-home")
     args = parser.parse_args(argv)
     receipt = run_one_deferred_event(
         args.profile, args.delivery_id, allow_headless=args.allow_headless,
-        wait_seconds=args.wait_seconds)
+        wait_seconds=args.wait_seconds, expected_profile_home=args.expected_profile_home)
     print(json.dumps({"delivery_id": receipt["delivery_id"], "status": receipt["status"]}), flush=True)
     return 0 if receipt["status"] in {"settled", "failed", "cancelled"} else 2
 

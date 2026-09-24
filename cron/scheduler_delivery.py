@@ -1004,8 +1004,9 @@ def parse_bot_chat_deliver_token(part: str) -> Optional[str]:
 def _deliver_to_jarvis_main(job: dict, content: str, *, for_failure: bool = False) -> Optional[str]:
     """Admit one explicit scheduled result into this profile's Jarvis chat.
 
-    Never create a chat, wake a closed app, or use the Bot Chat CLI fallback. A
-    deferred/queued/claimed receipt is unverified until the owner settles it.
+    Never create a chat or use the Bot Chat CLI fallback. A deferred/queued/
+    claimed receipt is unverified until the owner settles it. Explicit profile
+    opt-in can start a one-receipt headless consumer while this producer runs.
     """
     from hermes_constants import get_hermes_home
     from tui_gateway.owner_event_inbox import admit_jarvis_event
@@ -1035,10 +1036,31 @@ def _deliver_to_jarvis_main(job: dict, content: str, *, for_failure: bool = Fals
     if receipt["status"] == "settled":
         return None
     if receipt["status"] == "deferred":
+        if _jarvis_headless_activation_enabled(home):
+            from tui_gateway.owner_event_inbox import activate_deferred_jarvis_event
+            try:
+                activate_deferred_jarvis_event(home, receipt["id"], allow_headless=True)
+            except (OSError, ValueError, RuntimeError) as exc:
+                return (f"Jarvis headless activation failed; deferred receipt {receipt['id']} "
+                        f"remains recoverable: {exc}")
+            return f"Jarvis headless activation started (receipt {receipt['id']}): completion unverified"
         return f"Jarvis main chat awaiting app reopen (receipt {receipt['id']}): completion unverified"
     if receipt["status"] in {"queued", "claimed"}:
         return f"Jarvis main chat {receipt['status']} (receipt {receipt['id']}): completion unverified"
     return f"Jarvis main chat {receipt['status']} (receipt {receipt['id']}): not completed"
+
+
+def _jarvis_headless_activation_enabled(home) -> bool:
+    """Only a literal true in this profile's config can activate a closed chat."""
+    from hermes_cli.config_effective import load_user_config_effective
+
+    try:
+        config = load_user_config_effective(home / "config.yaml", fail_closed=True)
+    except Exception as exc:
+        logger.warning("Jarvis headless activation config unreadable for %s: %s", home, exc)
+        return False
+    desktop = config.get("desktop")
+    return isinstance(desktop, dict) and desktop.get("jarvis_headless_event_activation") is True
 
 
 def _resolve_bot_chat_target(job: dict, profile_arg: str) -> Optional[dict]:

@@ -64,6 +64,94 @@ def test_jarvis_delivery_refuses_without_a_permanent_desktop_chat(tmp_path, monk
     assert not (tmp_path / "runtime" / "bot_live_delivery").exists()
 
 
+def test_closed_chat_activation_is_opt_in_and_pins_each_profile(tmp_path, monkeypatch):
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from hermes_state import SessionDB
+    from tui_gateway import owner_event_inbox
+    from tui_gateway.owner_event_inbox import owner_event_receipt
+
+    root = tmp_path / "hermes"
+    homes = (root, root / "profiles" / "b")
+    launched = []
+
+    class Child:
+        pid = 1234
+
+        def wait(self):
+            return 0
+
+    def spawn(argv, **kwargs):
+        launched.append((argv, kwargs))
+        return Child()
+
+    monkeypatch.setenv("HERMES_HOME", str(root))
+    monkeypatch.setattr(owner_event_inbox.subprocess, "Popen", spawn)
+    for home in homes:
+        home.mkdir(parents=True, exist_ok=True)
+        (home / ".env").write_text(
+            f"OPENAI_API_KEY={'default-only' if home == root else 'b-only'}\n",
+            encoding="utf-8")
+        db = SessionDB(db_path=home / "state.db")
+        db.create_session(session_id="main", source="desktop")
+        db.set_session_title("main", "Jarvis")
+        db.close()
+    job = {"id": "routine", "name": "Brief", "execution_id": "one"}
+    monkeypatch.setenv("OPENAI_API_KEY", "default-only")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ambient-default-only")
+    assert "awaiting app reopen" in delivery._deliver_to_jarvis_main(job, "first")
+    assert launched == []
+    for home in homes:
+        (home / "config.yaml").write_text(
+            "desktop:\n  jarvis_headless_event_activation: true\n", encoding="utf-8")
+        event_id = "one" if home != root else "two"
+        token = set_hermes_home_override(home)
+        try:
+            assert "activation started" in delivery._deliver_to_jarvis_main(
+                {**job, "execution_id": event_id}, "first")
+        finally:
+            reset_hermes_home_override(token)
+        argv, kwargs = launched[-1]
+        assert argv[argv.index("--expected-profile-home") + 1] == str(home)
+        assert kwargs["env"]["HERMES_HOME"] == str(home)
+        assert kwargs["env"]["OPENAI_API_KEY"] == (
+            "default-only" if home == root else "b-only")
+        if home != root:
+            assert "ANTHROPIC_API_KEY" not in kwargs["env"]
+        assert kwargs["stdin"] is owner_event_inbox.subprocess.DEVNULL
+        assert owner_event_receipt(home, source="cron", event_id=f"routine:{event_id}")["status"] == "deferred"
+    assert len(launched) == 2
+
+
+def test_failed_activation_keeps_deferred_receipt_for_retry(tmp_path, monkeypatch):
+    from hermes_state import SessionDB
+    from tui_gateway import owner_event_inbox
+    from tui_gateway.owner_event_inbox import owner_event_receipt
+
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    (tmp_path / "config.yaml").write_text(
+        "desktop:\n  jarvis_headless_event_activation: true\n", encoding="utf-8")
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+    db.close()
+    def fail_spawn(*_args, **_kwargs):
+        raise OSError("spawn refused")
+    monkeypatch.setattr(owner_event_inbox.subprocess, "Popen", fail_spawn)
+    job = {"id": "routine", "name": "Brief", "execution_id": "one"}
+    assert "spawn refused" in delivery._deliver_to_jarvis_main(job, "first")
+    assert owner_event_receipt(tmp_path, source="cron", event_id="routine:one")["status"] == "deferred"
+    launched = []
+    class Child:
+        pid = 1234
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(owner_event_inbox.subprocess, "Popen", lambda *_a, **_kw: launched.append(1) or Child())
+    assert "activation started" in delivery._deliver_to_jarvis_main(job, "first")
+    assert launched == [1]
+
+
 def test_scheduler_records_jarvis_admission_as_queued_not_delivered(tmp_path, monkeypatch):
     from hermes_cli.active_sessions import try_acquire_active_session
     from hermes_state import SessionDB

@@ -2461,7 +2461,10 @@ DEFAULT_CONFIG = {
         # (`*.foo.com`) supported.
         "extra_allowed_hosts": [],
     },
-    "desktop": {  # Hermes Desktop (Electron) launch options; only affect `hermes desktop`.
+    "desktop": {  # Hermes Desktop launch and opt-in Jarvis event activation.
+        # Opt-in: a running cron producer may activate exactly one deferred Jarvis
+        # main-chat event in a fresh headless process when Desktop is closed.
+        "jarvis_headless_event_activation": False,
         # CSS font-family for the app's chat and UI text (e.g. "OpenDyslexic"). Layered in front
         # of the active theme's own sans stack so missing glyphs still fall through. Empty = the
         # theme's face. The terminal pane is terminal.font_family.
