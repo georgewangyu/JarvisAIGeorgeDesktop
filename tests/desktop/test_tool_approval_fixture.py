@@ -9,15 +9,19 @@ Manual rehearsal, from the repo root with its Python environment::
     # Or send the exact text "Request the synthetic approval action." in that
     # chat. The loopback model requests a permission change on a dummy file in
     # fixture's sandbox-target directory; approve or reject the card.
+    # To rehearse one background child in the same saved chat, send the exact
+    # text "Run the synthetic delegate check." The loopback model delays the
+    # child's tool-free response so its running state can be inspected.
     python tests/desktop/test_tool_approval_fixture.py status --root /tmp/hermes-approval-UNIQUE
     # After stopping/crashing only this fixture process, reuse its exact
     # test-owned root and token to inspect gateway-restart behavior:
     python tests/desktop/test_tool_approval_fixture.py resume --root /tmp/hermes-approval-UNIQUE
     python tests/desktop/test_tool_approval_fixture.py stop --root /tmp/hermes-approval-UNIQUE
 
-The explicit trigger uses a synthetic tool name with no executor. The model
+The explicit trigger uses a synthetic tool name with no executor. The approval
 rehearsal uses a deterministic local mock to request a real terminal tool, but
 its only command changes a dummy file inside a private test-owned directory.
+The delegate rehearsal makes one background child with no executable action.
 The status command reports the explicit trigger's gate state, not the model
 rehearsal; stop shuts down only this exact foreground fixture. No real model
 or account is used.
@@ -50,6 +54,10 @@ KIND = "hermes-desktop-tool-approval-fixture-v1"
 MODEL_APPROVAL_PROMPT = "Request the synthetic approval action."
 MODEL_BACKGROUND_SUCCESS_PROMPT = "Finish the synthetic background check."
 MODEL_BACKGROUND_FAILURE_PROMPT = "Fail the synthetic background check."
+MODEL_DELEGATE_PROMPT = "Run the synthetic delegate check."
+MODEL_DELEGATE_CHILD_GOAL = "Return the synthetic child check result. Do not use tools."
+MODEL_DELEGATE_CHILD_RESULT = "The synthetic child check finished."
+MODEL_DELEGATE_RESULT = "The synthetic delegate check finished."
 
 
 def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
@@ -63,10 +71,31 @@ def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
         raise ValueError("model messages required")
     user_index = next((index for index in range(len(messages) - 1, -1, -1)
                        if isinstance(messages[index], dict) and messages[index].get("role") == "user"), -1)
-    if user_index < 0 or messages[user_index].get("content") != MODEL_APPROVAL_PROMPT:
-        if user_index >= 0 and messages[user_index].get("content") == MODEL_BACKGROUND_SUCCESS_PROMPT:
-            return {"role": "assistant", "content": "The synthetic background check finished."}, "stop"
+    if user_index < 0:
         raise ValueError("only synthetic approval or background-check rehearsals are supported")
+    user_content = messages[user_index].get("content")
+    if user_content == MODEL_DELEGATE_CHILD_GOAL:
+        return {"role": "assistant", "content": MODEL_DELEGATE_CHILD_RESULT}, "stop"
+    if user_content == MODEL_DELEGATE_PROMPT:
+        after_user = messages[user_index + 1:]
+        if any(isinstance(item, dict) and item.get("role") == "tool" for item in after_user):
+            return {"role": "assistant", "content": "The synthetic child is running."}, "stop"
+        return {
+            "role": "assistant", "content": None,
+            "tool_calls": [{"index": 0, "id": "call_synthetic_delegate", "type": "function",
+                            "function": {"name": "delegate_task", "arguments": json.dumps({
+                                "tasks": [{"goal": MODEL_DELEGATE_CHILD_GOAL}],
+                            })}}],
+        }, "tool_calls"
+    if (isinstance(user_content, str)
+            and user_content.startswith("[ASYNC DELEGATION BATCH COMPLETE — ")
+            and MODEL_DELEGATE_CHILD_GOAL in user_content
+            and MODEL_DELEGATE_CHILD_RESULT in user_content):
+        return {"role": "assistant", "content": MODEL_DELEGATE_RESULT}, "stop"
+    if user_content != MODEL_APPROVAL_PROMPT:
+        if user_content == MODEL_BACKGROUND_SUCCESS_PROMPT:
+            return {"role": "assistant", "content": "The synthetic background check finished."}, "stop"
+        raise ValueError("only synthetic approval, background-check, or delegate rehearsals are supported")
     after_user = messages[user_index + 1:]
     tool_results = [message for message in after_user
                     if isinstance(message, dict) and message.get("role") == "tool"]
@@ -236,7 +265,8 @@ def serve(root: Path, *, resume: bool = False) -> None:
         if isinstance(messages, list):
             latest_user = next((item.get("content") for item in reversed(messages)
                                 if isinstance(item, dict) and item.get("role") == "user"), None)
-            if latest_user in {MODEL_BACKGROUND_SUCCESS_PROMPT, MODEL_BACKGROUND_FAILURE_PROMPT}:
+            if latest_user in {MODEL_BACKGROUND_SUCCESS_PROMPT, MODEL_BACKGROUND_FAILURE_PROMPT,
+                               MODEL_DELEGATE_CHILD_GOAL}:
                 # Allow a native test to leave the owning chat before the
                 # provider returns. No external model or user data is touched.
                 await asyncio.sleep(8)
@@ -398,6 +428,40 @@ def test_model_rehearsal_is_exact_and_test_owned(tmp_path: Path) -> None:
         pass
     else:
         raise AssertionError("unrelated model request was accepted")
+
+
+def test_model_delegate_rehearsal_routes_one_child_and_completion(tmp_path: Path) -> None:
+    root = tmp_path / "approval-fixture"
+    create_fixture(root)
+    messages = [{"role": "user", "content": MODEL_DELEGATE_PROMPT}]
+    spawned, reason = fixture_completion({"messages": messages}, root)
+    assert reason == "tool_calls"
+    assert len(spawned["tool_calls"]) == 1
+    call = spawned["tool_calls"][0]
+    assert call["function"]["name"] == "delegate_task"
+    assert json.loads(call["function"]["arguments"]) == {
+        "tasks": [{"goal": MODEL_DELEGATE_CHILD_GOAL}],
+    }
+    assert "terminal" not in fixture_sse(spawned, reason)
+
+    child, reason = fixture_completion(
+        {"messages": [{"role": "user", "content": MODEL_DELEGATE_CHILD_GOAL}]}, root,
+    )
+    assert (child, reason) == ({"role": "assistant", "content": MODEL_DELEGATE_CHILD_RESULT}, "stop")
+    assert "tool_calls" not in child
+
+    dispatched, reason = fixture_completion({"messages": messages + [
+        spawned, {"role": "tool", "content": '{"status":"dispatched"}'},
+    ]}, root)
+    assert (dispatched, reason) == ({"role": "assistant", "content": "The synthetic child is running."}, "stop")
+
+    completion = ("[ASYNC DELEGATION BATCH COMPLETE — synthetic-id]\n"
+                  f"--- TASK 1/1: {MODEL_DELEGATE_CHILD_GOAL} (status=completed) ---\n"
+                  f"{MODEL_DELEGATE_CHILD_RESULT}")
+    final, reason = fixture_completion({"messages": messages + [
+        {"role": "user", "content": completion},
+    ]}, root)
+    assert (final, reason) == ({"role": "assistant", "content": MODEL_DELEGATE_RESULT}, "stop")
 
 
 def test_loopback_gateway_denial_round_trip(tmp_path: Path) -> None:
