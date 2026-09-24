@@ -438,6 +438,26 @@ describe('switch provider on a live session (#95066)', () => {
   })
 })
 
+describe('Jarvis failed-turn presentation', () => {
+  it('keeps a rejected request and diagnostics readable without developer actions in the first view', async () => {
+    render(
+      <MemoryRouter>
+        <Harness assistant={failedMessage({ code: 'format_error', layer: 'provider', provider: 'custom', retryable: false })} />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('This AI connection could not run your request')).toBeTruthy()
+    expect(screen.getByText('Try another model. If it keeps happening, open troubleshooting for details.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Switch provider' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Send diagnostics' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open logs' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Troubleshooting' }))
+    expect(screen.getByRole('button', { name: 'Send diagnostics' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy error details' })).toBeTruthy()
+  })
+})
+
 describe('expired OAuth grant recovery', () => {
   it('explains the expiry and re-runs that provider sign-in in one click', async () => {
     render(<Harness assistant={oauthExpiredMessage()} />)

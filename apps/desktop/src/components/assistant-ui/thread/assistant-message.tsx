@@ -36,6 +36,7 @@ import { PreviewAttachment } from '@/components/chat/preview-attachment'
 import { Codicon } from '@/components/ui/codicon'
 import { CopyButton } from '@/components/ui/copy-button'
 import { useI18n } from '@/i18n'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import {
   errorRecoveryPlan,
   type ErrorSurface,
@@ -534,10 +535,15 @@ const useErrorText = () =>
 
 const ErrorCardHeadline: FC = () => {
   const { t } = useI18n()
+  const jarvisCopy = useJarvisCopy()
   const { themeName } = useTheme()
   const surface = useErrorSurface()
   const errorText = useErrorText()
-  const { body, title } = errorCardText(t.assistant.thread, surface, themeName === 'jarvis' ? 'jarvis' : undefined)
+  const defaultCopy = errorCardText(t.assistant.thread, surface, themeName === 'jarvis' ? 'jarvis' : undefined)
+
+  const { body, title } = themeName === 'jarvis' && surface?.code === 'format_error'
+    ? { body: jarvisCopy.errorFormatBody, title: jarvisCopy.errorFormatTitle }
+    : defaultCopy
 
   return (
     <>
@@ -711,6 +717,7 @@ const ScheduledRetryAction: FC<{ resetsAt: number }> = ({ resetsAt }) => {
       },
       Math.max(0, fireAt - Date.now())
     )
+
     const tick = window.setInterval(() => setNow(Date.now()), 1000)
 
     return () => {
@@ -762,6 +769,9 @@ const ScheduledRetryAction: FC<{ resetsAt: number }> = ({ resetsAt }) => {
 
 const ErrorRecoveryActions: FC = () => {
   const { t } = useI18n()
+  const jarvisCopy = useJarvisCopy()
+  const { themeName } = useTheme()
+  const [troubleshootingOpen, setTroubleshootingOpen] = useState(false)
   const copy = t.assistant.thread
   const surface = useErrorSurface()
   const errorText = useErrorText()
@@ -864,6 +874,26 @@ const ErrorRecoveryActions: FC = () => {
   // Retry will work instead of guessing (#98852). Informational only: no automatic retry.
   const limitReset = formatLimitReset(surface?.resetsAt)
 
+  const troubleshootingActions = (
+    <>
+      {localFolders && (
+        <button className="aui-error-action" onClick={() => void openLogs()} type="button">
+          {remoteConnection ? copy.errorOpenDesktopLogs : copy.errorOpenLogs}
+        </button>
+      )}
+      <button className="aui-error-action" onClick={() => requestSendDiagnostics(diagnosticsText())} type="button">
+        <Upload className="size-3" />
+        {copy.errorSendDiagnostics}
+      </button>
+      <CopyButton
+        appearance="inline"
+        className="aui-error-action"
+        label={copy.errorCopyDiagnostics}
+        text={diagnosticsText}
+      />
+    </>
+  )
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {plan.editMessage && <EditPreviousMessageAction label={copy.editMessage} />}
@@ -917,21 +947,19 @@ const ErrorRecoveryActions: FC = () => {
       )}
       {plan.retry && surface?.resetsAt !== undefined && <ScheduledRetryAction resetsAt={surface.resetsAt} />}
       {plan.switchProvider && inRouter && <SwitchProviderAction label={copy.errorSwitchProvider} />}
-      {localFolders && (
-        <button className="aui-error-action" onClick={() => void openLogs()} type="button">
-          {remoteConnection ? copy.errorOpenDesktopLogs : copy.errorOpenLogs}
-        </button>
-      )}
-      <button className="aui-error-action" onClick={() => requestSendDiagnostics(diagnosticsText())} type="button">
-        <Upload className="size-3" />
-        {copy.errorSendDiagnostics}
-      </button>
-      <CopyButton
-        appearance="inline"
-        className="aui-error-action"
-        label={copy.errorCopyDiagnostics}
-        text={diagnosticsText}
-      />
+      {themeName === 'jarvis' ? (
+        <div className="w-full text-xs" data-testid="jarvis-error-troubleshooting">
+          <button
+            aria-expanded={troubleshootingOpen}
+            className="cursor-pointer text-(--ui-text-secondary)"
+            onClick={() => setTroubleshootingOpen(open => !open)}
+            type="button"
+          >
+            {jarvisCopy.errorTroubleshooting}
+          </button>
+          {troubleshootingOpen ? <div className="mt-2 flex flex-wrap gap-1.5">{troubleshootingActions}</div> : null}
+        </div>
+      ) : troubleshootingActions}
     </div>
   )
 }
