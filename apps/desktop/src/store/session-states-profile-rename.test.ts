@@ -46,6 +46,9 @@ describe('migrateTilesForProfile', () => {
 
     const sessionStore = await import('@/store/session')
     sessionStore.setRememberedSessionId('s-1', 'webdesign_bhp')
+    const feedPrompt = await import('@/app/feed/prompt')
+    feedPrompt.saveFeedPrompt('webdesign_bhp', null, 'Local instructions')
+    feedPrompt.saveFeedPrompt('webdesign_bhp', 'remote-1', 'Remote instructions')
 
     const { migrateTilesForProfile } = await import('@/store/session-states')
     migrateTilesForProfile('webdesign_bhp', 'hutnik-projectmanager')
@@ -71,5 +74,7 @@ describe('migrateTilesForProfile', () => {
     expect(sessionStore.getSessionOwnerHints('s-1')).toEqual([
       { connectionId: 'local', profile: 'hutnik-projectmanager', targetProfile: 'hutnik-projectmanager' }
     ])
+    expect(feedPrompt.readFeedPrompt('hutnik-projectmanager', null)).toBe('Local instructions')
+    expect(feedPrompt.readFeedPrompt('webdesign_bhp', 'remote-1')).toBe('Remote instructions')
   })
 })

@@ -651,6 +651,37 @@ describe('dropTilesForProfile', () => {
     expect(mod.$sessionTiles.get().map(tile => tile.storedSessionId)).toEqual(['writer-session-1'])
     expect(storedTiles()).toHaveProperty('writer')
   })
+  it('drops local Feed preferences with a local profile but preserves remote preferences', async () => {
+    const feedPrompt = await import('@/app/feed/prompt')
+    feedPrompt.saveFeedPrompt('worker', null, 'Local instructions')
+    feedPrompt.saveFeedPrompt('worker', 'remote-1', 'Remote instructions')
+
+    mod.dropTilesForProfile('worker')
+
+    expect(window.localStorage.getItem(feedPrompt.feedPromptKey('worker', null))).toBeNull()
+    expect(feedPrompt.readFeedPrompt('worker', 'remote-1')).toBe('Remote instructions')
+  })
+  it('drops local Ideas feedback with a local profile but preserves remote feedback', async () => {
+    const ideas = await import('@/app/ideas/feedback')
+    ideas.setIdeaFeedback('worker', null, 'plan-day', 'saved')
+    ideas.setIdeaFeedback('worker', 'local', 'catch-up', 'done')
+
+    mod.dropTilesForProfile('worker')
+
+    expect(ideas.readIdeaFeedback('worker', null)).toEqual({})
+    expect(ideas.readIdeaFeedback('worker', 'local')).toEqual({ 'catch-up': 'done' })
+  })
+  it('preserves local preferences when a remote profile is deleted through an exact route', async () => {
+    const feedPrompt = await import('@/app/feed/prompt')
+    const ideas = await import('@/app/ideas/feedback')
+    feedPrompt.saveFeedPrompt('worker', null, 'Keep local instructions')
+    ideas.setIdeaFeedback('worker', null, 'plan-day', 'saved')
+
+    mod.dropTilesForProfile('worker', { connectionId: 'local', mode: 'remote', profile: 'worker' })
+
+    expect(feedPrompt.readFeedPrompt('worker', null)).toBe('Keep local instructions')
+    expect(ideas.readIdeaFeedback('worker', null)).toEqual({ 'plan-day': 'saved' })
+  })
   it("drops Bot Mode tiles owned by a locally-deleted profile and keeps the other bots' tiles", () => {
     mod.openSessionTile('bot-chat-1', 'right', undefined, undefined, {
       ownerRoute: { connectionId: 'local', mode: 'local' as const, profile: 'researcher-1' },

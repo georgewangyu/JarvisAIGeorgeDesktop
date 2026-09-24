@@ -19,7 +19,8 @@
 import { type GatewayEvent, LOCAL_CONNECTION_ID, registryBackendScopeKey } from '@hermes/shared'
 import { atom, computed } from 'nanostores'
 
-import { migrateIdeaFeedbackForProfile } from '@/app/ideas/feedback'
+import { dropFeedPreferencesForProfile, migrateFeedPreferencesForProfile } from '@/app/feed/preferences-lifecycle'
+import { dropIdeaFeedbackForProfile, migrateIdeaFeedbackForProfile } from '@/app/ideas/feedback'
 import type { ClientSessionState } from '@/app/types'
 import { findGroupOfPane, type LayoutNode } from '@/components/pane-shell/tree/model'
 import {
@@ -1931,7 +1932,7 @@ export function discardSessionTile(storedSessionId: string) {
  */
 export function dropTilesForProfile(
   profile: string,
-  route?: { connectionId?: string; profile?: string; targetProfile?: string }
+  route?: { connectionId?: string; mode?: 'local' | 'remote'; profile?: string; targetProfile?: string }
 ): void {
   // A route without profile has no owner side to match: it would silently fall
   // into the local-delete branch below and require `ownerConnection === 'local'`,
@@ -2021,6 +2022,11 @@ export function dropTilesForProfile(
   }
 
   persistTiles()
+
+  if (!route || route.mode === 'local') {
+    dropFeedPreferencesForProfile(name)
+    dropIdeaFeedbackForProfile(name)
+  }
 }
 
 /**
@@ -2080,6 +2086,7 @@ export function migrateTilesForProfile(oldProfile: string, newProfile: string): 
   migrateRememberedNavigationForProfile(from, to)
   migrateSessionOwnerHintsForProfile(from, to)
   migrateIdeaFeedbackForProfile(from, to)
+  migrateFeedPreferencesForProfile(from, to)
 }
 
 /** ⌘⇧T — reopen the most recently closed tab where it was, then focus it.

@@ -74,7 +74,11 @@ export function DeleteProfileDialog({
         // session/Bot tile restores on relaunch and dials the deleted
         // profile's backend, whose ensure_hermes_home() re-creates the
         // directory the delete just removed (hermes-agent#94235).
-        dropTilesForProfile(profile.name)
+        dropTilesForProfile(profile.name, remote ? {
+          connectionId: typeof scope === 'string' ? scope : scope?.connectionId ?? undefined,
+          mode: 'remote',
+          profile: typeof scope === 'string' ? profile.name : scope?.profile || profile.name
+        } : undefined)
         await onDeleted?.()
 
         if (wasActive) {

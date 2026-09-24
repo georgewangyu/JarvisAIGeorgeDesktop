@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest'
 
-import { ideaFeedbackKey, migrateIdeaFeedbackForProfile, readIdeaFeedback, setIdeaFeedback } from './feedback'
+import { dropIdeaFeedbackForProfile, ideaFeedbackKey, migrateIdeaFeedbackForProfile, readIdeaFeedback, setIdeaFeedback } from './feedback'
 
 afterEach(() => window.localStorage.clear())
 
@@ -51,4 +51,33 @@ it('does not report success when device storage rejects a write', () => {
       Object.defineProperty(window, 'localStorage', original)
     }
   }
+})
+
+it('separates local feedback from a remote connection literally named local', () => {
+  setIdeaFeedback('default', null, 'plan-day', 'saved')
+
+  expect(readIdeaFeedback('default', 'local')).toEqual({})
+  expect(setIdeaFeedback('default', 'local', 'catch-up', 'done')).toBe(true)
+  expect(readIdeaFeedback('default', null)).toEqual({ 'plan-day': 'saved' })
+  expect(readIdeaFeedback('default', 'local')).toEqual({ 'catch-up': 'done' })
+})
+
+it('reads an unambiguous legacy remote choice and keeps it cleared after upgrade', () => {
+  const legacyKey = 'jarvis.desktop.ideaFeedback.v1.profile.default.connection.remote-1'
+  window.localStorage.setItem(legacyKey, JSON.stringify({ 'plan-day': 'saved' }))
+
+  expect(readIdeaFeedback('default', 'remote-1')).toEqual({ 'plan-day': 'saved' })
+  expect(setIdeaFeedback('default', 'remote-1', 'plan-day', null)).toBe(true)
+  expect(readIdeaFeedback('default', 'remote-1')).toEqual({})
+})
+
+it('drops local feedback on local profile deletion without touching remote feedback', () => {
+  setIdeaFeedback('default', null, 'plan-day', 'saved')
+  setIdeaFeedback('default', 'local', 'catch-up', 'done')
+
+  dropIdeaFeedbackForProfile('default')
+
+  expect(readIdeaFeedback('default', null)).toEqual({})
+  expect(readIdeaFeedback('default', 'local')).toEqual({ 'catch-up': 'done' })
+  expect(window.localStorage.getItem(ideaFeedbackKey('default', null))).toBeNull()
 })

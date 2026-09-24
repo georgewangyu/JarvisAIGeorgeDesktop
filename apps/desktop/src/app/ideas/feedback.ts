@@ -9,7 +9,9 @@ const STORAGE_PREFIX = 'jarvis.desktop.ideaFeedback.v1'
 const FEEDBACK = new Set<IdeaFeedback>(['saved', 'done', 'not-interested'])
 
 export function ideaFeedbackKey(profile: string, connectionId: null | string): string {
-  return `${STORAGE_PREFIX}.profile.${encodeURIComponent(profile.trim() || 'default')}.connection.${encodeURIComponent(connectionId?.trim() || 'local')}`
+  const connectionScope = connectionId === null ? 'local' : `remote.${encodeURIComponent(connectionId.trim())}`
+
+  return `${STORAGE_PREFIX}.profile.${encodeURIComponent(profile.trim() || 'default')}.connection.${connectionScope}`
 }
 
 function validFeedback(value: unknown): value is IdeaFeedback {
@@ -17,7 +19,14 @@ function validFeedback(value: unknown): value is IdeaFeedback {
 }
 
 export function readIdeaFeedback(profile: string, connectionId: null | string): IdeaFeedbackById {
-  const value = readJson<unknown>(ideaFeedbackKey(profile, connectionId))
+  let value = readJson<unknown>(ideaFeedbackKey(profile, connectionId))
+  const legacyRemoteId = connectionId?.trim()
+
+  // Older remote keys omitted the prefix. The literal ID "local" aliases the
+  // local owner's key, so never infer ownership from that ambiguous legacy key.
+  if (value === null && legacyRemoteId && legacyRemoteId !== 'local') {
+    value = readJson<unknown>(`${STORAGE_PREFIX}.profile.${encodeURIComponent(profile.trim() || 'default')}.connection.${encodeURIComponent(legacyRemoteId)}`)
+  }
 
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {}
@@ -48,7 +57,9 @@ export function setIdeaFeedback(
     next[ideaId] = feedback
   }
 
-  const serialized = Object.keys(next).length ? JSON.stringify(next) : null
+  // A remote empty object shadows its legacy key so clearing feedback cannot
+  // bring an old choice back on the next read.
+  const serialized = Object.keys(next).length || connectionId !== null ? JSON.stringify(next) : null
   writeKey(key, serialized)
 
   return readKey(key) === serialized
@@ -76,4 +87,8 @@ export function migrateIdeaFeedbackForProfile(oldProfile: string, newProfile: st
   if (readKey(target) === serialized) {
     writeKey(source, null)
   }
+}
+
+export function dropIdeaFeedbackForProfile(profile: string): void {
+  writeKey(ideaFeedbackKey(profile, null), null)
 }

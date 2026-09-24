@@ -829,7 +829,7 @@ export const host = {
     dropTilesForProfile(
       route ? route.profile : name,
       route
-        ? { connectionId: route.connectionId, profile: route.profile, targetProfile: route.targetProfile }
+        ? { connectionId: route.connectionId, mode: route.mode, profile: route.profile, targetProfile: route.targetProfile }
         : undefined
     )
 

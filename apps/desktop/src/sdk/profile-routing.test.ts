@@ -484,6 +484,7 @@ describe('connection-aware plugin host APIs', () => {
     expect(retireLocalProfileGateways).not.toHaveBeenCalled()
     expect(dropTilesForProfile).toHaveBeenCalledWith('worker', {
       connectionId: 'source-a',
+      mode: 'remote',
       profile: 'worker',
       targetProfile: 'backend-worker'
     })
@@ -535,6 +536,7 @@ describe('connection-aware plugin host APIs', () => {
     })
     expect(dropTilesForProfile).toHaveBeenCalledWith('worker', {
       connectionId: 'source-local',
+      mode: 'local',
       profile: 'worker',
       targetProfile: 'backend-worker'
     })
