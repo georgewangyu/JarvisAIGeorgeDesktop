@@ -8,12 +8,14 @@ def test_turn_failure_marks_only_current_matching_reply_and_keeps_metadata(tmp_p
     db = SessionDB(db_path=path)
     try:
         db.create_session("s", source="desktop")
+        assert not db.mark_latest_turn_failure("s", {
+            "layer": "provider", "code": "format_error", "retryable": False})
         old = db.append_message("s", "assistant", "same reply")
         db.append_message("s", "user", "new turn")
-        assert not db.mark_latest_turn_failure("s", "same reply", {
+        assert not db.mark_latest_turn_failure("s", {
             "layer": "provider", "code": "format_error", "retryable": False})
-        current = db.append_message("s", "assistant", "same reply", display_metadata={"reactions": []})
-        assert db.mark_latest_turn_failure("s", "same reply", {
+        current = db.append_message("s", "assistant", "different saved failure", display_metadata={"reactions": []})
+        assert db.mark_latest_turn_failure("s", {
             "layer": "provider", "code": "format_error", "retryable": False,
             "secret": "never persist this", "provider": "openai"})
     finally:

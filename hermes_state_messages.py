@@ -387,13 +387,15 @@ class SessionMessagesMixin:
             return True
         return self._execute_write(_do)
 
-    def mark_latest_turn_failure(self, session_id: str, content: str, surface: Dict[str, Any]) -> bool:
+    def mark_latest_turn_failure(self, session_id: str, surface: Dict[str, Any]) -> bool:
         """Persist only the classified failure on this turn's assistant row.
 
-        Never stamp an older identical reply: the row must follow the latest user
-        input. Keep other display metadata (notably reactions) intact.
+        The model may persist a generic failure sentence while the live turn
+        emits richer copy. Target only a non-tool reply following the latest
+        user input, never a reply from an earlier turn. Keep other display
+        metadata (notably reactions) intact.
         """
-        if not session_id or not content or not isinstance(surface, dict):
+        if not session_id or not isinstance(surface, dict):
             return False
         descriptor = {key: surface[key] for key in ("layer", "code", "retryable", "provider", "model",
             "auth_kind", "provider_label", "api_key_env", "resets_at") if key in surface}
@@ -403,10 +405,11 @@ class SessionMessagesMixin:
         def _do(conn):
             row = conn.execute(
                 "SELECT id, display_metadata FROM messages WHERE session_id = ? AND role = 'assistant' "
-                "AND content = ? AND active = 1 AND id > COALESCE((SELECT MAX(id) FROM messages "
-                "WHERE session_id = ? AND role = 'user' AND active = 1), 0) "
+                "AND active = 1 AND content IS NOT NULL AND content != '' AND tool_calls IS NULL "
+                "AND id > (SELECT MAX(id) FROM messages "
+                "WHERE session_id = ? AND role = 'user' AND active = 1) "
                 "ORDER BY id DESC LIMIT 1",
-                (session_id, self._encode_content(content), session_id)).fetchone()
+                (session_id, session_id)).fetchone()
             if row is None:
                 return False
             metadata = self._decode_display_metadata(row["display_metadata"]) or {}

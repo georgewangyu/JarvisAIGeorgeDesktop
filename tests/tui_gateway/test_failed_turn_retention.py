@@ -230,8 +230,8 @@ def test_returned_error_stamps_saved_reply_for_restart(emits, turn_env):
     server._run_prompt_submit("rid", "sid", session, "synthetic request")
 
     assert len(stamped) == 1
-    assert stamped[0][0:2] == ("session-key", "saved failure")
-    assert stamped[0][2]["code"] == "format_error"
+    assert stamped[0][0] == "session-key"
+    assert stamped[0][1]["code"] == "format_error"
 
 
 def test_returned_error_without_reason_omits_no_frame(emits, turn_env):
