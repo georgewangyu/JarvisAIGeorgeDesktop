@@ -146,6 +146,7 @@ import type { NewSessionSplitHandler } from '../new-session-drag'
 
 import { SidebarSectionAddButton } from './chrome'
 import { ConsumerActivity } from './consumer-activity'
+import { consumeConsumerChatsRequest, OPEN_CONSUMER_CHATS_EVENT, restoreConsumerChatsLayout } from './consumer-chats-request'
 import { SidebarFilterMenu } from './filter-menu'
 import { useGatewaySessionGroups } from './gateway-group-model'
 import { isConsumerSearchSource, type LibrarySearchHit, matchingLibraryHits, scanLibrary } from './library-search'
@@ -256,7 +257,7 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
 
 const AUTOMATIONS_NAV_ITEM = SIDEBAR_NAV.find(item => item.id === 'cron')!
 const MAIN_CHAT_NAV_ITEM = SIDEBAR_NAV.find(item => item.id === 'new-session')!
-export const OPEN_CONSUMER_CHATS_EVENT = 'jarvis:open-chats'
+export { OPEN_CONSUMER_CHATS_EVENT } from './consumer-chats-request'
 export const OPEN_CONSUMER_SEARCH_EVENT = 'jarvis:open-search'
 
 // Two modes via the `compact` height variant (styles.css):
@@ -497,11 +498,16 @@ export function ChatSidebar({
 
   useEffect(() => {
     const onOpenChats = () => {
+      consumeConsumerChatsRequest()
       setDrawerMode('chats')
       setChatsOpen(true)
     }
 
     window.addEventListener(OPEN_CONSUMER_CHATS_EVENT, onOpenChats)
+
+    if (consumeConsumerChatsRequest()) {
+      onOpenChats()
+    }
 
     return () => window.removeEventListener(OPEN_CONSUMER_CHATS_EVENT, onOpenChats)
   }, [])
@@ -1717,6 +1723,10 @@ export function ChatSidebar({
             setChatsOpen(open)
 
             if (!open) {
+              if (drawerMode === 'chats') {
+                restoreConsumerChatsLayout()
+              }
+
               setDrawerMode('chats')
             }
           }}

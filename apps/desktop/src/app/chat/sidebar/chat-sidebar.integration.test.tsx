@@ -13,6 +13,8 @@ import { makeSessionInfo } from '@/test/session-info'
 
 import { type AppView, ROUTES_AREA, SIDEBAR_NAV_AREA } from '../../routes'
 
+import { requestConsumerChats } from './consumer-chats-request'
+
 import { ChatSidebar, OPEN_CONSUMER_CHATS_EVENT, OPEN_CONSUMER_SEARCH_EVENT } from './index'
 
 const searchSessionsMock = vi.hoisted(() => vi.fn())
@@ -110,6 +112,15 @@ describe('consumer chat navigation', () => {
     fireEvent.click(screen.getByText('Side chat two'))
 
     expect(onResumeSession).toHaveBeenCalledWith('side-two', expect.objectContaining({ title: 'Side chat two' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chats' })).toBeNull())
+  })
+
+  it('honors a Chats request made while the sidebar pane was unmounted', async () => {
+    requestConsumerChats()
+    renderSidebar()
+
+    expect(await screen.findByRole('dialog', { name: 'Chats' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chats' })).toBeNull())
   })
 

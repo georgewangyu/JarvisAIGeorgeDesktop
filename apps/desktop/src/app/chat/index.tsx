@@ -75,7 +75,7 @@ import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { useSessionView } from './session-view'
-import { OPEN_CONSUMER_CHATS_EVENT } from './sidebar'
+import { requestConsumerChats } from './sidebar/consumer-chats-request'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
 import { TrackChatGoal } from './track-chat-goal'
@@ -165,7 +165,7 @@ function ChatHeader({
       <header className="consumer-chat-header" data-slot="consumer-chat-header">
         <button
           className="consumer-header-pill consumer-chats-trigger"
-          onClick={() => window.dispatchEvent(new Event(OPEN_CONSUMER_CHATS_EVENT))}
+          onClick={requestConsumerChats}
           type="button"
         >
           <Codicon aria-hidden name="menu" size="0.9rem" />
