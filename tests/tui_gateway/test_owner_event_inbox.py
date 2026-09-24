@@ -9,6 +9,47 @@ from types import SimpleNamespace
 import pytest
 
 
+def test_settled_child_exit_hands_off_only_opted_in_deferred_event(tmp_path, monkeypatch):
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import _locked, _read, _write
+    from tui_gateway import owner_event_inbox as inbox
+
+    (tmp_path / "config.yaml").write_text(
+        "desktop:\n  jarvis_headless_event_activation: true\n", encoding="utf-8")
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+    db.close()
+    receipts = [inbox.admit_jarvis_event(
+        tmp_path, source="test", event_id=name, text=name) for name in ("first", "second", "old")]
+    with _locked(tmp_path) as root:
+        first = _read(root / f"{receipts[0]['id']}.json")
+        first.update(status="settled", headless_activation_requested=True)
+        _write(root / f"{receipts[0]['id']}.json", first)
+        second = _read(root / f"{receipts[1]['id']}.json")
+        second["headless_activation_requested"] = True
+        _write(root / f"{receipts[1]['id']}.json", second)
+    activated = []
+    monkeypatch.setattr(inbox, "activate_deferred_jarvis_event",
+                        lambda _home, key, **_kwargs: activated.append(key))
+
+    class Child:
+        def __init__(self, exit_code):
+            self.exit_code = exit_code
+
+        def wait(self):
+            return self.exit_code
+
+    inbox._reap_and_activate_next(tmp_path, receipts[0]["id"], Child(1))
+    assert activated == []
+    inbox._reap_and_activate_next(tmp_path, receipts[0]["id"], Child(0))
+    assert activated == [receipts[1]["id"]]
+    (tmp_path / "config.yaml").write_text(
+        "desktop:\n  jarvis_headless_event_activation: false\n", encoding="utf-8")
+    inbox._reap_and_activate_next(tmp_path, receipts[0]["id"], Child(0))
+    assert activated == [receipts[1]["id"]]
+
+
 def test_owner_event_admission_is_durable_and_exact(tmp_path):
     from tui_gateway.owner_event_inbox import admit_owner_event, owner_event_receipt
     from tools.bot_live_delivery import claim_pending_delivery, complete_delivery

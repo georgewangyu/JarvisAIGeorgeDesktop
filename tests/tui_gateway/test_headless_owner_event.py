@@ -228,7 +228,7 @@ def test_compute_host_mode_refuses_before_claim_or_model_call(tmp_path, monkeypa
     assert server._sessions == {}
 
 
-def test_module_entrypoint_settles_one_event_with_loopback_provider(tmp_path):
+def test_module_entrypoint_settles_one_event_with_loopback_provider(tmp_path, monkeypatch):
     """The real ``python -m`` entrypoint carries its creation proof across imports."""
     from tui_gateway.owner_event_inbox import owner_event_receipt
 
@@ -242,6 +242,7 @@ def test_module_entrypoint_settles_one_event_with_loopback_provider(tmp_path):
         def do_POST(self):
             request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             calls.append(request)
+            time.sleep(0.25)
             answer = {
                 "id": "chatcmpl-headless-test", "object": "chat.completion", "created": 1,
                 "model": "test-model", "choices": [{
@@ -303,6 +304,29 @@ def test_module_entrypoint_settles_one_event_with_loopback_provider(tmp_path):
             command, cwd=tmp_path, env=clean, stdin=subprocess.DEVNULL,
             capture_output=True, text=True, timeout=10,
         )
+        from cron import scheduler_delivery
+
+        with (home / "config.yaml").open("a", encoding="utf-8") as config_file:
+            config_file.write("desktop:\n  jarvis_headless_event_activation: true\n")
+        with monkeypatch.context() as environment:
+            for name, value in clean.items():
+                environment.setenv(name, value)
+            job = {"id": "handoff", "name": "Brief"}
+            for run in ("one", "two"):
+                message = scheduler_delivery._deliver_to_jarvis_main(
+                    {**job, "execution_id": run}, f"result {run}")
+                assert message and "activation started" in message
+            deadline = time.monotonic() + 25
+            while time.monotonic() < deadline:
+                statuses = [
+                    owner_event_receipt(home, source="cron", event_id=f"handoff:{run}")["status"]
+                    for run in ("one", "two")
+                ]
+                if statuses == ["settled", "settled"]:
+                    break
+                time.sleep(0.05)
+            else:
+                pytest.fail(f"headless child-exit handoff did not settle both events: {statuses}")
     finally:
         provider.shutdown()
         provider.server_close()
@@ -313,4 +337,4 @@ def test_module_entrypoint_settles_one_event_with_loopback_provider(tmp_path):
     assert "ONE_EVENT_SETTLED" in receipt["reply"]
     assert repeat.returncode != 0
     assert "not deferred" in repeat.stderr
-    assert len([call for call in calls if "messages" in call]) == 1
+    assert len([call for call in calls if "messages" in call]) == 3

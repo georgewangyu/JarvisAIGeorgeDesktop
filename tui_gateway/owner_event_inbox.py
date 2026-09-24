@@ -201,6 +201,64 @@ def owner_event_receipt(
     return read_delivery_result(profile_home, _event_delivery_id(source, event_id))
 
 
+def jarvis_headless_activation_enabled(profile_home: Path | str) -> bool:
+    """Read a literal per-profile opt-in without borrowing another profile's scope."""
+    from utils import fast_safe_load
+
+    home = Path(profile_home).resolve()
+    try:
+        with (home / "config.yaml").open(encoding="utf-8") as handle:
+            config = fast_safe_load(handle)
+    except FileNotFoundError:
+        return False
+    except Exception as exc:
+        log.warning("Jarvis headless activation config unreadable for %s: %s", home, exc)
+        return False
+    desktop = config.get("desktop") if isinstance(config, dict) else None
+    return isinstance(desktop, dict) and desktop.get("jarvis_headless_event_activation") is True
+
+
+def _next_opted_in_deferred_event(home: Path) -> str | None:
+    from tools.bot_live_delivery import _locked, _scan_read
+
+    session_id = find_jarvis_main_session_id(home)
+    if session_id is None:
+        return None
+    candidates = []
+    with _locked(home) as root:
+        for path in root.glob("*.json"):
+            record = _scan_read(path)
+            if (record is None or record.get("status") != "deferred"
+                    or record.get("headless_activation_requested") is not True
+                    or record.get("profile_home") != str(home)
+                    or record.get("target_session_id") != session_id):
+                continue
+            sequence = record.get("sequence")
+            key = record.get("delivery_id")
+            if isinstance(sequence, int) and isinstance(key, str):
+                candidates.append((sequence, key))
+    return min(candidates)[1] if candidates else None
+
+
+def _reap_and_activate_next(home: Path, delivery_id: str, process) -> None:
+    """On a settled child exit, hand one pending receipt to a new one-shot child."""
+    from tools.bot_live_delivery import read_delivery_result
+
+    if process.wait() != 0:
+        return
+    try:
+        completed = read_delivery_result(home, delivery_id)
+        if not completed or completed.get("status") not in {"settled", "failed", "cancelled"}:
+            return
+        if not jarvis_headless_activation_enabled(home):
+            return
+        next_id = _next_opted_in_deferred_event(home)
+        if next_id is not None:
+            activate_deferred_jarvis_event(home, next_id, allow_headless=True)
+    except (OSError, ValueError, RuntimeError) as exc:
+        log.warning("Jarvis deferred event handoff stopped for %s: %s", home, exc)
+
+
 def activate_deferred_jarvis_event(
     profile_home: Path | str, delivery_id: str, *, allow_headless: bool = False,
 ) -> int:
@@ -211,18 +269,15 @@ def activate_deferred_jarvis_event(
     This runs only when an already-running producer calls it, not as a watcher.
     """
     from hermes_cli.profiles import get_profile_dir
-    from tools.bot_live_delivery import _delivery_id
+    from tools.bot_live_delivery import _delivery_id, _locked, _read, _write
     from tools.environments.local import served_profile_child_env
 
     if not allow_headless:
         raise ValueError("headless event activation requires explicit opt-in")
     home = Path(profile_home).resolve()
     key = _delivery_id(delivery_id)
-    receipt = read_delivery_result(home, key)
-    if (receipt is None or receipt.get("status") != "deferred"
-            or receipt.get("profile_home") != str(home)
-            or receipt.get("target_session_id") != find_jarvis_main_session_id(home)):
-        raise ValueError("event is not deferred for the exact Jarvis profile")
+    if not jarvis_headless_activation_enabled(home):
+        raise ValueError("headless activation is not enabled for the exact profile")
     if home == get_profile_dir("default").resolve():
         profile = "default"
     elif home.parent.name == "profiles" and home == get_profile_dir(home.name).resolve():
@@ -232,6 +287,16 @@ def activate_deferred_jarvis_event(
     env = served_profile_child_env(target_home=home, inherit_credentials=True)
     if Path(env.get("HERMES_HOME", "")).resolve() != home:
         raise RuntimeError("activation child lacks the exact profile home")
+    session_id = find_jarvis_main_session_id(home)
+    with _locked(home) as root:
+        path = root / f"{key}.json"
+        receipt = _read(path)
+        if (receipt is None or receipt.get("status") != "deferred"
+                or receipt.get("profile_home") != str(home)
+                or receipt.get("target_session_id") != session_id):
+            raise ValueError("event is not deferred for the exact Jarvis profile")
+        receipt["headless_activation_requested"] = True
+        _write(path, receipt)
     process = subprocess.Popen(
         [sys.executable, "-m", "tui_gateway.headless_owner_event",
          "--profile", profile, "--expected-profile-home", str(home),
@@ -240,7 +305,9 @@ def activate_deferred_jarvis_event(
         stderr=subprocess.DEVNULL, close_fds=True, start_new_session=True,
     )
     try:
-        threading.Thread(target=process.wait, name="jarvis-event-child-reaper", daemon=True).start()
+        threading.Thread(
+            target=_reap_and_activate_next, args=(home, key, process),
+            name="jarvis-event-child-reaper", daemon=True).start()
     except RuntimeError:
         log.warning("Jarvis event child started but its wait thread could not start")
     return process.pid
