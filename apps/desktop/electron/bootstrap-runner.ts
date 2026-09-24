@@ -243,7 +243,7 @@ function cachedScriptPath(hermesHome, commit) {
   return path.join(bootstrapCacheDir(hermesHome), `install-${commit}.${process.platform === 'win32' ? 'ps1' : 'sh'}`)
 }
 
-async function retryPinnedInstallScript404(ref, attempt) {
+async function retryPinnedInstallScript404(ref, attempt, apiFallback = null) {
   try {
     return await attempt(false)
   } catch (error) {
@@ -254,12 +254,88 @@ async function retryPinnedInstallScript404(ref, attempt) {
       throw error
     }
 
-    return attempt(true)
+    try {
+      return await attempt(true)
+    } catch (retryError) {
+      if (!apiFallback || !/HTTP 404\b/.test(String(retryError))) {throw retryError}
+
+      // Raw CDN and its cache-busted URL can both lag a newly pushed commit.
+      // Fetch the same pinned ref's file content through GitHub's API, never
+      // substitute an unpinned branch installer.
+      return apiFallback()
+    }
   }
 }
 
 function downloadInstallScript(ref, destPath) {
-  return retryPinnedInstallScript404(ref, cacheBust => downloadInstallScriptAttempt(ref, destPath, cacheBust))
+  return retryPinnedInstallScript404(
+    ref,
+    cacheBust => downloadInstallScriptAttempt(ref, destPath, cacheBust),
+    () => downloadPinnedInstallScriptViaApi(ref, destPath)
+  )
+}
+
+function downloadPinnedInstallScriptViaApi(ref, destPath, get = https.get) {
+  const scriptName = installScriptName()
+  const url = `https://api.github.com/repos/${INSTALL_SOURCE_REPOSITORY}/contents/scripts/${scriptName}?ref=${ref}`
+
+  return new Promise((resolve, reject) => {
+    const request = get(url, {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'JarvisAIGeorgeDesktop' }
+    }, res => {
+      if (res.statusCode !== 200) {
+        res.resume()
+        reject(new Error(`Failed to download ${scriptName}: GitHub API HTTP ${res.statusCode}`))
+
+        return
+      }
+
+      const chunks = []
+      let bytes = 0
+
+      res.on('data', chunk => {
+        bytes += chunk.length
+
+        if (bytes > 2_000_000) {
+          res.destroy(new Error(`Failed to download ${scriptName}: GitHub API response too large`))
+
+          return
+        }
+
+        chunks.push(chunk)
+      })
+      res.on('error', reject)
+      res.on('end', async () => {
+        const tmpPath = `${destPath}.api.tmp`
+
+        try {
+          const file = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+
+          if (file.type !== 'file' || file.path !== `scripts/${scriptName}` || file.encoding !== 'base64'
+              || typeof file.content !== 'string' || !/^[A-Za-z0-9+/=\s]+$/.test(file.content)) {
+            throw new Error('unexpected GitHub API content')
+          }
+
+          const content = Buffer.from(file.content, 'base64')
+
+          if (content.length === 0 || content.length > 1_000_000 || file.size !== content.length) {
+            throw new Error('invalid installer size')
+          }
+
+          await fsp.mkdir(path.dirname(destPath), { recursive: true })
+          await fsp.writeFile(tmpPath, content)
+          await fsp.rename(tmpPath, destPath)
+          resolve(destPath)
+        } catch (error) {
+          await fsp.rm(tmpPath, { force: true }).catch(() => undefined)
+          reject(new Error(`Failed to download ${scriptName}: ${String(error)}`))
+        }
+      })
+    })
+
+    request.setTimeout(20_000, () => request.destroy(new Error(`Failed to download ${scriptName}: GitHub API timeout`)))
+    request.on('error', reject)
+  })
 }
 
 function downloadInstallScriptAttempt(ref, destPath, cacheBust) {
@@ -1106,6 +1182,7 @@ export {
   buildPosixPinArgs,
   cachedScriptPath,
   cleanInstallerLogLine,
+  downloadPinnedInstallScriptViaApi,
   hasExistingGitCheckout,
   installedAgentInstallScript,
   installRefForStamp,

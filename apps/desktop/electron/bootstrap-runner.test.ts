@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
+import type { IncomingMessage } from 'node:http'
+import type https from 'node:https'
 import os from 'node:os'
 import path from 'node:path'
+import { PassThrough } from 'node:stream'
 
 import { test } from 'vitest'
 
@@ -10,6 +14,7 @@ import {
   buildPosixPinArgs,
   cachedScriptPath,
   cleanInstallerLogLine,
+  downloadPinnedInstallScriptViaApi,
   hasExistingGitCheckout,
   installedAgentInstallScript,
   installRefForStamp,
@@ -47,6 +52,77 @@ test('a newly pushed pinned installer gets one cache-busted retry after raw GitH
   assert.equal(result, 'downloaded')
   assert.deepEqual(attempts, [false, true])
   assert.match(installScriptUrl(ref, SCRIPT_NAME, true), /\?retry=\d+$/)
+})
+
+test('two raw 404s use only the same pinned ref through the API fallback', async () => {
+  const ref = 'a'.repeat(40)
+  const attempts: boolean[] = []
+  let fallbackCalls = 0
+
+  const result = await retryPinnedInstallScript404(ref, async cacheBust => {
+    attempts.push(cacheBust)
+    throw new Error('Failed to download install.sh: HTTP 404')
+  }, async () => {
+    fallbackCalls += 1
+
+    return 'pinned API installer'
+  })
+
+  assert.equal(result, 'pinned API installer')
+  assert.deepEqual(attempts, [false, true])
+  assert.equal(fallbackCalls, 1)
+})
+
+test('API fallback refuses unpinned refs and non-404 raw failures', async () => {
+  for (const [ref, errors] of [['main', ['HTTP 404']], ['a'.repeat(40), ['HTTP 404', 'HTTP 403']]] as const) {
+    let attempts = 0
+    let fallbackCalls = 0
+
+    await assert.rejects(retryPinnedInstallScript404(ref, async () => {
+      throw new Error(errors[attempts++] ?? 'unexpected retry')
+    }, async () => {
+      fallbackCalls += 1
+
+      return 'should not be used'
+    }), new RegExp(errors.at(-1)))
+    assert.equal(attempts, errors.length)
+    assert.equal(fallbackCalls, 0)
+  }
+})
+
+test('pinned GitHub API response writes only the requested installer file', async () => {
+  const home = mkTmpHome()
+  const ref = 'a'.repeat(40)
+  const content = '#!/bin/sh\necho synthetic\n'
+  const urls: string[] = []
+
+  const fakeGet = ((url: string, options: { headers: Record<string, string> }, callback: (response: IncomingMessage) => void) => {
+    urls.push(url)
+    assert.equal(options.headers['User-Agent'], 'JarvisAIGeorgeDesktop')
+    const request = Object.assign(new EventEmitter(), { setTimeout: () => request })
+
+    queueMicrotask(() => {
+      const response = Object.assign(new PassThrough(), { statusCode: 200 })
+      callback(response as unknown as IncomingMessage)
+      response.end(JSON.stringify({
+        type: 'file', path: `scripts/${SCRIPT_NAME}`, encoding: 'base64', size: Buffer.byteLength(content),
+        content: Buffer.from(content).toString('base64')
+      }))
+    })
+
+    return request
+  }) as unknown as typeof https.get
+
+  try {
+    const destination = path.join(home, 'cache', SCRIPT_NAME)
+    assert.equal(await downloadPinnedInstallScriptViaApi(ref, destination, fakeGet), destination)
+    assert.equal(fs.readFileSync(destination, 'utf8'), content)
+    assert.deepEqual(urls, [
+      `https://api.github.com/repos/georgewangyu/JarvisAIGeorgeDesktop/contents/scripts/${SCRIPT_NAME}?ref=${ref}`
+    ])
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
 })
 
 test('installer retry does not mask a missing ref or non-404 failure', async () => {
