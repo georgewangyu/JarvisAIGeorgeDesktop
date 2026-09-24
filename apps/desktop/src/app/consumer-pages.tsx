@@ -171,6 +171,22 @@ export function startConsumerDraft(
   addToDraft()
 }
 
+const IDEA_ICONS: Record<string, string> = {
+  'activity-goal': '🚶',
+  'build-routine': '🔁',
+  'catch-up': '✉️',
+  'compare-purchase': '🛍️',
+  'draft-message': '💌',
+  'find-tradeoffs': '⚖️',
+  'organize-project': '🧩',
+  'plan-day': '📅',
+  'plan-workout': '🏋️',
+  'prepare-meeting': '📋',
+  'reconnect': '☕',
+  'research-decision': '🔎',
+  'savings-goal': '🪙'
+}
+
 export function ConsumerIdeasView() {
   const navigate = useNavigate()
   const profile = useStore($activeGatewayProfile)
@@ -288,7 +304,7 @@ export function ConsumerIdeasView() {
 
 
   return (
-    <ConsumerPage description="Starting points for a chat. Choices are saved on this Mac for this profile; nothing is sent until you choose to send it." title="Ideas">
+    <ConsumerPage description="Choose a starting point for an editable chat. Nothing is sent until you send it." title="Ideas">
       <div className="space-y-10">
         {goalLoadError && gateway ? (
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3 text-sm">
@@ -299,17 +315,20 @@ export function ConsumerIdeasView() {
         {sections.map(group => (
           <section key={group.title}>
             <h2 className="mb-3 text-xl font-semibold tracking-tight">{group.title}</h2>
-            <div className="space-y-1">
+            <div className="space-y-3">
               {group.ideas.map(idea => (
-                <div className="flex items-start gap-2 rounded-2xl transition-colors hover:bg-(--ui-control-hover-background)" key={idea.id}>
-                  <button className="min-w-0 flex-1 px-4 py-3 text-left" onClick={() => startIdea(idea.prompt)} type="button">
-                    <span className="block font-medium">{idea.title}</span>
+                <div className="flex items-start gap-4 rounded-2xl transition-colors hover:bg-(--ui-control-hover-background)" key={idea.id}>
+                  <span aria-hidden="true" className="ml-3 mt-4 grid size-11 shrink-0 place-items-center rounded-2xl bg-[#f1eefe] text-xl text-[#6f55b5] dark:bg-[#2a2440]">
+                    {idea.id.startsWith('goal:') ? '✦' : IDEA_ICONS[idea.id] || '✦'}
+                  </span>
+                  <button className="min-w-0 flex-1 px-1 py-4 text-left" onClick={() => startIdea(idea.prompt)} type="button">
+                    <span className="block text-base font-medium leading-6">{idea.title}</span>
                     <span className="mt-1 block text-sm leading-6 text-(--ui-text-tertiary)">{idea.description}</span>
                     {feedback[idea.id] && <span className="mt-1 block text-xs text-(--ui-text-secondary)">{feedbackLabel[feedback[idea.id]]}</span>}
                   </button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button aria-label={`Feedback for ${idea.title}`} className="mr-2 mt-2 grid size-9 shrink-0 place-items-center rounded-full text-(--ui-text-secondary) hover:bg-(--ui-control-hover-background)" type="button">
+                      <button aria-label={`Feedback for ${idea.title}`} className="mr-2 mt-3 grid size-9 shrink-0 place-items-center rounded-full text-(--ui-text-secondary) hover:bg-(--ui-control-hover-background)" type="button">
                         <Codicon name="ellipsis" size="1rem" />
                       </button>
                     </DropdownMenuTrigger>
