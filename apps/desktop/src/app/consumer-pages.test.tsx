@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
@@ -98,6 +98,71 @@ it('turns an Idea into an editable chat draft without sending it', () => {
   expect(screen.getByRole('heading', { name: 'Relationships' })).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Financial planning' })).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Health & fitness' })).toBeTruthy()
+})
+
+it('offers selected-profile saved goals as editable Ideas without sending a prompt', async () => {
+  const request = vi.fn(async () => ({ goals: [
+    { session_id: 'walk-goal', session_title: 'Walk weekly', goal: { title: 'Walk weekly', status: 'active', updated_at: 20 } },
+    { session_id: 'finished-goal', session_title: 'Completed', goal: { title: 'Completed', status: 'done', updated_at: 30 } }
+  ] }))
+
+  $gateway.set({ request } as never)
+
+  render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+
+  expect(await screen.findByRole('heading', { name: 'For your goals' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /^Make progress on CompletedExplore/ })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /^Make progress on Walk weeklyExplore/ }))
+  expect(takeSessionDraft(null).text).toContain('my saved goal: Walk weekly')
+  expect($freshSessionRequest.get()).toBe(1)
+  expect(request).toHaveBeenCalledWith('session.goals.list', { profile: 'default' })
+  expect(request).toHaveBeenCalledTimes(1)
+})
+
+it('never shows a delayed goal suggestion from a previous profile', async () => {
+  let resolveOld: (value: unknown) => void = () => undefined
+  const oldRequest = vi.fn(() => new Promise(resolve => { resolveOld = resolve }))
+
+  const newRequest = vi.fn(async () => ({ goals: [
+    { session_id: 'new-goal', session_title: 'New profile goal', goal: { title: 'New profile goal', status: 'active' } }
+  ] }))
+
+  $gateway.set({ request: oldRequest } as never)
+  const view = render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+
+  act(() => {
+    $activeGatewayProfile.set('other')
+    $gateway.set({ request: newRequest } as never)
+  })
+  view.rerender(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+  expect(await screen.findByRole('button', { name: /^Make progress on New profile goalExplore/ })).toBeTruthy()
+
+  await act(async () => {
+    resolveOld({ goals: [
+      { session_id: 'old-goal', session_title: 'Old profile goal', goal: { title: 'Old profile goal', status: 'active' } }
+    ] })
+  })
+  expect(screen.queryByRole('button', { name: /^Make progress on Old profile goalExplore/ })).toBeNull()
+  expect(newRequest).toHaveBeenCalledWith('session.goals.list', { profile: 'other' })
+})
+
+it('keeps generic Ideas usable when saved goals are unavailable and retries', async () => {
+  const request = vi.fn()
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce({ goals: [
+      { session_id: 'recovered', session_title: 'Recovered', goal: { title: 'Recovered', status: 'paused' } }
+    ] })
+
+  $gateway.set({ request } as never)
+
+  render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+
+  expect(await screen.findByText('Your saved goals are unavailable. Other ideas still work.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: /^Plan my day/ })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+  expect(await screen.findByRole('button', { name: /^Make progress on RecoveredExplore/ })).toBeTruthy()
+  expect(screen.queryByText('Your saved goals are unavailable. Other ideas still work.')).toBeNull()
+  expect(request).toHaveBeenCalledTimes(2)
 })
 
 it('keeps a shopping idea as an editable draft without taking action', () => {

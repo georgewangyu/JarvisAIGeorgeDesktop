@@ -174,6 +174,7 @@ export function startConsumerDraft(
 export function ConsumerIdeasView() {
   const navigate = useNavigate()
   const profile = useStore($activeGatewayProfile)
+  const gateway = useStore($gateway)
   const connection = useStore($connection)
   const connectionId = connection?.mode === 'remote' ? (connection.connectionId || connection.baseUrl) : null
   const scope = ideaFeedbackKey(profile, connectionId)
@@ -184,6 +185,42 @@ export function ConsumerIdeasView() {
   }))
 
   const [showNotInterested, setShowNotInterested] = useState(false)
+
+  const [goalSnapshot, setGoalSnapshot] = useState<{
+    connectionId: string | null
+    gateway: typeof gateway
+    goals: SessionGoalsListResult['goals']
+    profile: string
+  } | null>(null)
+
+  const [goalLoadError, setGoalLoadError] = useState(false)
+  const [goalRefresh, setGoalRefresh] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+
+    setGoalSnapshot(null)
+    setGoalLoadError(false)
+
+    if (gateway) {
+      void gateway.request<SessionGoalsListResult>('session.goals.list', { profile }).then(
+        result => {
+          if (!cancelled) {
+            setGoalSnapshot({ connectionId, gateway, goals: result.goals, profile })
+          }
+        },
+        () => {
+          if (!cancelled) {
+            setGoalLoadError(true)
+          }
+        }
+      )
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [connectionId, gateway, profile, goalRefresh])
 
   const feedback = feedbackSnapshot.scope === scope ? feedbackSnapshot.values : readIdeaFeedback(profile, connectionId)
 
@@ -217,13 +254,30 @@ export function ConsumerIdeasView() {
 
   type IdeaRow = { description: string; id: string; prompt: string; title: string }
 
-  const allIdeas = IDEA_GROUPS.reduce<IdeaRow[]>((items, group) => [...items, ...group.ideas], [])
+  const scopedGoals = goalSnapshot?.gateway === gateway && goalSnapshot.profile === profile && goalSnapshot.connectionId === connectionId
+    ? goalSnapshot.goals
+    : []
+
+  const goalIdeas: IdeaRow[] = scopedGoals
+    .filter(row => row.goal.status !== 'done' && row.goal.title.trim())
+    .sort((a, b) => (b.goal.updated_at ?? 0) - (a.goal.updated_at ?? 0))
+    .slice(0, 3)
+    .map(row => ({
+      id: `goal:${row.session_id}`,
+      title: `Make progress on ${row.goal.title}`,
+      description: 'Explore a next step for this saved goal.',
+      prompt: `Help me make progress on my saved goal: ${row.goal.title}. Ask what has changed and suggest one manageable next step. Do not take action without checking with me.`
+    }))
+
+  const allIdeas = [...goalIdeas, ...IDEA_GROUPS.reduce<IdeaRow[]>((items, group) => [...items, ...group.ideas], [])]
   const savedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'saved')
   const completedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'done')
   const notInterestedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'not-interested')
+  const freshGoalIdeas = goalIdeas.filter(idea => !feedback[idea.id])
 
   const sections: { ideas: IdeaRow[]; title: string }[] = [
     ...(savedIdeas.length ? [{ title: 'Saved for later', ideas: savedIdeas }] : []),
+    ...(freshGoalIdeas.length ? [{ title: 'For your goals', ideas: freshGoalIdeas }] : []),
     ...IDEA_GROUPS.map(group => ({
       title: group.title,
       ideas: group.ideas.filter(idea => !feedback[idea.id])
@@ -236,6 +290,12 @@ export function ConsumerIdeasView() {
   return (
     <ConsumerPage description="Starting points for a chat. Choices are saved on this Mac for this profile; nothing is sent until you choose to send it." title="Ideas">
       <div className="space-y-10">
+        {goalLoadError && gateway ? (
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3 text-sm">
+            <span>Your saved goals are unavailable. Other ideas still work.</span>
+            <Button onClick={() => setGoalRefresh(value => value + 1)} size="sm" variant="text">Try again</Button>
+          </div>
+        ) : null}
         {sections.map(group => (
           <section key={group.title}>
             <h2 className="mb-3 text-xl font-semibold tracking-tight">{group.title}</h2>
