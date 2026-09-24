@@ -216,6 +216,73 @@ def test_deferred_jarvis_events_remain_in_their_own_profile(tmp_path):
         lease.release()
 
 
+def test_headless_event_claim_is_exact_profile_and_not_replayed_after_crash(tmp_path):
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from hermes_state import SessionDB
+    from tui_gateway.owner_event_inbox import (
+        admit_jarvis_event, claim_deferred_jarvis_event_for_headless_owner,
+        owner_event_receipt,
+    )
+
+    homes = [tmp_path / name for name in ("a", "b")]
+    for home in homes:
+        home.mkdir()
+        db = SessionDB(db_path=home / "state.db")
+        db.create_session(session_id="main", source="desktop")
+        db.set_session_title("main", "Jarvis")
+        db.close()
+        admit_jarvis_event(home, source="calendar", event_id="same", text="Check")
+
+    a_id = owner_event_receipt(homes[0], source="calendar", event_id="same")["id"]
+    child = (
+        "import json,os,sys; "
+        "from hermes_cli.active_sessions import try_acquire_active_session; "
+        "from tui_gateway.owner_event_inbox import claim_deferred_jarvis_event_for_headless_owner; "
+        "home=sys.argv[1]; delivery_id=sys.argv[2]; "
+        "lease, refusal=try_acquire_active_session(session_id='main',surface='jarvis-event',"
+        "config={},registry_home=home,metadata={'live_session_id':'child',"
+        "'jarvis_event_consumer':True}); "
+        "assert refusal is None; "
+        "owner={'profile_home':os.path.realpath(home),'session_id':'main',"
+        "'lease_id':lease.lease_id,'live_session_id':'child'}; "
+        "claimed=claim_deferred_jarvis_event_for_headless_owner(home,delivery_id,owner,"
+        "allow_headless=True); print(json.dumps(claimed),flush=True); os._exit(0)"
+    )
+    crashed = subprocess.run([sys.executable, "-c", child, str(homes[0]), a_id],
+                             check=True, capture_output=True, text=True)
+    assert json.loads(crashed.stdout)["status"] == "claimed"
+    assert owner_event_receipt(homes[0], source="calendar", event_id="same")["status"] == "claimed"
+    assert owner_event_receipt(homes[1], source="calendar", event_id="same")["status"] == "deferred"
+
+    for home in (homes[1], homes[0]):  # A → B → A after the first owner's crash.
+        lease, refusal = try_acquire_active_session(
+            session_id="main", surface="jarvis-event", config={}, registry_home=home,
+            metadata={"live_session_id": "replacement", "jarvis_event_consumer": True},
+        )
+        assert refusal is None
+        owner = dict(profile_home=str(home.resolve()), session_id="main",
+                     lease_id=lease.lease_id, live_session_id="replacement")
+        delivery_id = owner_event_receipt(home, source="calendar", event_id="same")["id"]
+        try:
+            with pytest.raises(ValueError, match="explicit opt-in"):
+                claim_deferred_jarvis_event_for_headless_owner(home, delivery_id, owner)
+            with pytest.raises(ValueError, match="different profile home"):
+                claim_deferred_jarvis_event_for_headless_owner(
+                    homes[1] if home == homes[0] else homes[0], delivery_id, owner,
+                    allow_headless=True,
+                )
+            if home == homes[1]:
+                assert claim_deferred_jarvis_event_for_headless_owner(
+                    home, delivery_id, owner, allow_headless=True)["status"] == "claimed"
+            with pytest.raises(ValueError, match="not deferred"):
+                claim_deferred_jarvis_event_for_headless_owner(
+                    home, delivery_id, owner, allow_headless=True)
+        finally:
+            lease.release()
+    assert all(owner_event_receipt(home, source="calendar", event_id="same")["status"] == "claimed"
+               for home in homes)
+
+
 def test_jarvis_event_admission_to_idle_turn_and_restart_receipt(tmp_path):
     """Real DB/lease/mailbox/poller wiring; only the model dispatch is synthetic."""
     from hermes_cli.active_sessions import try_acquire_active_session

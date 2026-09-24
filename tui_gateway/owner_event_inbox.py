@@ -134,6 +134,60 @@ def adopt_deferred_jarvis_events(
         db.close()
 
 
+def claim_deferred_jarvis_event_for_headless_owner(
+    profile_home: Path | str, delivery_id: str, owner: dict[str, Any], *,
+    allow_headless: bool = False,
+) -> dict[str, Any]:
+    """Opt in to a single exact-lease claim; this does not start or run a turn.
+
+    The caller must already hold the permanent chat's exclusive session lease.
+    A crash after this transition leaves an unknown outcome, never a replayable
+    deferred event. No runtime calls this API until a headless consumer exists.
+    """
+    import os
+    import time
+    from hermes_cli.active_sessions import active_session_registry_snapshot
+    from tools.bot_live_delivery import _delivery_id, _locked, _owner, _read, _write
+
+    if not allow_headless:
+        raise ValueError("headless event claiming requires explicit opt-in")
+    home = Path(profile_home).resolve()
+    pinned = _owner(home, owner)
+    key = _delivery_id(delivery_id)
+    # Strict liveness is necessary: an unreadable registry cannot authorize a
+    # background claimant merely because it presented a plausible lease id.
+    def valid_owner() -> bool:
+        if find_jarvis_main_session_id(home) != pinned["session_id"]:
+            return False
+        for entry in active_session_registry_snapshot(registry_home=home, strict=True):
+            meta = entry.get("metadata") or {}
+            if (entry.get("surface") == "jarvis-event"
+                    and entry.get("session_id") == pinned["session_id"]
+                    and entry.get("lease_id") == pinned["lease_id"]
+                    and entry.get("pid") == os.getpid()
+                    and meta.get("live_session_id") == pinned["live_session_id"]
+                    and meta.get("jarvis_event_consumer") is True):
+                return True
+        return False
+
+    if not valid_owner():
+        raise ValueError("no exact live Jarvis event owner")
+    with _locked(home) as root:
+        record_path = root / f"{key}.json"
+        record = _read(record_path)
+        if record is None:
+            raise FileNotFoundError(f"event delivery not found: {key}")
+        if (record.get("status") != "deferred"
+                or record.get("profile_home") != str(home)
+                or record.get("target_session_id") != pinned["session_id"]):
+            raise ValueError("event is not deferred for this Jarvis owner")
+        if not valid_owner():
+            raise ValueError("Jarvis event owner changed during claim")
+        record.update(owner=pinned, **pinned, status="claimed", claimed_at=time.time_ns())
+        _write(record_path, record)
+        return record
+
+
 def owner_event_receipt(
     profile_home: Path | str, *, source: str, event_id: str,
 ) -> dict[str, Any] | None:
