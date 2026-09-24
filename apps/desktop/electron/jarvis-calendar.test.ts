@@ -6,11 +6,11 @@ import type { IpcMain } from 'electron'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { runCalendarHelper } from './jarvis-calendar';
-import { calendarRendererMatches, registerJarvisCalendar } from './jarvis-calendar'
+import { calendarConnectionScope, calendarRendererMatches, registerJarvisCalendar } from './jarvis-calendar'
 
 const roots: string[] = []
 
-function bridge(run: typeof runCalendarHelper, userData: string) {
+function bridge(run: typeof runCalendarHelper, userData: string, scopeForSender = () => '[null,"default"]') {
   const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
   const ipcMain = { handle: (name: string, fn: (...args: unknown[]) => Promise<unknown>) => handlers.set(name, fn) } as unknown as IpcMain
 
@@ -19,6 +19,7 @@ function bridge(run: typeof runCalendarHelper, userData: string) {
     ipcMain,
     platform: 'darwin',
     run,
+    scopeForSender,
     trustedSender: event => calendarRendererMatches(event, 'file:///tmp/Jarvis.app/Contents/Resources/app.asar.unpacked/dist/index.html'),
     userData
   })
@@ -41,6 +42,17 @@ afterEach(() => {
 })
 
 describe('Jarvis Calendar connection boundary', () => {
+  it('binds only a valid exact window route, never an unknown peer or invalid profile', () => {
+    expect(calendarConnectionScope(null, 'default', true)).toBe('[null,"default"]')
+    expect(calendarConnectionScope(null, 'default', false)).toBeNull()
+    expect(calendarConnectionScope({ connectionId: 'remote', profile: 'alpha', registryScoped: true }, 'default', true))
+      .toBe('["remote","alpha"]')
+    expect(calendarConnectionScope({ connectionId: null, profile: '../alpha', registryScoped: false }, 'default', true))
+      .toBeNull()
+    expect(calendarConnectionScope({ connectionId: null, profile: undefined, registryScoped: false }, 'default', true))
+      .toBeNull()
+  })
+
   it('rejects untrusted or nested renderer frames before reading status or changing access', async () => {
     const run = vi.fn()
     const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
@@ -51,6 +63,7 @@ describe('Jarvis Calendar connection boundary', () => {
       ipcMain,
       platform: 'darwin',
       run: run as typeof runCalendarHelper,
+      scopeForSender: () => '[null,"default"]',
       trustedSender: event => calendarRendererMatches(event, 'file:///tmp/Jarvis.app/Contents/Resources/app.asar.unpacked/dist/index.html'),
       userData: testHome()
     })
@@ -131,5 +144,88 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
       .toEqual({ ok: false, code: 'not_connected' })
     expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(false)
+  })
+
+  it('keeps app opt-in separate across profiles, restarts and the old global config', async () => {
+    const userData = testHome()
+    fs.writeFileSync(path.join(userData, 'jarvis-calendar-connection.json'), '{"enabled":true}')
+    let scope = '[null,"alpha"]'
+
+    const spy = vi.fn(async (_executable, input) => ({
+      ok: true,
+      command: input.command,
+      authorization: 'fullAccess',
+      events: []
+    }))
+
+    const run = spy as typeof runCalendarHelper
+    const call = bridge(run, userData, () => scope)
+
+    expect(await call('status')).toMatchObject({ connected: false })
+    expect(await call('connect')).toMatchObject({ connected: true })
+    scope = '[null,"beta"]'
+    expect(await call('status')).toMatchObject({ connected: false })
+    expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
+      .toEqual({ ok: false, code: 'not_connected' })
+    expect(await call('connect')).toMatchObject({ connected: true })
+    expect(await call('disconnect')).toMatchObject({ connected: false })
+    scope = '[null,"alpha"]'
+    expect(await bridge(run, userData, () => scope)('status')).toMatchObject({ connected: true })
+    scope = '["remote-connection","alpha"]'
+    expect(await call('status')).toMatchObject({ connected: false })
+    expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(false)
+  })
+
+  it('cannot grant a profile that changes while macOS permission is pending', async () => {
+    const userData = testHome()
+    let scope = '[null,"alpha"]'
+    let finishPermission!: (value: { ok: true; command: string; authorization: string }) => void
+
+    const pendingPermission = new Promise<{ ok: true; command: string; authorization: string }>(resolve => {
+      finishPermission = resolve
+    })
+
+    const spy = vi.fn(async (_executable, input) => {
+      if (input.command === 'request-full-access') {return pendingPermission}
+
+      return { ok: true, command: input.command, authorization: 'notDetermined' }
+    })
+
+    const run = spy as typeof runCalendarHelper
+    const call = bridge(run, userData, () => scope)
+    const connecting = call('connect')
+
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'request-full-access')).toBe(true))
+    scope = '[null,"beta"]'
+    finishPermission({ ok: true, command: 'request-full-access', authorization: 'fullAccess' })
+    expect(await connecting).toMatchObject({ connected: false })
+    scope = '[null,"alpha"]'
+    expect(await call('status')).toMatchObject({ connected: false })
+  })
+
+  it('does not request permission when the owner changes during its status check', async () => {
+    const userData = testHome()
+    let scope = '[null,"alpha"]'
+    let finishStatus!: (value: { ok: true; command: string; authorization: string }) => void
+
+    const pendingStatus = new Promise<{ ok: true; command: string; authorization: string }>(resolve => {
+      finishStatus = resolve
+    })
+
+    const spy = vi.fn(async (_executable, input) => input.command === 'status'
+      ? pendingStatus
+      : { ok: true, command: input.command, authorization: 'fullAccess' })
+
+    const call = bridge(spy as typeof runCalendarHelper, userData, () => scope)
+    const connecting = call('connect')
+
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledOnce())
+    scope = '[null,"beta"]'
+    finishStatus({ ok: true, command: 'status', authorization: 'notDetermined' })
+    expect(await connecting).toMatchObject({ connected: false })
+    expect(spy.mock.calls.some(([, input]) => input.command === 'request-full-access')).toBe(false)
+    scope = '[null,"alpha"]'
+    expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
+      .toEqual({ ok: false, code: 'not_connected' })
   })
 })

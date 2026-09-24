@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { listOAuthProviders } from '@/api/config'
 import { getGlobalModelInfo, setGlobalModel } from '@/api/models'
@@ -22,6 +22,8 @@ import {
   ShieldLock
 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { $activeConnectionId } from '@/store/connections'
+import { $activeGatewayProfile } from '@/store/profile'
 import { $currentModel, $currentProvider } from '@/store/session'
 
 import { ConsumerSettingsLayout } from '../preferences/settings-layout'
@@ -88,6 +90,11 @@ function ConnectionRow({
 
 export function ConnectionsView() {
   const s = useJarvisCopy()
+  const activeConnectionId = useStore($activeConnectionId)
+  const activeProfile = useStore($activeGatewayProfile)
+  const calendarScope = JSON.stringify([activeConnectionId, activeProfile])
+  const calendarScopeRef = useRef(calendarScope)
+  calendarScopeRef.current = calendarScope
   const currentModel = useStore($currentModel)
   const currentProvider = useStore($currentProvider)
   const [permissions, setPermissions] = useState<JarvisOnboardingPermissionSnapshot | null>(null)
@@ -110,6 +117,7 @@ export function ConnectionsView() {
   )
 
   const refresh = useCallback(async () => {
+    const owner = calendarScopeRef.current
     setRefreshing(true)
 
     try {
@@ -140,21 +148,32 @@ export function ConnectionsView() {
         failures.push('Could not check Mac permissions.')
       }
 
-      setCalendar(calendarResult.status === 'fulfilled' ? calendarResult.value ?? null : null)
-
-      if (calendarResult.status !== 'fulfilled' || !calendarResult.value?.connected) {setCalendarEvents(null)}
+      if (owner === calendarScopeRef.current) {
+        setCalendar(calendarResult.status === 'fulfilled' ? calendarResult.value ?? null : null)
+        // A status refresh cannot prove that a previously read event is still authorized.
+        setCalendarEvents(null)
+      }
 
       setError(failures.length > 0 ? failures.join(' ') : null)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not check this Mac.')
+    } catch {
+      setError('Could not check this Mac. Try again.')
     } finally {
       setRefreshing(false)
     }
   }, [])
 
   useEffect(() => {
+    setCalendar(null)
+    setCalendarEvents(null)
+    setCalendarError(null)
+    setCalendarBusy(false)
+    setEventTitle('')
+    setEventStart('')
+    setEventEnd('')
     void refresh()
+  }, [calendarScope, refresh])
 
+  useEffect(() => {
     const onFocus = () => void refresh()
     window.addEventListener('focus', onFocus)
 
@@ -203,20 +222,24 @@ export function ConnectionsView() {
     const bridge = window.hermesDesktop?.jarvisCalendar
 
     if (!bridge) {return}
+    const owner = calendarScopeRef.current
     setCalendarBusy(true)
     setCalendarError(null)
+    setCalendarEvents(null)
 
     try {
       const next = connect ? await bridge.connect() : await bridge.disconnect()
+
+      if (owner !== calendarScopeRef.current) {return}
       setCalendar(next)
 
       if (!next.connected) {setCalendarEvents(null)}
 
       if (connect && !next.connected) {setCalendarError('Calendar access was not granted. You can try again from macOS Settings.')}
     } catch {
-      setCalendarError('Could not change Calendar access. Try again.')
+      if (owner === calendarScopeRef.current) {setCalendarError('Could not change Calendar access. Try again.')}
     } finally {
-      setCalendarBusy(false)
+      if (owner === calendarScopeRef.current) {setCalendarBusy(false)}
     }
   }
 
@@ -224,6 +247,7 @@ export function ConnectionsView() {
     const bridge = window.hermesDesktop?.jarvisCalendar
 
     if (!bridge || !calendar?.connected) {return}
+    const owner = calendarScopeRef.current
     setCalendarBusy(true)
     setCalendarError(null)
 
@@ -232,14 +256,19 @@ export function ConnectionsView() {
       const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)
       const result = await bridge.list(start.toISOString(), end.toISOString())
 
+      if (owner !== calendarScopeRef.current) {return}
+
       if (!result.ok || !result.events) {throw new Error('read_failed')}
       setCalendarEvents(result.events)
     } catch {
+      if (owner !== calendarScopeRef.current) {return}
       setCalendarError('Could not read upcoming events. Check Calendar access and try again.')
       setCalendarEvents(null)
-      setCalendar(await bridge.status().catch(() => null))
+      const next = await bridge.status().catch(() => null)
+
+      if (owner === calendarScopeRef.current) {setCalendar(next)}
     } finally {
-      setCalendarBusy(false)
+      if (owner === calendarScopeRef.current) {setCalendarBusy(false)}
     }
   }
 
@@ -247,6 +276,7 @@ export function ConnectionsView() {
     const bridge = window.hermesDesktop?.jarvisCalendar
 
     if (!bridge || !calendar?.connected) {return}
+    const owner = calendarScopeRef.current
     const start = new Date(eventStart)
     const end = new Date(eventEnd)
 
@@ -262,16 +292,22 @@ export function ConnectionsView() {
     try {
       const result = await bridge.create(eventTitle.trim(), start.toISOString(), end.toISOString())
 
+      if (owner !== calendarScopeRef.current) {return}
+
       if (!result.ok || !result.event) {throw new Error('create_failed')}
       setEventTitle('')
       setEventStart('')
       setEventEnd('')
       setCalendarEvents(current => current ? [...current, result.event!].sort((a, b) => a.start.localeCompare(b.start)) : null)
     } catch {
+      if (owner !== calendarScopeRef.current) {return}
       setCalendarError('Event was not created. Check Calendar access and try again.')
-      setCalendar(await bridge.status().catch(() => null))
+      setCalendarEvents(null)
+      const next = await bridge.status().catch(() => null)
+
+      if (owner === calendarScopeRef.current) {setCalendar(next)}
     } finally {
-      setCalendarBusy(false)
+      if (owner === calendarScopeRef.current) {setCalendarBusy(false)}
     }
   }
 

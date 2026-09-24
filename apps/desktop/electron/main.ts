@@ -256,7 +256,7 @@ import { createHudSnapShortcut } from './hud-snap-shortcut'
 import { buildHudWindowUrl } from './hud-url'
 import { resolveHudWindowing } from './hud-windowing'
 import { createIntroRevealWindowController } from './intro-reveal-window'
-import { calendarRendererMatches, registerJarvisCalendar } from './jarvis-calendar'
+import { calendarConnectionScope, calendarRendererMatches, registerJarvisCalendar } from './jarvis-calendar'
 import { registerJarvisCodexOAuth } from './jarvis-codex-oauth'
 import { registerJarvisOnboardingPermissions } from './jarvis-onboarding-permissions'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
@@ -16319,6 +16319,11 @@ registerJarvisOnboardingPermissions({ ipcMain, shell, systemPreferences })
 registerJarvisCalendar({
   appPath: app.getAppPath(),
   ipcMain,
+  scopeForSender: event => calendarConnectionScope(
+    windowConnectionRoutes.get(event.sender.id),
+    primaryProfileKey(),
+    event.sender === mainWindow?.webContents
+  ),
   trustedSender: event => {
     const window = BrowserWindow.fromWebContents(event.sender)
 

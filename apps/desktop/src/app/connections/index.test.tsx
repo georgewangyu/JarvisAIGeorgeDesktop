@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { listOAuthProviders } from '@/api/config'
 import { getGlobalModelInfo, setGlobalModel } from '@/api/models'
+import { $activeGatewayProfile } from '@/store/profile'
 import { $currentModel, $currentProvider } from '@/store/session'
 import { makeOAuthProvider } from '@/test/oauth-provider'
 
@@ -13,6 +14,7 @@ vi.mock('@/api/config', () => ({ listOAuthProviders: vi.fn() }))
 vi.mock('@/api/models', () => ({ getGlobalModelInfo: vi.fn(), setGlobalModel: vi.fn() }))
 
 beforeEach(() => {
+  $activeGatewayProfile.set('default')
   $currentProvider.set('openai-codex')
   $currentModel.set('test-model')
   vi.mocked(listOAuthProviders).mockResolvedValue({ providers: [makeOAuthProvider('openai-codex')] })
@@ -24,6 +26,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  $activeGatewayProfile.set('default')
   vi.clearAllMocks()
 })
 
@@ -35,6 +38,16 @@ it('does not treat a selected model as proof of an authenticated account', async
   )
   await screen.findByText('Not connected')
   expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy()
+})
+
+it('does not expose a synchronous connection-check exception to the consumer', async () => {
+  vi.mocked(listOAuthProviders).mockImplementation(() => {
+    throw new Error('private credential at synthetic-path')
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  expect(await screen.findByText('Could not check this Mac. Try again.')).toBeTruthy()
+  expect(screen.queryByText(/private credential/)).toBeNull()
 })
 
 it('keeps Mac permission results when the AI account check fails', async () => {
@@ -271,6 +284,80 @@ it('requires an explicit valid create action and reports a denied Calendar conne
   fireEvent.change(within(section).getByLabelText('Event end'), { target: { value: '2026-09-23T11:00' } })
   fireEvent.click(within(section).getByRole('button', { name: 'Create event' }))
   await waitFor(() => expect(create).toHaveBeenCalledOnce())
+})
+
+it('does not resurrect previously read events after Calendar access is revoked and reconnected', async () => {
+  let granted = true
+  const calendarStatus = () => ({ supported: true, authorization: granted ? 'fullAccess' : 'denied', connected: granted })
+  const status = vi.fn(async () => calendarStatus())
+  const connect = vi.fn(async () => calendarStatus())
+
+  const list = vi.fn().mockResolvedValue({
+    ok: true,
+    command: 'list-events',
+    events: [{
+      id: 'old-event', title: 'Previously read event', start: '2026-09-23T10:00:00.000Z',
+      end: '2026-09-23T11:00:00.000Z', isAllDay: false, calendarId: 'synthetic'
+    }]
+  })
+
+  const create = vi.fn(async () => {
+    granted = false
+
+    return { ok: false, code: 'full_access_required' }
+  })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisCalendar: { status, connect, disconnect: vi.fn(), list, create } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'View upcoming' })).toBeTruthy())
+  fireEvent.click(within(section).getByRole('button', { name: 'View upcoming' }))
+  await waitFor(() => expect(within(section).getByText('Previously read event')).toBeTruthy())
+
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Event title' }), { target: { value: 'New event' } })
+  fireEvent.change(within(section).getByLabelText('Event start'), { target: { value: '2026-09-23T10:00' } })
+  fireEvent.change(within(section).getByLabelText('Event end'), { target: { value: '2026-09-23T11:00' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'Create event' }))
+  await waitFor(() => expect(within(section).getByText('Needs macOS access')).toBeTruthy())
+
+  granted = true
+  fireEvent.click(within(section).getByRole('button', { name: 'Connect' }))
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'View upcoming' })).toBeTruthy())
+  expect(within(section).queryByText('Previously read event')).toBeNull()
+})
+
+it('drops a delayed Calendar read and draft when the active profile changes', async () => {
+  $activeGatewayProfile.set('alpha')
+  let finishList!: (value: unknown) => void
+  const list = vi.fn(() => new Promise(resolve => {finishList = resolve}))
+  const status = vi.fn().mockResolvedValue({ supported: true, authorization: 'fullAccess', connected: true })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisCalendar: { status, connect: vi.fn(), disconnect: vi.fn(), list, create: vi.fn() } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'View upcoming' })).toBeTruthy())
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Event title' }), { target: { value: 'Alpha draft' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'View upcoming' }))
+  await waitFor(() => expect(list).toHaveBeenCalledOnce())
+
+  act(() => $activeGatewayProfile.set('beta'))
+  await waitFor(() => expect(within(section).getByRole('textbox', { name: 'Event title' })).toHaveProperty('value', ''))
+  await act(async () => finishList({
+    ok: true,
+    command: 'list-events',
+    events: [{ id: 'alpha', title: 'Alpha private event', start: '2026-09-23T10:00:00.000Z', end: '2026-09-23T11:00:00.000Z', isAllDay: false, calendarId: 'alpha' }]
+  }))
+  expect(within(section).queryByText('Alpha private event')).toBeNull()
 })
 
 it('does not claim an app is absent or offer a no-op permission action without a native permission bridge', async () => {

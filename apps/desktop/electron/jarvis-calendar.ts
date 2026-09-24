@@ -1,8 +1,12 @@
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
+
+import { DESKTOP_PROFILE_NAME_RE } from './desktop-profile'
+import type { WindowConnectionRoute } from './window-connection-route'
 
 export type CalendarAuthorization = 'notDetermined' | 'restricted' | 'denied' | 'writeOnly' | 'fullAccess' | 'unknown'
 
@@ -26,7 +30,7 @@ interface CalendarSuccess {
 type CalendarResponse = CalendarError | CalendarSuccess
 
 const MAX_RESPONSE_BYTES = 256 * 1024
-const CONFIG_FILE = 'jarvis-calendar-connection.json'
+const CONFIG_PREFIX = 'jarvis-calendar-connection-'
 
 const AUTHORIZATIONS = new Set<CalendarAuthorization>([
   'notDetermined', 'restricted', 'denied', 'writeOnly', 'fullAccess', 'unknown'
@@ -34,6 +38,22 @@ const AUTHORIZATIONS = new Set<CalendarAuthorization>([
 
 export function calendarHelperPath(appPath: string): string {
   return path.resolve(appPath, 'dist/native/jarvis-calendar-helper').replace(/\.asar(?=[/\\])/g, '.asar.unpacked')
+}
+
+export function calendarConnectionScope(
+  route: WindowConnectionRoute | null,
+  primaryProfile: string,
+  isPrimaryWindow: boolean
+): string | null {
+  if (route) {
+    return route.profile && DESKTOP_PROFILE_NAME_RE.test(route.profile)
+      ? JSON.stringify([route.connectionId, route.profile])
+      : null
+  }
+
+  return isPrimaryWindow && DESKTOP_PROFILE_NAME_RE.test(primaryProfile)
+    ? JSON.stringify([null, primaryProfile])
+    : null
 }
 
 export function calendarRendererMatches(event: IpcMainInvokeEvent, rendererUrl: string): boolean {
@@ -59,6 +79,12 @@ function enabled(configPath: string): boolean {
   } catch {
     return false
   }
+}
+
+function configForScope(userData: string, scope: string): string {
+  const hash = createHash('sha256').update(scope).digest('hex')
+
+  return path.join(userData, `${CONFIG_PREFIX}${hash}.json`)
 }
 
 function saveEnabled(configPath: string, value: boolean): void {
@@ -144,19 +170,19 @@ interface CalendarBridgeDeps {
   ipcMain: IpcMain
   platform?: NodeJS.Platform
   run?: typeof runCalendarHelper
+  scopeForSender: (event: IpcMainInvokeEvent) => string | null
   trustedSender: (event: IpcMainInvokeEvent) => boolean
   userData: string
 }
 
-export function registerJarvisCalendar({ appPath, ipcMain, platform = process.platform, run = runCalendarHelper, trustedSender, userData }: CalendarBridgeDeps): void {
-  const configPath = path.join(userData, CONFIG_FILE)
+export function registerJarvisCalendar({ appPath, ipcMain, platform = process.platform, run = runCalendarHelper, scopeForSender, trustedSender, userData }: CalendarBridgeDeps): void {
   const helper = calendarHelperPath(appPath)
 
   const call = (input: Record<string, unknown>) => platform === 'darwin'
     ? run(helper, input)
     : Promise.resolve<CalendarResponse>({ ok: false, code: 'unavailable' })
 
-  const status = async (): Promise<CalendarStatus> => {
+  const status = async (configPath: string): Promise<CalendarStatus> => {
     const response = await call({ command: 'status' })
     const raw = response.ok ? response.authorization : undefined
 
@@ -167,52 +193,82 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     return { authorization, connected: enabled(configPath) && authorization === 'fullAccess', supported: platform === 'darwin' && response.ok }
   }
 
-  const requireTrusted = (event: IpcMainInvokeEvent) => {
+  const requireTrustedScope = (event: IpcMainInvokeEvent): string | null => {
     if (!trustedSender(event)) {
       throw new Error('Untrusted Calendar renderer')
     }
+
+    const scope = scopeForSender(event)
+
+    return typeof scope === 'string' && scope.length > 0 && scope.length <= 256 ? scope : null
   }
 
   ipcMain.handle('jarvis:calendar:status', async event => {
-    requireTrusted(event)
+    const scope = requireTrustedScope(event)
 
-    return status()
+    if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
+
+    const result = await status(configForScope(userData, scope))
+
+    return scopeForSender(event) === scope ? result : { authorization: 'unknown', connected: false, supported: false }
   })
   ipcMain.handle('jarvis:calendar:connect', async (event): Promise<CalendarStatus> => {
-    requireTrusted(event)
-    const before = await status()
+    const scope = requireTrustedScope(event)
+
+    if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
+
+    const configPath = configForScope(userData, scope)
+    const before = await status(configPath)
+
+    if (scopeForSender(event) !== scope) {return { authorization: 'unknown', connected: false, supported: false }}
 
     if (!before.supported) {return before}
 
     if (before.authorization !== 'fullAccess') {
       const request = await call({ command: 'request-full-access' })
 
-      if (!request.ok || request.authorization !== 'fullAccess') {return status()}
+      if (!request.ok || request.authorization !== 'fullAccess') {
+        return scopeForSender(event) === scope
+          ? status(configPath)
+          : { authorization: 'unknown', connected: false, supported: false }
+      }
     }
+
+    if (scopeForSender(event) !== scope) {return { authorization: 'unknown', connected: false, supported: false }}
 
     saveEnabled(configPath, true)
 
-    return status()
+    const result = await status(configPath)
+
+    return scopeForSender(event) === scope ? result : { authorization: 'unknown', connected: false, supported: false }
   })
   ipcMain.handle('jarvis:calendar:disconnect', async (event): Promise<CalendarStatus> => {
-    requireTrusted(event)
+    const scope = requireTrustedScope(event)
+
+    if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
+
+    const configPath = configForScope(userData, scope)
     saveEnabled(configPath, false)
 
-    return status()
+    return status(configPath)
   })
   ipcMain.handle('jarvis:calendar:list', async (event, start: unknown, end: unknown) => {
-    requireTrusted(event)
+    const scope = requireTrustedScope(event)
 
-    if (!(await status()).connected) {return { ok: false, code: 'not_connected' }}
+    if (!scope || !(await status(configForScope(userData, scope))).connected || scopeForSender(event) !== scope) {
+      return { ok: false, code: 'not_connected' }
+    }
 
     if (typeof start !== 'string' || typeof end !== 'string') {return { ok: false, code: 'invalid_input' }}
 
     return call({ command: 'list-events', start, end, limit: 100 })
   })
   ipcMain.handle('jarvis:calendar:create', async (event, title: unknown, start: unknown, end: unknown) => {
-    requireTrusted(event)
+    const scope = requireTrustedScope(event)
 
-    if (!(await status()).connected) {return { ok: false, code: 'not_connected' }}
+    if (!scope || !(await status(configForScope(userData, scope))).connected || scopeForSender(event) !== scope) {
+      return { ok: false, code: 'not_connected' }
+    }
 
     if (typeof title !== 'string' || typeof start !== 'string' || typeof end !== 'string') {
       return { ok: false, code: 'invalid_input' }
