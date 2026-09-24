@@ -184,6 +184,40 @@ describe('DesktopInstallOverlay first-run setup', () => {
     expect(await screen.findByRole('heading', { name: 'Apps on this Mac' })).toBeTruthy()
   })
 
+  it('keeps an IPC sign-in rejection private and permits retry in the setup journey', async () => {
+    $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
+    const desktop = installDesktopMock(bootstrapState())
+
+    const startCodexOAuth = vi.fn()
+      .mockRejectedValueOnce(new Error('callback code=private-code at /Users/example/auth.json'))
+      .mockResolvedValueOnce({ ok: true })
+
+    Object.assign(desktop, {
+      jarvisOnboarding: {
+        getPermissions: vi.fn().mockResolvedValue({
+          apps: { mail: false, messages: false, notes: false, whatsapp: false },
+          fullDiskAccess: 'denied', microphone: 'denied', platform: 'darwin'
+        }),
+        startCodexOAuth
+      }
+    })
+    render(<DesktopInstallOverlay />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Get started' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue without access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with ChatGPT / Codex' }))
+
+    expect(await screen.findByText('ChatGPT sign-in could not start. Please try again.')).toBeTruthy()
+    expect(screen.queryByText(/private-code|auth\.json/)).toBeNull()
+    expect($desktopOnboarding.get().configured).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with ChatGPT / Codex' }))
+    await waitFor(() => expect(startCodexOAuth).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect($desktopOnboarding.get().configured).toBe(true))
+  })
+
   it('lets an already-installed first-run user defer the provider without claiming connection', async () => {
     $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
     const desktop = installDesktopMock(bootstrapState())

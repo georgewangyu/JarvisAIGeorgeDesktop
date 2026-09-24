@@ -24,17 +24,21 @@ export interface JarvisCodexOAuthCommand {
 let activeLogin: ChildProcess | null = null
 
 function safeFailure(output: string): string {
-  const lines = output
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(Boolean)
-    .filter(line => !line.includes('https://'))
-
-  if (lines.some(line => /authorization timed out waiting for the local callback/i.test(line))) {
-    return 'The sign-in window expired. Choose Connect to try again.'
+  if (/authorization timed out waiting for the local callback/i.test(output)) {
+    return 'The sign-in window expired. Choose Continue with ChatGPT / Codex to try again.'
   }
 
-  return lines.at(-1) || 'ChatGPT sign-in did not finish. Please try again.'
+  if (/authorization callback state mismatch/i.test(output)) {
+    return 'The browser response did not match this sign-in. Please try again.'
+  }
+
+  if (/authorization failed:.*(?:access_denied|declined|denied)/i.test(output)) {
+    return 'Sign-in was declined in the browser. Try again when you are ready.'
+  }
+
+  // CLI diagnostics can include the callback URL, code, state, account details,
+  // or a machine path. Never return an arbitrary output line to the renderer.
+  return 'ChatGPT sign-in did not finish. Please try again.'
 }
 
 function collectOutput(stream: NodeJS.ReadableStream | null, append: (chunk: Buffer | string) => void): void {
@@ -60,7 +64,13 @@ export function registerJarvisCodexOAuth({
       return { ok: false, message: 'ChatGPT sign-in is already open in your browser.' }
     }
 
-    const runtime = await resolveCommand()
+    let runtime: JarvisCodexOAuthCommand | null
+
+    try {
+      runtime = await resolveCommand()
+    } catch {
+      return { ok: false, message: 'The Jarvis local engine is not ready yet.' }
+    }
 
     if (!runtime) {
       return { ok: false, message: 'The Jarvis local engine is not ready yet.' }
@@ -74,7 +84,15 @@ export function registerJarvisCodexOAuth({
         stdio: ['ignore', 'pipe', 'pipe']
       }
 
-      const child = spawnProcess(runtime.command, runtime.args, options)
+      let child: ChildProcess
+
+      try {
+        child = spawnProcess(runtime.command, runtime.args, options)
+      } catch {
+        resolve({ ok: false, message: 'ChatGPT sign-in could not start. Please try again.' })
+
+        return
+      }
 
       activeLogin = child
       let output = ''
@@ -85,12 +103,12 @@ export function registerJarvisCodexOAuth({
 
       collectOutput(child.stdout, remember)
       collectOutput(child.stderr, remember)
-      child.once('error', error => {
+      child.once('error', () => {
         if (activeLogin === child) {
           activeLogin = null
         }
 
-        resolve({ ok: false, message: error.message || 'ChatGPT sign-in could not start.' })
+        resolve({ ok: false, message: 'ChatGPT sign-in could not start. Please try again.' })
       })
       child.once('exit', code => {
         if (code !== 0) {

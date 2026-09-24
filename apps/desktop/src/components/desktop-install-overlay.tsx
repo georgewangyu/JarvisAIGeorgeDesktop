@@ -485,7 +485,14 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
             return
           }
 
-          const result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
+          let result: { message?: string; ok: boolean } | undefined
+
+          try {
+            result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
+          } catch {
+            // An IPC rejection can carry a local path or auth callback detail.
+            throw new Error('ChatGPT sign-in could not start. Please try again.')
+          }
 
           if (!result?.ok) {
             throw new Error(result?.message || 'ChatGPT sign-in could not start.')
