@@ -108,6 +108,16 @@ describe('HUD mode', () => {
     expect(screen.getByLabelText('Stop dictation')).toBeTruthy()
     expect(screen.queryByLabelText('Voice')).toBeNull()
   })
+
+  it('reports microphone opening and finishing rather than appearing idle', () => {
+    $hudMode.set(true)
+    const view = renderControls({ voiceStatus: 'starting' })
+
+    expect(screen.getByLabelText('Opening microphone')).toBeTruthy()
+    view.unmount()
+    renderControls({ voiceStatus: 'stopping' })
+    expect(screen.getByLabelText('Finishing recording')).toBeTruthy()
+  })
 })
 
 // A tile can be narrower than the controls cost, and the row is inside an

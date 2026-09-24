@@ -70,6 +70,10 @@ export function VoiceMenu({
   const dictationLabel =
     voiceStatus === 'recording'
       ? c.stopDictation
+      : voiceStatus === 'starting'
+        ? c.startingDictation
+        : voiceStatus === 'stopping'
+          ? c.stoppingDictation
       : voiceStatus === 'transcribing'
         ? c.transcribingDictation
         : c.voiceDictation
@@ -91,7 +95,7 @@ export function VoiceMenu({
           >
             {voiceStatus === 'recording' ? (
               <Square className={cn('fill-current', iconSize.xs)} />
-            ) : voiceStatus === 'transcribing' ? (
+            ) : voiceStatus === 'starting' || voiceStatus === 'stopping' || voiceStatus === 'transcribing' ? (
               <Loader2 className={cn('animate-spin', iconSize.sm)} />
             ) : wakeListening ? (
               <Ear className={iconSize.sm} />
@@ -122,7 +126,7 @@ export function VoiceMenu({
         <DropdownMenuCheckboxItem
           checked={dictating}
           className={dropdownMenuRow}
-          disabled={disabled || !state.voice.enabled || voiceStatus === 'transcribing'}
+          disabled={disabled || !state.voice.enabled || (voiceStatus !== 'idle' && voiceStatus !== 'recording')}
           onSelect={event => {
             // Keep the menu open: dictation is a mode you watch, and closing
             // on select hides the recording state the trigger just entered.

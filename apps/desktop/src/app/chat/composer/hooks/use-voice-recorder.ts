@@ -22,20 +22,22 @@ export function useVoiceRecorder({
 }: VoiceRecorderOptions) {
   const { t } = useI18n()
   const voiceCopy = t.notifications.voice
-  const { handle, level, recording } = useMicRecorder(voiceCopy)
+  const { handle, level } = useMicRecorder(voiceCopy)
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>('idle')
+  // React state can lag a click while microphone permission or stop is pending.
+  const phaseRef = useRef<'idle' | 'starting' | 'recording' | 'stopping' | 'transcribing'>('idle')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const startedAtRef = useRef(0)
   const intervalRef = useRef<number | null>(null)
   const timeoutRef = useRef<number | null>(null)
 
   const clearTimers = () => {
-    if (intervalRef.current) {
+    if (intervalRef.current !== null) {
       window.clearInterval(intervalRef.current)
       intervalRef.current = null
     }
 
-    if (timeoutRef.current) {
+    if (timeoutRef.current !== null) {
       window.clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
@@ -44,21 +46,34 @@ export function useVoiceRecorder({
   useEffect(() => () => clearTimers(), [])
 
   const stop = async () => {
+    if (phaseRef.current !== 'recording') {
+      return
+    }
+
+    phaseRef.current = 'stopping'
+    setVoiceStatus('stopping')
     clearTimers()
-    const result = await handle.stop()
 
-    if (!result) {
+    let result
+
+    try {
+      result = await handle.stop()
+    } catch (error) {
+      // MediaRecorder.stop() can throw before its onstop cleanup runs. Release
+      // the stream before returning to idle, even when no audio was captured.
+      try {handle.cancel()} catch { /* Keep the original recording error. */ }
+      notifyError(error, voiceCopy.recordingFailed)
+    }
+
+    if (!result || !onTranscribeAudio) {
+      phaseRef.current = 'idle'
       setVoiceStatus('idle')
+      focusInput()
 
       return
     }
 
-    if (!onTranscribeAudio) {
-      setVoiceStatus('idle')
-
-      return
-    }
-
+    phaseRef.current = 'transcribing'
     setVoiceStatus('transcribing')
 
     try {
@@ -72,20 +87,41 @@ export function useVoiceRecorder({
     } catch (error) {
       notifyError(error, voiceCopy.transcriptionFailed)
     } finally {
+      phaseRef.current = 'idle'
       setVoiceStatus('idle')
       focusInput()
     }
   }
 
   const start = async () => {
+    if (phaseRef.current !== 'idle') {
+      return
+    }
+
     if (!onTranscribeAudio) {
       notify({ kind: 'warning', title: voiceCopy.unavailable, message: voiceCopy.transcriptionUnavailable })
 
       return
     }
 
+    phaseRef.current = 'starting'
+    setVoiceStatus('starting')
+
     try {
-      await handle.start({ onError: error => notifyError(error, voiceCopy.recordingFailed) })
+      await handle.start({
+        onError: error => {
+          clearTimers()
+          phaseRef.current = 'idle'
+          setVoiceStatus('idle')
+          notifyError(error, voiceCopy.recordingFailed)
+        }
+      })
+
+      if (phaseRef.current !== 'starting') {
+        return
+      }
+
+      phaseRef.current = 'recording'
       startedAtRef.current = Date.now()
       setElapsedSeconds(0)
       setVoiceStatus('recording')
@@ -93,15 +129,16 @@ export function useVoiceRecorder({
       const cap = Math.max(1, Math.min(Math.trunc(maxRecordingSeconds), 600))
       timeoutRef.current = window.setTimeout(() => void stop(), cap * 1000)
     } catch (error) {
+      phaseRef.current = 'idle'
       setVoiceStatus('idle')
       notifyError(error, voiceCopy.recordingFailed)
     }
   }
 
   const dictate = () => {
-    if (recording) {
+    if (phaseRef.current === 'recording') {
       void stop()
-    } else if (voiceStatus === 'idle') {
+    } else if (phaseRef.current === 'idle') {
       void start()
     }
   }

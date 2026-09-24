@@ -171,7 +171,15 @@ export function VoiceActivity({ state }: { state: VoiceActivityState }) {
   }
 
   const recording = state.status === 'recording'
-  const title = recording ? t.composer.dictating : t.composer.transcribing
+
+  const title =
+    state.status === 'starting'
+      ? t.composer.startingDictation
+      : state.status === 'stopping'
+        ? t.composer.stoppingDictation
+        : recording
+          ? t.composer.dictating
+          : t.composer.transcribing
 
   return (
     <div
@@ -193,9 +201,11 @@ export function VoiceActivity({ state }: { state: VoiceActivityState }) {
 
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate font-medium text-foreground/85">{title}</span>
-        <span className="font-mono text-[0.6875rem] text-muted-foreground/85">
-          {formatElapsed(state.elapsedSeconds)}
-        </span>
+        {(recording || state.status === 'stopping') && (
+          <span className="font-mono text-[0.6875rem] text-muted-foreground/85">
+            {formatElapsed(state.elapsedSeconds)}
+          </span>
+        )}
       </div>
 
       <VoiceLevelBars active={recording} level={state.level} />
