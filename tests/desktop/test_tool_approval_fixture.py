@@ -68,7 +68,21 @@ def create_fixture(root: Path) -> dict:
     root.mkdir(parents=True, exist_ok=True)
     marker, home, state = paths(root)
     home.mkdir()
-    (home / "config.yaml").write_text("approvals:\n  mode: manual\n  timeout: 90\n", encoding="utf-8")
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = int(probe.getsockname()[1])
+    (home / "config.yaml").write_text(
+        "approvals:\n  mode: manual\n  timeout: 90\n"
+        "model:\n  default: approval-fixture-model\n"
+        "  provider: custom:approval-fixture\n"
+        "auxiliary:\n  title_generation:\n    enabled: false\n"
+        "providers:\n  approval-fixture:\n"
+        f"    api: http://127.0.0.1:{port}/v1\n"
+        "    transport: chat_completions\n"
+        "    default_model: approval-fixture-model\n"
+        "    key_env: APPROVAL_FIXTURE_API_KEY\n",
+        encoding="utf-8",
+    )
     from hermes_state import SessionDB
 
     session_id = f"synthetic-approval-{uuid.uuid4().hex}"
@@ -80,9 +94,6 @@ def create_fixture(root: Path) -> dict:
         db.append_message(session_id, "assistant", "Open this chat, then run the fixture trigger command. Deny the approval card; no tool will execute.")
     finally:
         db.close()
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = int(probe.getsockname()[1])
     data = {"kind": KIND, "root": str(root), "session_id": session_id,
             "session_token": secrets.token_urlsafe(32), "port": port}
     marker.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -97,6 +108,7 @@ def serve(root: Path) -> None:
     fixture_env = isolated_environment(root)
     os.environ.clear()
     os.environ.update(fixture_env)
+    os.environ["APPROVAL_FIXTURE_API_KEY"] = "synthetic-loopback-only"
     data = create_fixture(root)
     _marker, _home, state_path = paths(root)
     # Import the production app only after binding it to this disposable home.
@@ -127,6 +139,14 @@ def serve(root: Path) -> None:
         require_token(x_hermes_session_token)
         return json.loads(state_path.read_text(encoding="utf-8"))
 
+    @app.get("/v1/models")
+    def fixture_models():
+        return {"object": "list", "data": [{"id": "approval-fixture-model", "object": "model"}]}
+
+    @app.post("/v1/chat/completions")
+    def fixture_model_refusal():
+        raise HTTPException(status_code=409, detail="fixture does not run a model turn")
+
     @app.post("/fixture/approval/trigger")
     def fixture_trigger(x_hermes_session_token: str | None = Header(default=None)):
         nonlocal worker
@@ -140,15 +160,13 @@ def serve(root: Path) -> None:
                 raise HTTPException(status_code=409, detail="open the saved chat in Desktop first")
             sid, session = live
             key = session["session_key"]
-            # approval.respond currently calls _sess(), which waits for agent
-            # initialization even though resolving a queued decision needs no
-            # model. This fixture has no provider by design: wait for the cold
-            # build to finish, then use an inert sentinel solely for that RPC.
+            # approval.respond currently calls _sess(), so do not trigger a
+            # request until the loopback-only agent has finished initializing.
             ready = session.get("agent_ready")
             if ready is not None and not ready.wait(timeout=10):
                 raise HTTPException(status_code=409, detail="synthetic chat is still opening")
-            session["agent"] = object()
-            session["agent_error"] = None
+            if session.get("agent") is None or session.get("agent_error"):
+                raise HTTPException(status_code=409, detail="synthetic agent could not initialize")
             write_state({"state": "waiting", "session_id": sid})
             approval.register_gateway_notify(key, lambda payload: gateway._emit_approval_request(sid, payload))
 
@@ -182,7 +200,8 @@ def serve(root: Path) -> None:
     # The dashboard's catch-all mount precedes late-added test routes. Place
     # these exact fixture endpoints ahead of it so the normal app serves them.
     fixture_routes = [route for route in app.router.routes
-                      if getattr(route, "path", "").startswith("/fixture/approval/")]
+                      if getattr(route, "path", "").startswith("/fixture/approval/")
+                      or getattr(route, "path", "").startswith("/v1/")]
     app.router.routes[:] = fixture_routes + [route for route in app.router.routes if route not in fixture_routes]
 
     config = uvicorn.Config(app, host="127.0.0.1", port=data["port"], log_level="warning")
