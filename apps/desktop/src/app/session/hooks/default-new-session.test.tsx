@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopProfileRoute } from '@/global'
 import { createClientSessionState } from '@/lib/chat-runtime'
 import { $defaultProfileRoute, setDefaultProfile } from '@/store/default-profile'
-import { requestGatewayForAgent } from '@/store/gateway'
+import { requestGatewayForAgent, requestGatewayForProfile } from '@/store/gateway'
 import {
   $activeGatewayProfile,
   $newChatConnectionId,
@@ -39,6 +39,7 @@ vi.mock('@/store/gateway', async original => ({
   ...(await original<Record<string, unknown>>()),
   activeGatewayConnectionId: vi.fn(() => 'previous'),
   requestGatewayForAgent: vi.fn(),
+  requestGatewayForProfile: vi.fn(),
   retainGatewayForAgent: vi.fn(async () => () => undefined)
 }))
 
@@ -46,11 +47,12 @@ vi.mock('@/store/gateway', async original => ({
 // hook tags them foreground (#105104); the two undefineds are timeout/signal.
 const FOREGROUND_CREATE_DIAL = [undefined, undefined, { spawnPriority: 'foreground' }] as const
 
-function mountActions() {
+function mountActions(getRouteToken = () => 'route') {
   const ref = <T,>(current: T) => ({ current })
   const requestGateway = vi.fn(async () => ({ session_id: 'ambient', stored_session_id: 'ambient-stored' }) as never)
   const navigate = vi.fn()
   const state = createClientSessionState()
+
   const result = renderHook(() =>
     useSessionActions({
       activeSessionId: 'existing-runtime',
@@ -58,7 +60,7 @@ function mountActions() {
       busyRef: ref(false),
       creatingSessionRef: ref(false),
       ensureSessionState: () => state,
-      getRouteToken: () => 'route',
+      getRouteToken,
       getRoutedStoredSessionId: () => null,
       navigate,
       requestGateway,
@@ -71,6 +73,7 @@ function mountActions() {
       updateSessionState: () => state
     })
   )
+
   return { ...result, navigate, requestGateway }
 }
 
@@ -112,6 +115,8 @@ beforeEach(() => {
   })
   window.hermesDesktop = { profile: { setDefault: async (route: DesktopProfileRoute) => route } } as never
   vi.mocked(requestGatewayForAgent).mockReset()
+  vi.mocked(requestGatewayForProfile).mockReset()
+  vi.mocked(requestGatewayForProfile).mockResolvedValue({ sessions: [] })
   vi.mocked(requestGatewayForAgent).mockResolvedValue({
     session_id: 'created',
     stored_session_id: 'created-stored',
@@ -150,13 +155,145 @@ describe('generic new session default routing', () => {
     )
   })
 
-  it('reopens the permanent Jarvis chat instead of minting another draft', () => {
-    setSessions([{ id: 'jarvis-main', title: 'Jarvis' } as never])
+  it('resolves the permanent Jarvis chat when startup cache is empty', async () => {
+    vi.mocked(requestGatewayForAgent).mockResolvedValueOnce({
+      sessions: [{ id: 'jarvis-main', title: 'Jarvis' }]
+    })
+    const { navigate, result } = mountActions()
+
+    await act(async () => result.current.selectSidebarItem({ action: 'new-session' } as never))
+
+    expect(navigate).toHaveBeenCalledWith('/jarvis-main')
+    expect(requestGatewayForAgent).toHaveBeenCalledWith(
+      'previous',
+      'other',
+      'session.list',
+      { title: 'Jarvis', include_hidden: true, profile: 'other' },
+      undefined,
+      undefined,
+      { spawnPriority: 'foreground' }
+    )
+  })
+
+  it('does not open a cached Jarvis row from another profile', async () => {
+    setSessions([{ id: 'other-jarvis', title: 'Jarvis', profile: 'stranger' } as never])
+    vi.mocked(requestGatewayForAgent).mockResolvedValueOnce({
+      sessions: [{ id: 'our-jarvis', title: 'Jarvis' }]
+    })
+    const { navigate, result } = mountActions()
+
+    await act(async () => result.current.selectSidebarItem({ action: 'new-session' } as never))
+
+    expect(navigate).toHaveBeenCalledWith('/our-jarvis')
+    expect(navigate).not.toHaveBeenCalledWith('/other-jarvis')
+  })
+
+  it('does not let another profile\'s Jarvis row suppress this owner\'s permanent title', async () => {
+    setSessions([{ id: 'other-jarvis', title: 'Jarvis', profile: 'stranger', connection_id: 'elsewhere' } as never])
+    vi.mocked(requestGatewayForAgent).mockResolvedValueOnce({ sessions: [] })
+    const { result } = mountActions()
+
+    await act(async () => result.current.selectSidebarItem({ action: 'new-session' } as never))
+    await act(() => result.current.createBackendSessionForSend('hello'))
+
+    expect(requestGatewayForAgent).toHaveBeenCalledWith(
+      'previous',
+      'other',
+      'session.create',
+      expect.objectContaining({ title: 'Jarvis' }),
+      ...FOREGROUND_CREATE_DIAL
+    )
+  })
+
+  it('refuses to mint a second main chat when the exact owner cache contradicts an empty lookup', async () => {
+    setSessions([{ id: 'known-jarvis', title: 'Jarvis', profile: 'other', connection_id: 'previous' } as never])
+    vi.mocked(requestGatewayForAgent).mockResolvedValueOnce({ sessions: [] })
+    const { navigate, result } = mountActions()
+
+    await act(async () => result.current.selectSidebarItem({ action: 'new-session' } as never))
+
+    expect(navigate).not.toHaveBeenCalled()
+    expect($activeSessionId.get()).toBe('existing-runtime')
+  })
+
+  it('opens the live compression tip of the permanent Jarvis chat', async () => {
+    vi.mocked(requestGatewayForAgent).mockResolvedValueOnce({
+      sessions: [{ id: 'jarvis-root', resolved_id: 'jarvis-tip', title: 'Jarvis' }]
+    })
+    const { navigate, result } = mountActions()
+
+    await act(async () => result.current.selectSidebarItem({ action: 'new-session' } as never))
+
+    expect(navigate).toHaveBeenCalledWith('/jarvis-tip')
+    expect(navigate).not.toHaveBeenCalledWith('/jarvis-root')
+  })
+
+  it('keeps the current chat on a registry failure, then opens Jarvis on retry', async () => {
+    vi.mocked(requestGatewayForAgent).mockRejectedValueOnce(new Error('unavailable'))
+    vi.mocked(requestGatewayForAgent).mockResolvedValueOnce({
+      sessions: [{ id: 'jarvis-after-retry', title: 'Jarvis' }]
+    })
+    const { navigate, result } = mountActions()
+
+    await act(async () => result.current.selectSidebarItem({ action: 'new-session' } as never))
+
+    expect(navigate).not.toHaveBeenCalled()
+    expect($activeSessionId.get()).toBe('existing-runtime')
+
+    await act(async () => result.current.selectSidebarItem({ action: 'new-session' } as never))
+
+    expect(navigate).toHaveBeenCalledWith('/jarvis-after-retry')
+  })
+
+  it('resolves a legacy-profile Jarvis chat through that profile, not the previous source', async () => {
+    const { navigate, result } = mountActions()
+    await act(() => setDefaultProfile({ connectionId: null, profile: 'personal' }))
+    vi.mocked(requestGatewayForProfile).mockResolvedValueOnce({
+      sessions: [{ id: 'personal-jarvis', title: 'Jarvis' }]
+    })
+
+    await act(async () => result.current.selectSidebarItem({ action: 'new-session' } as never))
+
+    expect(requestGatewayForProfile).toHaveBeenCalledWith(
+      'personal',
+      'session.list',
+      { title: 'Jarvis', include_hidden: true, profile: 'personal' },
+      undefined,
+      undefined,
+      { spawnPriority: 'foreground' }
+    )
+    expect(navigate).toHaveBeenCalledWith('/personal-jarvis')
+    expect(requestGatewayForAgent).not.toHaveBeenCalled()
+  })
+
+  it('does not steal the foreground after the user leaves during Jarvis lookup', async () => {
+    let finishLookup!: (value: { sessions: Array<{ id: string; title: string }> }) => void
+    vi.mocked(requestGatewayForAgent).mockImplementationOnce(
+      () => new Promise(resolve => { finishLookup = resolve })
+    )
+    let routeToken = 'chat-before-click'
+    const { navigate, result } = mountActions(() => routeToken)
+
+    act(() => result.current.selectSidebarItem({ action: 'new-session' } as never))
+    routeToken = 'another-page'
+    await act(async () => finishLookup({ sessions: [{ id: 'jarvis-main', title: 'Jarvis' }] }))
+
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('does not open the old profile\'s Jarvis chat after a profile switch on the same page', async () => {
+    let finishLookup!: (value: { sessions: Array<{ id: string; title: string }> }) => void
+    vi.mocked(requestGatewayForAgent).mockImplementationOnce(
+      () => new Promise(resolve => { finishLookup = resolve })
+    )
     const { navigate, result } = mountActions()
 
     act(() => result.current.selectSidebarItem({ action: 'new-session' } as never))
+    $newChatProfile.set('next-profile')
+    $newChatRoute.set({ connectionId: 'previous', profile: 'next-profile' })
+    await act(async () => finishLookup({ sessions: [{ id: 'old-profile-jarvis', title: 'Jarvis' }] }))
 
-    expect(navigate).toHaveBeenCalledWith('/jarvis-main')
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('keeps an explicitly requested fresh chat separate from Jarvis', async () => {

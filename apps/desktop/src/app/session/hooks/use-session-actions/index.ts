@@ -36,6 +36,7 @@ import {
   openGatewayForAgent,
   openGatewayForProfile,
   requestGatewayForAgent,
+  requestGatewayForProfile,
   retainGatewayForAgent
 } from '@/store/gateway'
 import { $gatewaySwitching } from '@/store/gateway-switch'
@@ -212,6 +213,14 @@ interface SessionActionsOptions {
 // bounded retry rebinds it when the backend returns. Boot-into-a-stale-last-id
 // (NOT in this set) still legitimately drops to a draft.
 const createdThisRun = new Set<string>()
+
+function knownJarvisMainChatForOwner(profile: string, route: AgentProfileRoute | null): boolean {
+  return $sessions.get().some(session =>
+    isJarvisMainChat(session) &&
+    normalizeProfileKey(session.profile) === normalizeProfileKey(profile) &&
+    (route ? session.connection_id === route.connectionId : !session.connection_id)
+  )
+}
 
 const branchMessagesFingerprint = (messages: BranchMessage[]): string =>
   JSON.stringify(messages.map(({ content, role }) => [role, content]))
@@ -418,6 +427,7 @@ export function useSessionActions({
   const transcriptHydrationByRuntimeRef = useRef(new Map<string, symbol>())
   const coldDisplayReadsRef = useRef(new Map<string, symbol>())
   const branchCreateFlightsRef = useRef(new Map<string, Promise<SessionCreateResponse>>())
+  const mainChatOpenRequestRef = useRef(0)
   // A first launch opens the permanent Jarvis conversation. Every generic
   // new-chat path (keyboard shortcut, workspace +, branch) explicitly becomes
   // a side chat; clicking the Jarvis row switches this intent back to main.
@@ -614,7 +624,9 @@ export function useSessionActions({
         const legacyProfileIntent = isLegacyNewChatProfile(capturedProfile)
 
         const mainChatTitle =
-          freshChatIntentRef.current === 'main' && !createOverrides?.title && !$sessions.get().some(isJarvisMainChat)
+          freshChatIntentRef.current === 'main' &&
+          !createOverrides?.title &&
+          !knownJarvisMainChatForOwner(capturedProfile, capturedRoute)
             ? JARVIS_MAIN_CHAT_TITLE
             : undefined
 
@@ -782,17 +794,83 @@ export function useSessionActions({
   const selectSidebarItem = useCallback(
     (item: SidebarNavItem) => {
       if (item.action === 'new-session') {
+        const requestId = ++mainChatOpenRequestRef.current
         prepareDefaultNewSession()
         setWorkspaceScope('sessions')
-        const mainChat = $sessions.get().find(isJarvisMainChat)
+        // The sidebar cache can still be empty during startup or contain a
+        // Jarvis row from another profile. Resolve the exact title in the
+        // selected backend before minting a new main-chat draft. Never treat
+        // a failed registry read as proof that the chat is absent.
+        const target = defaultNewSessionTarget()
+        const route = target ? target.route : resolveNewChatOwnerRoute()
+        const profile = target?.profile ?? route?.profile ?? $newChatProfile.get() ?? $activeGatewayProfile.get()
+        const routeToken = getRouteToken()
 
-        if (mainChat) {
-          navigate(sessionRoute(mainChat.id))
+        const stillSelected = () => {
+          if (mainChatOpenRequestRef.current !== requestId || getRouteToken() !== routeToken) {
+            return false
+          }
 
-          return
+          const currentProfile = $newChatProfile.get() ?? $activeGatewayProfile.get()
+          const currentRoute = resolveNewChatOwnerRoute()
+
+          return (
+            normalizeProfileKey(currentProfile) === normalizeProfileKey(profile) &&
+            (route
+              ? currentRoute?.connectionId === route.connectionId &&
+                normalizeProfileKey(currentRoute.profile) === normalizeProfileKey(route.profile)
+              : currentRoute === null)
+          )
         }
 
-        startFreshSessionDraft({ intent: 'main' })
+        const lookup = route
+          ? requestGatewayForAgent<{ sessions?: Array<{ id: string; resolved_id?: string; title: string | null }> }>(
+              route.connectionId,
+              route.profile,
+              'session.list',
+              { title: JARVIS_MAIN_CHAT_TITLE, include_hidden: true, profile: route.profile },
+              undefined,
+              undefined,
+              { spawnPriority: 'foreground' }
+            )
+          : profile
+            ? requestGatewayForProfile<{ sessions?: Array<{ id: string; resolved_id?: string; title: string | null }> }>(
+                profile,
+                'session.list',
+                { title: JARVIS_MAIN_CHAT_TITLE, include_hidden: true, profile },
+                undefined,
+                undefined,
+                { spawnPriority: 'foreground' }
+              )
+            : requestGateway<{ sessions?: Array<{ id: string; resolved_id?: string; title: string | null }> }>('session.list', {
+                title: JARVIS_MAIN_CHAT_TITLE,
+                include_hidden: true
+              })
+
+        void lookup
+          .then(result => {
+            if (!stillSelected()) {
+              return
+            }
+
+            const saved = result.sessions?.find(row => row.id && isJarvisMainChat(row))
+
+            if (saved) {
+              navigate(sessionRoute(saved.resolved_id || saved.id))
+            } else if (profile && knownJarvisMainChatForOwner(profile, route)) {
+              // A successful but empty lookup during a backend restart is not
+              // proof of absence when this exact owner had a main chat in the
+              // cache. A retry is safer than creating an untitled duplicate.
+              notify({ kind: 'error', message: copy.sessionUnavailable })
+            } else {
+              startFreshSessionDraft({ intent: 'main' })
+            }
+          })
+          .catch(() => {
+            if (stillSelected()) {
+              notify({ kind: 'error', message: copy.sessionUnavailable })
+            }
+          })
 
         return
       }
@@ -801,7 +879,7 @@ export function useSessionActions({
         navigateToWorkspacePage(navigate, item.route)
       }
     },
-    [navigate, startFreshSessionDraft]
+    [copy.sessionUnavailable, getRouteToken, navigate, requestGateway, startFreshSessionDraft]
   )
 
   /** Create a fresh session and open it as a tile — leaves the primary chat alone.
