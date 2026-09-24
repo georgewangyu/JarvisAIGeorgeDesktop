@@ -153,9 +153,18 @@ it('labels generated links as unverified on completed editions only', async () =
   expect(screen.getByRole('link', { name: 'release notes' }).getAttribute('href')).toBe('https://example.test/release')
 
   vi.mocked(getFeedEditions).mockResolvedValue([{
-    ...linked, content: null, error: 'Provider unavailable', status: 'failed'
+    ...linked,
+    retrieved_source_urls: ['https://example.test/release']
   }])
   view.unmount()
+  const retrievedView = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+  expect(await screen.findByText('Jarvis retrieved 1 cited page while preparing this briefing. Their claims have not been independently checked.')).toBeTruthy()
+  expect(screen.getByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeTruthy()
+
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...linked, content: null, error: 'Provider unavailable', status: 'failed'
+  }])
+  retrievedView.unmount()
   render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
   expect(await screen.findByText('Provider unavailable')).toBeTruthy()
   expect(screen.queryByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeNull()

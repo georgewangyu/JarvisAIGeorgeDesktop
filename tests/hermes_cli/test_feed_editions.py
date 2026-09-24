@@ -1,5 +1,6 @@
 """Feed generation persists real attempt outcomes without a provider in tests."""
 
+import json
 import threading
 import time
 
@@ -104,12 +105,16 @@ def test_failure_and_interruption_require_explicit_retry(tmp_path, monkeypatch):
 
     calls = []
 
-    def fake_run_job(job):
+    def fake_run_job(job, *, tool_complete_callback):
         calls.append(job)
+        tool_complete_callback("call-1", "web_extract", {"urls": ["https://example.test/page"]}, json.dumps({
+            "results": [{"url": "https://example.test/page", "content": "Page text", "error": None}],
+        }))
         return True, "audit document", "Agent result", None
 
     monkeypatch.setattr(scheduler, "run_job", fake_run_job)
-    assert feed._run_real_agent("Deliberate request", "abcdef1234567890") == ("Agent result", None)
+    assert feed._run_real_agent("Deliberate request", "abcdef1234567890") == (
+        "Agent result", ["https://example.test/page"])
     assert calls[0]["prompt"] == "Deliberate request"
     assert calls[0]["id"] == "abcdef123456"
     assert calls[0]["deliver"] == "local"
@@ -130,6 +135,43 @@ def test_generated_urls_are_only_unverified_mentions(tmp_path, monkeypatch):
     assert completed["content"] == content
     assert completed["source_urls"] == ["https://example.test/release"]
     assert completed["source_urls_verified"] is False
+
+
+def test_only_completed_exact_web_extract_results_record_retrieved_citations(tmp_path, monkeypatch):
+    import cron.scheduler as scheduler
+
+    monkeypatch.setattr(feed, "_db_path", lambda: tmp_path / "feed" / "editions.sqlite3")
+    cited = "https://example.test/fetched"
+    other = "https://example.test/unfetched"
+    responses = [f"Read {cited} and {other}", f"Read {cited}"]
+
+    def fake_run_job(_job, *, tool_complete_callback):
+        tool_complete_callback("search", "web_search", {"query": "example"}, json.dumps({
+            "success": True, "data": {"web": [{"url": other}]},
+        }))
+        tool_complete_callback("spoofed", "web_extract", {"urls": [cited]}, json.dumps({
+            "results": [{"url": other, "content": "wrong page", "error": None}],
+        }))
+        tool_complete_callback("blocked", "web_extract", {"urls": [other]}, json.dumps({
+            "results": [{"url": other, "content": "", "error": "Blocked: private address"}],
+        }))
+        tool_complete_callback("fetched", "web_extract", {"urls": [cited]}, json.dumps({
+            "results": [{"url": cited, "content": "Actual page text", "error": None}],
+        }))
+        return True, "response document", responses.pop(0), None
+
+    monkeypatch.setattr(scheduler, "run_job", fake_run_job)
+    first = feed.request_edition("One")
+    partial = _eventually(lambda: feed.get_edition(first["id"]), "completed")
+    assert partial["source_urls"] == [cited, other]
+    assert partial["retrieved_source_urls"] == [cited]
+    assert partial["source_urls_verified"] is False
+
+    second = feed.request_edition("Two")
+    retrieved = _eventually(lambda: feed.get_edition(second["id"]), "completed")
+    assert retrieved["source_urls"] == [cited]
+    assert retrieved["retrieved_source_urls"] == [cited]
+    assert retrieved["source_urls_verified"] is False
 
 
 def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
@@ -264,6 +306,7 @@ def test_existing_feed_database_migrates_without_losing_editions(tmp_path, monke
     monkeypatch.setattr(feed, "_db_path", lambda: path)
     assert feed.get_edition("old")["content"] == "Older output"
     assert feed.get_edition("old")["feedback_applied_count"] == 0
+    assert feed.get_edition("old")["retrieved_source_urls"] == []
     newer = feed.request_edition(
         "New prompt", liked_edition_ids=["old"], runner=lambda *_: ("New output", None),
     )

@@ -2283,6 +2283,7 @@ class _FireAudit:
 def run_job(
     job: dict, *, defer_agent_teardown: Optional[list] = None, extra_prompt: Optional[str] = None,
     cancel_event: Optional[_CancelEventLike] = None, execution_id: Optional[str] = None,
+    tool_complete_callback=None,
 ) -> tuple[bool, str, str, Optional[str]]:
     """Execute a single cron job. Returns (success, full_output_doc, final_response, error).
     ``defer_agent_teardown``: if a list, the live agent is appended instead of torn down; the caller
@@ -2298,6 +2299,8 @@ def run_job(
     existing caller is unchanged.
     ``extra_prompt``: optional per-run context from ``cronjob(action='run', prompt=...)`` (#57331). Appended
     to the stored prompt for this fire only — never persisted to the job definition.
+    ``tool_complete_callback``: optional observer for this run's completed tool calls. It receives
+    the agent's normal ``(call_id, name, display_args, result)`` callback payload.
     """
     job_id = job["id"]
     job_name = str(job.get("name") or job.get("prompt") or job_id or "cron job")
@@ -2336,6 +2339,8 @@ def run_job(
         agent = _construct_cron_agent(
             AIAgent, job, _cfg, setup, workdir=scope.workdir, session_id=_cron_session_id,
             session_db=_session_db)
+        if tool_complete_callback is not None:
+            agent.tool_complete_callback = tool_complete_callback
         _audit = _FireAudit(job, job_id, model)
 
         result = _run_agent_with_watchdog(

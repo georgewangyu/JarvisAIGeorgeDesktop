@@ -9,6 +9,7 @@ export interface FeedEdition {
   finished_at: null | string
   id: string
   prompt: string
+  retrieved_source_urls?: string[]
   source_urls: string[]
   source_urls_verified: false
   status: 'completed' | 'denied' | 'failed' | 'generating' | 'interrupted'

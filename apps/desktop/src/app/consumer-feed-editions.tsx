@@ -203,6 +203,7 @@ export function ConsumerFeedEditions() {
                 {(item.feedback_applied_count ?? 0) > 0 ? <p className="mt-2 text-xs text-(--ui-text-tertiary)">Guided by {item.feedback_applied_count} loved {item.feedback_applied_count === 1 ? 'briefing' : 'briefings'}</p> : null}
                 {item.status === 'completed' && item.content ? <>
                   <p className="mt-4 text-xs text-(--ui-text-tertiary)">Sources have not been verified. Links in this generated briefing may be inaccurate.</p>
+                  {(item.retrieved_source_urls?.length ?? 0) > 0 ? <p className="mt-1 text-xs text-(--ui-text-tertiary)">Jarvis retrieved {item.retrieved_source_urls?.length} cited {item.retrieved_source_urls?.length === 1 ? 'page' : 'pages'} while preparing this briefing. Their claims have not been independently checked.</p> : null}
                   <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div>
                 </> : null}
                 {item.status === 'generating' ? <p className="mt-5 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}

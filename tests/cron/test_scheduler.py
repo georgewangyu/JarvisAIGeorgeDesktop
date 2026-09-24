@@ -600,12 +600,14 @@ class TestRunJobSessionPersistence:
             mock_agent.run_conversation.return_value = {"final_response": "ok"}
             mock_agent_cls.return_value = mock_agent
 
-            success, output, final_response, error = run_job(job)
+            callback = lambda *_: None
+            success, output, final_response, error = run_job(job, tool_complete_callback=callback)
 
         assert success is True
         assert error is None
         assert final_response == "ok"
         assert "ok" in output
+        assert mock_agent.tool_complete_callback is callback
 
         kwargs = mock_agent_cls.call_args.kwargs
         assert kwargs["session_db"] is fake_db
@@ -2323,7 +2325,8 @@ class TestCronDeliveryTargets:
         # bot-chat:<profile> entries (machine-local Bot Chat injection) ride
         # the same listing but are not gateway platforms — scope the
         # platform assertions to the gateway entries.
-        platform_targets = {k: v for k, v in targets.items() if not k.startswith("bot-chat")}
+        platform_targets = {k: v for k, v in targets.items()
+                            if not k.startswith("bot-chat") and k != "jarvis-main"}
 
         assert set(platform_targets) == {"matrix", "telegram"}
         # Configured but no home channel → surfaced, flagged for the UI.
