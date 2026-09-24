@@ -78,7 +78,8 @@ describe('PendingApprovalStack', () => {
     $activeSessionId.set('sess-1')
     render(<PendingApprovalStack />)
 
-    expect(screen.getByRole('status').textContent).toContain('Approval interrupted')
+    expect(screen.getByRole('status').textContent).toContain('Approval no longer available')
+    expect(screen.getByRole('status').textContent).toContain('answered elsewhere or lost during a restart')
     expect(screen.queryByRole('button', { name: /Run/ })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))

@@ -72,7 +72,7 @@ export const PendingApprovalStack: FC = () => {
   return (
     <motion.section
       animate={{ paddingBlock: requests.length || interrupted ? 8 : 0 }}
-      aria-label={requests.length ? t.assistant.approval.jumpToApproval : interrupted ? 'Approval interrupted' : undefined}
+      aria-label={requests.length ? t.assistant.approval.jumpToApproval : interrupted ? 'Approval no longer available' : undefined}
       className={cn(
         'min-w-0',
         placement === 'floating' ? 'sticky bottom-4 z-10 mt-auto w-full max-w-xl self-center' : 'w-full max-w-xl'
@@ -87,9 +87,9 @@ export const PendingApprovalStack: FC = () => {
       <ApprovalQueue floating={placement === 'floating'} requests={requests} total={total} />
       {interrupted && isSessionOwnerRoute(owner) && durableId ? (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm" role="status">
-          <p className="font-medium">Approval interrupted</p>
+          <p className="font-medium">Approval no longer available</p>
           <p className="mt-1 text-(--ui-text-secondary)">
-            This approval is no longer available after reconnecting. Its outcome is unknown; check the chat and any affected files before asking Jarvis to try again. Jarvis did not retry it automatically.
+            It may have been answered elsewhere or lost during a restart. Check the chat and any affected files before asking Jarvis to try again; Jarvis did not retry it automatically.
           </p>
           <Button onClick={() => dismissApprovalRecovery(owner, durableId)} size="inline" variant="textStrong">
             Dismiss
