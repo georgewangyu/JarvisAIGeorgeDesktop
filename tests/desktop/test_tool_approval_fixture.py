@@ -6,12 +6,18 @@ Manual rehearsal, from the repo root with its Python environment::
     # Add the printed URL/token as a Desktop remote connection and open the
     # saved "Synthetic approval rehearsal" chat before triggering.
     python tests/desktop/test_tool_approval_fixture.py trigger --root /tmp/hermes-approval-UNIQUE
+    # Or send the exact text "Request the synthetic approval action." in that
+    # chat. The loopback model requests a terminal chmod confined to this
+    # fixture's sandbox-target directory; reject the approval card.
     python tests/desktop/test_tool_approval_fixture.py status --root /tmp/hermes-approval-UNIQUE
     python tests/desktop/test_tool_approval_fixture.py stop --root /tmp/hermes-approval-UNIQUE
 
-The tool name is synthetic and has no executor. Deny the card in Desktop. The
-status command reports the production gate's final denial; stop shuts down only
-this exact foreground fixture. No live model, account, or machine tool is used.
+The explicit trigger uses a synthetic tool name with no executor. The model
+rehearsal uses a deterministic local mock to request a real terminal tool, but
+its only command targets test-owned sandbox-target. Deny the card in Desktop.
+The status command reports the explicit trigger's gate state, not the model
+rehearsal; stop shuts down only this exact foreground fixture. No real model
+or account is used.
 """
 
 from __future__ import annotations
@@ -31,10 +37,58 @@ import uuid
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+from fastapi import Request as FastAPIRequest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 MARKER = ".hermes-desktop-tool-approval-fixture"
 KIND = "hermes-desktop-tool-approval-fixture-v1"
+MODEL_APPROVAL_PROMPT = "Request the synthetic approval action."
+
+
+def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
+    """One deterministic model tool call, then a denial-aware final answer.
+
+    The only possible command targets a directory owned by this fixture.
+    Requests unrelated to the exact rehearsal phrase are refused.
+    """
+    messages = body.get("messages")
+    if not isinstance(messages, list):
+        raise ValueError("model messages required")
+    user_index = next((index for index in range(len(messages) - 1, -1, -1)
+                       if isinstance(messages[index], dict) and messages[index].get("role") == "user"), -1)
+    if user_index < 0 or messages[user_index].get("content") != MODEL_APPROVAL_PROMPT:
+        raise ValueError("only the synthetic approval rehearsal is supported")
+    after_user = messages[user_index + 1:]
+    tool_results = [message for message in after_user
+                    if isinstance(message, dict) and message.get("role") == "tool"]
+    if tool_results:
+        raw_result = tool_results[-1].get("content")
+        try:
+            result = json.loads(raw_result) if isinstance(raw_result, str) else raw_result
+        except json.JSONDecodeError:
+            result = {}
+        denied = isinstance(result, dict) and result.get("status") == "blocked"
+        content = ("The synthetic action was denied and was not run." if denied
+                   else "The synthetic command returned a result; check the tool row for its outcome.")
+        return {"role": "assistant", "content": content}, "stop"
+    command = f"chmod -R 777 {root / 'sandbox-target'}"
+    return {
+        "role": "assistant", "content": None,
+        "tool_calls": [{"index": 0, "id": "call_synthetic_approval", "type": "function",
+                        "function": {"name": "terminal", "arguments": json.dumps({"command": command})}}],
+    }, "tool_calls"
+
+
+def fixture_sse(message: dict, finish_reason: str) -> str:
+    delta = {key: value for key, value in message.items() if key in {"role", "content", "tool_calls"}}
+    frames = [
+        {"id": "fixture-approval", "object": "chat.completion.chunk", "model": "approval-fixture-model",
+         "choices": [{"index": 0, "delta": delta, "finish_reason": None}]},
+        {"id": "fixture-approval", "object": "chat.completion.chunk", "model": "approval-fixture-model",
+         "choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}]},
+    ]
+    return "".join(f"data: {json.dumps(frame)}\n\n" for frame in frames) + "data: [DONE]\n\n"
 
 
 def isolated_environment(root: Path, token: str | None = None) -> dict[str, str]:
@@ -68,6 +122,7 @@ def create_fixture(root: Path) -> dict:
     root.mkdir(parents=True, exist_ok=True)
     marker, home, state = paths(root)
     home.mkdir()
+    (root / "sandbox-target").mkdir(mode=0o700)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = int(probe.getsockname()[1])
@@ -114,7 +169,7 @@ def serve(root: Path) -> None:
     # Import the production app only after binding it to this disposable home.
     os.environ["HERMES_DASHBOARD_SESSION_TOKEN"] = data["session_token"]
 
-    from fastapi import Header, HTTPException
+    from fastapi import Header, HTTPException, Response
     import uvicorn
     from hermes_cli.web_server import app, _configure_auth_gate
     from tui_gateway import server as gateway
@@ -144,8 +199,18 @@ def serve(root: Path) -> None:
         return {"object": "list", "data": [{"id": "approval-fixture-model", "object": "model"}]}
 
     @app.post("/v1/chat/completions")
-    def fixture_model_refusal():
-        raise HTTPException(status_code=409, detail="fixture does not run a model turn")
+    async def fixture_model(request: FastAPIRequest):
+        body = await request.json()
+        try:
+            message, finish_reason = fixture_completion(body, root)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if body.get("stream"):
+            return Response(fixture_sse(message, finish_reason), media_type="text/event-stream")
+        return {
+            "id": "fixture-approval", "object": "chat.completion", "model": "approval-fixture-model",
+            "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
+        }
 
     @app.post("/fixture/approval/trigger")
     def fixture_trigger(x_hermes_session_token: str | None = Header(default=None)):
@@ -243,6 +308,34 @@ def test_fixture_owns_only_a_new_root(tmp_path: Path) -> None:
         raise AssertionError("fixture reused an occupied root")
 
 
+def test_model_rehearsal_is_exact_and_test_owned(tmp_path: Path) -> None:
+    root = tmp_path / "approval-fixture"
+    create_fixture(root)
+    request_body = {"messages": [{"role": "user", "content": MODEL_APPROVAL_PROMPT}], "stream": True}
+    message, finish_reason = fixture_completion(request_body, root)
+    assert finish_reason == "tool_calls"
+    assert message["tool_calls"][0]["function"]["name"] == "terminal"
+    assert json.loads(message["tool_calls"][0]["function"]["arguments"]) == {
+        "command": f"chmod -R 777 {root / 'sandbox-target'}",
+    }
+    assert "finish_reason\": \"tool_calls" in fixture_sse(message, finish_reason)
+    assert "data: [DONE]" in fixture_sse(message, finish_reason)
+    request_body["messages"].append({"role": "tool", "content": '{"status":"blocked"}'})
+    final, final_reason = fixture_completion(request_body, root)
+    assert final_reason == "stop"
+    assert "denied" in final["content"]
+    request_body["messages"][-1]["content"] = '{"status":"success"}'
+    allowed, _ = fixture_completion(request_body, root)
+    assert "denied" not in allowed["content"]
+    request_body["messages"] = [{"role": "user", "content": "Unrelated real request"}]
+    try:
+        fixture_completion(request_body, root)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unrelated model request was accepted")
+
+
 def test_loopback_gateway_denial_round_trip(tmp_path: Path) -> None:
     """The real WebSocket dispatcher receives and resolves the synthetic gate."""
     from urllib.error import URLError
@@ -267,6 +360,16 @@ def test_loopback_gateway_denial_round_trip(tmp_path: Path) -> None:
                 if time.monotonic() >= deadline:
                     raise
                 time.sleep(0.05)
+
+        model_request = Request(
+            f"http://127.0.0.1:{read_fixture(root)['port']}/v1/chat/completions",
+            data=json.dumps({"messages": [{"role": "user", "content": MODEL_APPROVAL_PROMPT}],
+                             "stream": False}).encode(),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        with urlopen(model_request, timeout=5) as response:
+            model_reply = json.load(response)
+        assert model_reply["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "terminal"
 
         with connect(f"ws://127.0.0.1:{read_fixture(root)['port']}/api/ws?token={details['session_token']}",
                      open_timeout=5) as ws:

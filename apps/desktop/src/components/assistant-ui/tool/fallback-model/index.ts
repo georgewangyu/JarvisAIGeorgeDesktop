@@ -1392,6 +1392,14 @@ function dynamicTitle(
   }
 
   if (part.toolName === 'terminal' || part.toolName === 'execute_code') {
+    if (result.status === 'blocked') {
+      const deniedSummary = firstStringField(result, ['user_summary'])
+
+      if (deniedSummary) {
+        return { title: deniedSummary }
+      }
+    }
+
     const command = shellCommand(args)
 
     if (command) {

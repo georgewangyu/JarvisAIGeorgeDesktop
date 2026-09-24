@@ -65,6 +65,18 @@ describe('buildToolView terminal exit-code status', () => {
     expect(terminal({ exit_code: 0, output: 'done' }).status).toBe('success')
   })
 
+  it('does not claim a denied command ran', () => {
+    const view = buildToolView(part({
+      args: { command: 'chmod -R 777 /tmp/synthetic-target' },
+      result: { error: 'BLOCKED: Command denied by user.', status: 'blocked',
+        user_summary: 'You denied this command — it did not run.' },
+      toolName: 'terminal'
+    }), '')
+
+    expect(view.title).toBe('You denied this command — it did not run.')
+    expect(view.status).toBe('error')
+  })
+
   // Explicit error signals still win regardless of output presence.
   it('keeps explicit error signals red even with output', () => {
     expect(terminal({ error: 'boom', exit_code: 0, output: 'partial' }).status).toBe('error')
