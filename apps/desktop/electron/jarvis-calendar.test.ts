@@ -10,7 +10,7 @@ import { calendarConnectionScope, calendarRendererMatches, registerJarvisCalenda
 
 const roots: string[] = []
 
-function bridge(run: typeof runCalendarHelper, userData: string, scopeForSender = () => '[null,"default"]') {
+function bridge(run: typeof runCalendarHelper, userData: string, scopeForSender = () => '[null,"default"]', ownerVersionForSender = () => 0) {
   const handlers = new Map<string, (...args: unknown[]) => Promise<unknown>>()
   const ipcMain = { handle: (name: string, fn: (...args: unknown[]) => Promise<unknown>) => handlers.set(name, fn) } as unknown as IpcMain
 
@@ -20,6 +20,7 @@ function bridge(run: typeof runCalendarHelper, userData: string, scopeForSender 
     platform: 'darwin',
     run,
     scopeForSender,
+    ownerVersionForSender,
     trustedSender: event => calendarRendererMatches(event, 'file:///tmp/Jarvis.app/Contents/Resources/app.asar.unpacked/dist/index.html'),
     userData
   })
@@ -280,6 +281,45 @@ describe('Jarvis Calendar connection boundary', () => {
 
     expect(await creating).toEqual({ ok: false, code: 'outcome_unknown' })
     expect(spy.mock.calls.filter(([, input]) => input.command === 'create-event')).toHaveLength(1)
+  })
+
+  it('rejects old read and create results when the route switches A to B to A', async () => {
+    const userData = testHome()
+    let scope = '[null,"alpha"]'
+    let version = 1
+    let finishRead!: (value: { ok: true; command: string; events: unknown[] }) => void
+    let finishCreate!: (value: { ok: true; command: string; event: { id: string } }) => void
+    const pendingRead = new Promise<{ ok: true; command: string; events: unknown[] }>(resolve => {finishRead = resolve})
+    const pendingCreate = new Promise<{ ok: true; command: string; event: { id: string } }>(resolve => {finishCreate = resolve})
+
+    const spy = vi.fn(async (_executable, input) => {
+      if (input.command === 'list-events') {return pendingRead}
+
+      if (input.command === 'create-event') {return pendingCreate}
+
+      return { ok: true, command: input.command, authorization: 'fullAccess' }
+    })
+
+    const call = bridge(spy as typeof runCalendarHelper, userData, () => scope, () => version)
+
+    expect(await call('connect')).toMatchObject({ connected: true })
+    const reading = call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z')
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(true))
+    scope = '[null,"beta"]'
+    version += 1
+    scope = '[null,"alpha"]'
+    version += 1
+    finishRead({ ok: true, command: 'list-events', events: [{ title: 'Alpha private event' }] })
+    expect(await reading).toEqual({ ok: false, code: 'scope_changed' })
+
+    const creating = call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z')
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(true))
+    scope = '[null,"beta"]'
+    version += 1
+    scope = '[null,"alpha"]'
+    version += 1
+    finishCreate({ ok: true, command: 'create-event', event: { id: 'synthetic' } })
+    expect(await creating).toEqual({ ok: false, code: 'outcome_unknown' })
   })
 
   it('rechecks revoked macOS access after a read or create helper finishes', async () => {

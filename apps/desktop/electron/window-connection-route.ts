@@ -66,9 +66,16 @@ export function registrySshPoolScopeByConnectionId(
 
 export class WindowConnectionRouteRegistry {
   private readonly routes = new Map<number, WindowConnectionRoute>()
+  private readonly generations = new Map<number, number>()
 
   set(webContentsId: number, value: unknown): WindowConnectionRoute | null {
     const route = normalizeWindowConnectionRoute(value)
+    const previous = this.get(webContentsId)
+
+    if (previous?.connectionId !== route?.connectionId || previous?.profile !== route?.profile
+        || previous?.registryScoped !== route?.registryScoped) {
+      this.generations.set(webContentsId, this.generation(webContentsId) + 1)
+    }
 
     if (!route) {
       this.routes.delete(webContentsId)
@@ -85,7 +92,15 @@ export class WindowConnectionRouteRegistry {
     return this.routes.get(webContentsId) ?? null
   }
 
+  generation(webContentsId: number): number {
+    return this.generations.get(webContentsId) ?? 0
+  }
+
   delete(webContentsId: number): void {
+    if (this.routes.has(webContentsId)) {
+      this.generations.set(webContentsId, this.generation(webContentsId) + 1)
+    }
+
     this.routes.delete(webContentsId)
   }
 }

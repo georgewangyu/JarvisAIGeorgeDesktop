@@ -16319,6 +16319,7 @@ registerJarvisOnboardingPermissions({ ipcMain, shell, systemPreferences })
 registerJarvisCalendar({
   appPath: app.getAppPath(),
   ipcMain,
+  ownerVersionForSender: event => windowConnectionRoutes.generation(event.sender.id),
   scopeForSender: event => calendarConnectionScope(
     windowConnectionRoutes.get(event.sender.id),
     primaryProfileKey(),

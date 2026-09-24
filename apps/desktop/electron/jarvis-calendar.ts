@@ -171,11 +171,12 @@ interface CalendarBridgeDeps {
   platform?: NodeJS.Platform
   run?: typeof runCalendarHelper
   scopeForSender: (event: IpcMainInvokeEvent) => string | null
+  ownerVersionForSender?: (event: IpcMainInvokeEvent) => number
   trustedSender: (event: IpcMainInvokeEvent) => boolean
   userData: string
 }
 
-export function registerJarvisCalendar({ appPath, ipcMain, platform = process.platform, run = runCalendarHelper, scopeForSender, trustedSender, userData }: CalendarBridgeDeps): void {
+export function registerJarvisCalendar({ appPath, ipcMain, platform = process.platform, run = runCalendarHelper, scopeForSender, ownerVersionForSender = () => 0, trustedSender, userData }: CalendarBridgeDeps): void {
   const helper = calendarHelperPath(appPath)
 
   const call = (input: Record<string, unknown>) => platform === 'darwin'
@@ -203,24 +204,29 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     return typeof scope === 'string' && scope.length > 0 && scope.length <= 256 ? scope : null
   }
 
+  const sameOwner = (event: IpcMainInvokeEvent, scope: string, version: number) =>
+    scopeForSender(event) === scope && ownerVersionForSender(event) === version
+
   ipcMain.handle('jarvis:calendar:status', async event => {
     const scope = requireTrustedScope(event)
+    const version = ownerVersionForSender(event)
 
     if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
 
     const result = await status(configForScope(userData, scope))
 
-    return scopeForSender(event) === scope ? result : { authorization: 'unknown', connected: false, supported: false }
+    return sameOwner(event, scope, version) ? result : { authorization: 'unknown', connected: false, supported: false }
   })
   ipcMain.handle('jarvis:calendar:connect', async (event): Promise<CalendarStatus> => {
     const scope = requireTrustedScope(event)
+    const version = ownerVersionForSender(event)
 
     if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
 
     const configPath = configForScope(userData, scope)
     const before = await status(configPath)
 
-    if (scopeForSender(event) !== scope) {return { authorization: 'unknown', connected: false, supported: false }}
+    if (!sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, supported: false }}
 
     if (!before.supported) {return before}
 
@@ -228,22 +234,23 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
       const request = await call({ command: 'request-full-access' })
 
       if (!request.ok || request.authorization !== 'fullAccess') {
-        return scopeForSender(event) === scope
+        return sameOwner(event, scope, version)
           ? status(configPath)
           : { authorization: 'unknown', connected: false, supported: false }
       }
     }
 
-    if (scopeForSender(event) !== scope) {return { authorization: 'unknown', connected: false, supported: false }}
+    if (!sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, supported: false }}
 
     saveEnabled(configPath, true)
 
     const result = await status(configPath)
 
-    return scopeForSender(event) === scope ? result : { authorization: 'unknown', connected: false, supported: false }
+    return sameOwner(event, scope, version) ? result : { authorization: 'unknown', connected: false, supported: false }
   })
   ipcMain.handle('jarvis:calendar:disconnect', async (event): Promise<CalendarStatus> => {
     const scope = requireTrustedScope(event)
+    const version = ownerVersionForSender(event)
 
     if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
 
@@ -252,15 +259,16 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
 
     const result = await status(configPath)
 
-    return scopeForSender(event) === scope
+    return sameOwner(event, scope, version)
       ? result
       : { authorization: 'unknown', connected: false, supported: false }
   })
   ipcMain.handle('jarvis:calendar:list', async (event, start: unknown, end: unknown) => {
     const scope = requireTrustedScope(event)
+    const version = ownerVersionForSender(event)
     const configPath = scope ? configForScope(userData, scope) : ''
 
-    if (!scope || !(await status(configPath)).connected || scopeForSender(event) !== scope) {
+    if (!scope || !(await status(configPath)).connected || !sameOwner(event, scope, version)) {
       return { ok: false, code: 'not_connected' }
     }
 
@@ -268,17 +276,18 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
 
     const result = await call({ command: 'list-events', start, end, limit: 100 })
 
-    if (scopeForSender(event) !== scope) {return { ok: false, code: 'scope_changed' }}
+    if (!sameOwner(event, scope, version)) {return { ok: false, code: 'scope_changed' }}
 
     if (!(await status(configPath)).connected) {return { ok: false, code: 'not_connected' }}
 
-    return scopeForSender(event) === scope ? result : { ok: false, code: 'scope_changed' }
+    return sameOwner(event, scope, version) ? result : { ok: false, code: 'scope_changed' }
   })
   ipcMain.handle('jarvis:calendar:create', async (event, title: unknown, start: unknown, end: unknown) => {
     const scope = requireTrustedScope(event)
+    const version = ownerVersionForSender(event)
     const configPath = scope ? configForScope(userData, scope) : ''
 
-    if (!scope || !(await status(configPath)).connected || scopeForSender(event) !== scope) {
+    if (!scope || !(await status(configPath)).connected || !sameOwner(event, scope, version)) {
       return { ok: false, code: 'not_connected' }
     }
 
@@ -290,10 +299,10 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
 
     // The helper may already have created the event. Suppress the old owner's
     // details in this renderer, but never claim it definitely did not happen.
-    if (scopeForSender(event) !== scope) {return { ok: false, code: 'outcome_unknown' }}
+    if (!sameOwner(event, scope, version)) {return { ok: false, code: 'outcome_unknown' }}
 
     if (!(await status(configPath)).connected) {return { ok: false, code: 'outcome_unknown' }}
 
-    return scopeForSender(event) === scope ? result : { ok: false, code: 'outcome_unknown' }
+    return sameOwner(event, scope, version) ? result : { ok: false, code: 'outcome_unknown' }
   })
 }

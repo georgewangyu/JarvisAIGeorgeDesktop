@@ -61,6 +61,22 @@ test('isolates active routes by webContents id', () => {
   assert.equal(routes.get(22)?.connectionId, 'source-b')
 })
 
+test('route generation distinguishes A to B to A but not a duplicate publication', () => {
+  const routes = new WindowConnectionRouteRegistry()
+  const alpha = { connectionId: null, profile: 'alpha', registryScoped: false }
+  const beta = { connectionId: null, profile: 'beta', registryScoped: false }
+
+  routes.set(11, alpha)
+  const firstAlpha = routes.generation(11)
+  routes.set(11, alpha)
+  assert.equal(routes.generation(11), firstAlpha)
+  routes.set(11, beta)
+  routes.set(11, alpha)
+  assert.equal(routes.generation(11), firstAlpha + 2)
+  routes.delete(11)
+  assert.equal(routes.generation(11), firstAlpha + 3)
+})
+
 test('invalid publications clear only the sender route', () => {
   const routes = new WindowConnectionRouteRegistry()
 
