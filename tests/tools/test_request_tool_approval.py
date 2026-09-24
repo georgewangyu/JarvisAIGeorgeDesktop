@@ -109,7 +109,7 @@ class TestRequestToolApproval:
         monkeypatch.setattr(approval, "save_permanent_allowlist", lambda x: None)
         res = request_tool_approval("write_file", "reason", rule_key="ssh-writes")
         assert res["approved"] is True
-        assert calls["session"] == ["plugin_rule:ssh-writes"]
+        assert calls["session"] == ["plugin_rule:write_file:ssh-writes"]
         assert calls["permanent"] == []  # session != always
 
 
@@ -154,7 +154,16 @@ class TestRequestToolApproval:
         monkeypatch.setattr(approval, "prompt_dangerous_approval", lambda *a, **k: "deny")
         monkeypatch.setattr(approval_prompt, "prompt_dangerous_approval", lambda *a, **k: "deny")
         res = request_tool_approval("terminal", "any", rule_key="my-rule")
-        assert res["pattern_key"] == "plugin_rule:my-rule"
+        assert res["pattern_key"] == "plugin_rule:terminal:my-rule"
+
+    def test_explicit_rule_key_cannot_reuse_another_tools_grant(self, monkeypatch):
+        monkeypatch.setattr(approval, "_is_interactive_cli", lambda: True)
+        monkeypatch.setattr(approval, "_is_gateway_approval_context", lambda: False)
+        monkeypatch.setattr(tools_approval_context, "_is_gateway_approval_context", lambda: False)
+        monkeypatch.setattr(approval_prompt, "prompt_dangerous_approval", lambda *a, **k: "deny")
+        first = request_tool_approval("send_email", "send draft", rule_key="send")["pattern_key"]
+        second = request_tool_approval("transfer_funds", "submit transfer", rule_key="send")["pattern_key"]
+        assert first != second
 
     def test_no_human_non_cron_fails_closed(self, monkeypatch):
         """Non-interactive, non-gateway, NON-cron context blocks (fail-closed)
@@ -196,7 +205,7 @@ class TestRequestToolApproval:
 
         assert res["approved"] is True
         assert len(notified) == 1
-        assert notified[0]["pattern_key"] == "plugin_rule:unlock"
+        assert notified[0]["pattern_key"] == "plugin_rule:home_lock:unlock"
 
     def test_api_server_without_exec_ask_remains_fail_closed(self, monkeypatch):
         """An api_server call without an active approval bridge must not run ungated."""

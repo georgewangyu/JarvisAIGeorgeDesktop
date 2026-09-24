@@ -1619,6 +1619,23 @@ class TestResolvePreToolBlock:
             "rule_key": "write_file:ssh",
         }
 
+    def test_approve_without_rule_key_keeps_reason_scoping(self, monkeypatch):
+        from hermes_cli.plugins import resolve_pre_tool_block
+
+        monkeypatch.setattr(
+            "hermes_cli.plugins.invoke_hook",
+            lambda hook_name, **kwargs: [{"action": "approve", "message": "send to external recipient"}],
+        )
+        seen = []
+
+        def _approve(tool_name, reason, **kwargs):
+            seen.append((tool_name, reason, kwargs["rule_key"]))
+            return {"approved": False, "message": "denied"}
+
+        monkeypatch.setattr("tools.approval.request_tool_approval", _approve)
+        assert resolve_pre_tool_block("send_email", {}) == "denied"
+        assert seen == [("send_email", "send to external recipient", "")]
+
 
     def test_approve_gate_exception_fails_closed(self, monkeypatch):
         from hermes_cli.plugins import resolve_pre_tool_block
