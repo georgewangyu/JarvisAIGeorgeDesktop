@@ -292,4 +292,44 @@ describe('interrupted activity', () => {
     await waitFor(() => expect(request).toHaveBeenCalledWith('jarvis.events.interrupted', { profile: 'other' }))
     expect(screen.queryByText('Outcome unknown after restart')).toBeNull()
   })
+
+  it('does not show an old profile review failure after switching profiles', async () => {
+    let rejectOldReview: (error: Error) => void = () => {}
+
+    const request = vi.fn((method: string, params: { profile: string }) => {
+      if (method === 'jarvis.events.interrupted') {
+        return Promise.resolve({
+          events: [{ delivery_id: `${params.profile}-event`, claimed_at: 1, status: 'outcome_unknown' }]
+        })
+      }
+
+      if (method === 'jarvis.events.review' && params.profile === 'default') {
+        return new Promise((_resolve, reject) => {rejectOldReview = reject})
+      }
+
+      if (method === 'jarvis.events.review') {
+        return Promise.resolve({
+          delivery_id: 'other-event', message: 'Current profile request', review_digest: 'current', status: 'outcome_unknown'
+        })
+      }
+
+      throw new Error('Unexpected request')
+    })
+
+    $gateway.set({ request } as never)
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={vi.fn()} sessions={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review request' }))
+    await waitFor(() => expect(request).toHaveBeenCalledWith('jarvis.events.review', {
+      profile: 'default', delivery_id: 'default-event'
+    }))
+
+    act(() => $activeGatewayProfile.set('other'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review request' }))
+    expect(await screen.findByText('Current profile request')).toBeTruthy()
+
+    await act(async () => {rejectOldReview(new Error('Old profile failed'))})
+    expect(screen.getByText('Current profile request')).toBeTruthy()
+    expect(screen.queryByText('Could not load the original request. Please try again.')).toBeNull()
+  })
 })

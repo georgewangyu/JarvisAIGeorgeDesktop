@@ -1,6 +1,6 @@
 import type { JarvisEventRetryResult, JarvisEventReviewResult, JarvisInterruptedEventsResult } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -212,11 +212,13 @@ export function ConsumerActivity({
   const [reviewError, setReviewError] = useState('')
   const [acknowledged, setAcknowledged] = useState(false)
   const [retryStatus, setRetryStatus] = useState('')
+  const reviewRequestId = useRef(0)
 
   const currentReview = review?.gateway === gateway && review.profile === profile ? review : null
 
   useEffect(() => {
     setReview(null)
+    setReviewBusy(false)
     setAcknowledged(false)
     setReviewError('')
     setRetryStatus('')
@@ -224,6 +226,7 @@ export function ConsumerActivity({
 
   async function openReview(deliveryId: string) {
     if (!gateway || reviewBusy) {return}
+    const requestId = ++reviewRequestId.current
     setReviewBusy(true)
     setReviewError('')
     setRetryStatus('')
@@ -234,18 +237,21 @@ export function ConsumerActivity({
         delivery_id: deliveryId
       })
 
-      if ($gateway.get() !== gateway || $activeGatewayProfile.get() !== profile) {return}
+      if (reviewRequestId.current !== requestId || $gateway.get() !== gateway || $activeGatewayProfile.get() !== profile) {return}
       setReview({ ...result, gateway, profile })
       setAcknowledged(false)
     } catch {
-      setReviewError('Could not load the original request. Please try again.')
+      if (reviewRequestId.current === requestId && $gateway.get() === gateway && $activeGatewayProfile.get() === profile) {
+        setReviewError('Could not load the original request. Please try again.')
+      }
     } finally {
-      setReviewBusy(false)
+      if (reviewRequestId.current === requestId) {setReviewBusy(false)}
     }
   }
 
   async function retryReviewed() {
     if (!gateway || !currentReview || !acknowledged || reviewBusy) {return}
+    const requestId = ++reviewRequestId.current
     setReviewBusy(true)
     setReviewError('')
 
@@ -256,13 +262,15 @@ export function ConsumerActivity({
         review_digest: currentReview.review_digest
       })
 
-      if ($gateway.get() !== gateway || $activeGatewayProfile.get() !== profile) {return}
+      if (reviewRequestId.current !== requestId || $gateway.get() !== gateway || $activeGatewayProfile.get() !== profile) {return}
       setRetryStatus(result.status === 'queued' ? 'Retry queued. The outcome is not yet known.' : `Retry status: ${result.status}.`)
       setRefreshIndex(index => index + 1)
     } catch {
-      setReviewError('Could not queue the retry. The original outcome is still unknown.')
+      if (reviewRequestId.current === requestId && $gateway.get() === gateway && $activeGatewayProfile.get() === profile) {
+        setReviewError('Could not queue the retry. The original outcome is still unknown.')
+      }
     } finally {
-      setReviewBusy(false)
+      if (reviewRequestId.current === requestId) {setReviewBusy(false)}
     }
   }
 
