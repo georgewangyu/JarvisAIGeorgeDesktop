@@ -2111,6 +2111,8 @@ export const ar = defineLocale({
     endConversation: 'إنهاء المحادثة',
     endShort: 'إنهاء',
     stopDictation: 'إيقاف الإملاء',
+    startingDictation: 'جار فتح الميكروفون',
+    stoppingDictation: 'جار إنهاء التسجيل',
     transcribingDictation: 'جار تفريغ الإملاء',
     voiceControls: 'صوت',
     voiceDictation: 'إملاء صوتي',
@@ -2554,6 +2556,9 @@ export const ar = defineLocale({
     price: (input, output) => `${input} إدخال / ${output} إخراج لكل مليون رمز`,
     change: 'تغيير',
     startChatting: 'ابدأ',
+    modelConfirmationWarning: 'قد تكون تكلفة هذا النموذج أعلى أو تختلف شروط استخدام بياناته، لذا يلزم تأكيد صريح. راجع النموذج قبل المتابعة.',
+    modelConfirmationFailed: 'تعذر إكمال إعداد النموذج. راجع النموذج أو اختر نموذجًا آخر ثم حاول مجددًا.',
+    confirmModelAndBegin: 'تأكيد النموذج والبدء',
     docs: provider => `وثائق ${provider}`
   },
   modelPicker: {

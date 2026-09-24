@@ -60,7 +60,7 @@ export function FlowPanel({
   if (flow.status === 'error') {
     // Recovery in the order a stuck user needs it: retry the same provider
     // (when we know which one failed), fall back to a pasted API key, or go
-    // back to the provider list. Raw error text stays behind Details.
+    // back to the provider list. OAuth diagnostics stay out of this panel.
     const failedProvider = flow.provider
 
     return (
@@ -69,12 +69,6 @@ export function FlowPanel({
           <ErrorIcon className="shrink-0" size="0.875rem" />
           <span>{flow.message || t.onboarding.signInFailed}</span>
         </div>
-        {flow.detail ? (
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer select-none">{t.onboarding.errorDetails}</summary>
-            <pre className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-[0.6875rem]">{flow.detail}</pre>
-          </details>
-        ) : null}
         <div className="flex flex-wrap justify-end gap-2">
           <Button onClick={cancelOnboardingFlow} variant="text">
             {t.onboarding.pickDifferentProvider}
@@ -318,9 +312,15 @@ function ConfirmingModelPanel({
           leaving ? 'opacity-0 saturate-0' : 'opacity-100 saturate-100'
         )}
       >
+        {flow.requiresConfirmation ? (
+          <p className="mb-3 max-w-sm text-sm text-muted-foreground">{t.onboarding.modelConfirmationWarning}</p>
+        ) : null}
+        {flow.confirmationError ? (
+          <p className="mb-3 max-w-sm text-sm text-destructive" role="alert">{t.onboarding.modelConfirmationFailed}</p>
+        ) : null}
         <HackeryButton
           disabled={flow.saving}
-          label={<GlyphText text={scrambledBegin} />}
+          label={<GlyphText text={flow.requiresConfirmation ? t.onboarding.confirmModelAndBegin : scrambledBegin} />}
           loading={flow.saving}
           onClick={onBegin}
         />

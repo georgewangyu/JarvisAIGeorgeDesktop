@@ -15,7 +15,7 @@ import {
 import { translateNow } from '@/i18n'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
-import { setMainModelAssignment } from '@/store/cron-model-impact'
+import { ModelConfirmationRequiredError, setMainModelAssignment } from '@/store/cron-model-impact'
 import { ackFreeTierNotice, freeTierReadyPending, refreshFreeTierStatus, setFreeTierRoute } from '@/store/free-tier'
 import { notify, notifyError } from '@/store/notifications'
 import { guidedOnboardingActive } from '@/store/onboarding-gate'
@@ -45,10 +45,13 @@ export type OnboardingFlow =
       currentModel: string
       label: string
       providerSlug: string
+      requiresConfirmation?: boolean
+      ignoreRuntimeGate?: boolean
+      confirmationError?: boolean
       saving: boolean
       status: 'confirming_model'
     }
-  | { detail?: string; message: string; provider?: OAuthProvider; start?: OAuthStartResponse; status: 'error' }
+  | { message: string; provider?: OAuthProvider; start?: OAuthStartResponse; status: 'error' }
 
 export interface DesktopOnboardingState {
   /** null until the first runtime check resolves. Seeded from localStorage so
@@ -175,14 +178,10 @@ let flowProfile: string | undefined
 let pollTimer: number | null = null
 let providersRefreshPromise: null | Promise<void> = null
 
-const errMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
-
-// One plain sentence for every way a provider sign-in can fail (start, poll,
-// code exchange); the raw error text rides along as `detail` (desktop-09).
-function signInDidNotFinish(provider: OAuthProvider, raw: unknown): { message: string; detail?: string } {
-  const detail = raw instanceof Error ? errMessage(raw) : typeof raw === 'string' ? raw.trim() : ''
-
-  return { message: translateNow('onboarding.signInDidNotFinish', provider.name), detail: detail || undefined }
+// OAuth failures may contain a callback URL, authorization code, state, email,
+// or local credential path. No raw provider/transport error reaches the renderer.
+function signInDidNotFinish(provider: OAuthProvider): { message: string } {
+  return { message: translateNow('onboarding.signInDidNotFinish', provider.name) }
 }
 
 const patch = (update: Partial<DesktopOnboardingState>) =>
@@ -408,6 +407,20 @@ async function completeWithModelConfirm(
         return
       }
 
+      if (error instanceof ModelConfirmationRequiredError) {
+        setFlow({
+          status: 'confirming_model',
+          providerSlug: defaults.providerSlug,
+          currentModel: defaults.defaultModel,
+          label: providerLabel,
+          requiresConfirmation: true,
+          ignoreRuntimeGate,
+          saving: false
+        })
+
+        return
+      }
+
       onFail(error instanceof Error ? error.message : 'Hermes could not save the selected model.')
 
       return
@@ -444,12 +457,10 @@ async function completeWithModelConfirm(
   })
 }
 
-function providerResolutionFailure(reason: null | string) {
-  const detail = reason?.trim()
-
-  return detail
-    ? `Connected, but Hermes still cannot resolve a usable provider. ${detail}`
-    : 'Connected, but Hermes still cannot resolve a usable provider.'
+function providerResolutionFailure(_reason: null | string) {
+  // This reason can come from a provider, transport exception, or runtime
+  // response. It may contain an OAuth callback, account, or local path.
+  return 'Sign-in succeeded, but Jarvis could not finish setting up the model. Try again or choose a different provider.'
 }
 
 /** Re-read the OAuth provider list into the onboarding cache. Exported so a
@@ -799,9 +810,11 @@ async function openSignInUrl(url: string) {
 
 export async function startProviderOAuth(provider: OAuthProvider, ctx: OnboardingContext) {
   ctx = { ...ctx }
+  // A retry or provider switch owns a fresh lifetime. Otherwise a slower
+  // earlier start response can replace this provider's active sign-in screen.
+  cancelOnboardingFlow()
   const generation = flowGeneration
   flowProfile = ctx.profile
-  clearPoll()
 
   if (provider.flow === 'external') {
     setFlow({ status: 'external_pending', provider, copied: false })
@@ -850,14 +863,14 @@ export async function startProviderOAuth(provider: OAuthProvider, ctx: Onboardin
       return
     }
 
-    setFlow({ status: 'error', provider, ...signInDidNotFinish(provider, error) })
+    setFlow({ status: 'error', provider, ...signInDidNotFinish(provider) })
   }
 }
 
 // Poll a session-backed device-code flow until it resolves.
 async function pollSession(provider: OAuthProvider, start: DeviceStart, ctx: OnboardingContext, generation: number) {
   try {
-    const { error_message, status } = await pollOAuthSession(provider.id, start.session_id, ctx.profile)
+    const { status } = await pollOAuthSession(provider.id, start.session_id, ctx.profile)
 
     if (generation !== flowGeneration) {
       return
@@ -875,7 +888,7 @@ async function pollSession(provider: OAuthProvider, start: DeviceStart, ctx: Onb
       )
     } else if (status !== 'pending') {
       clearPoll()
-      setFlow({ status: 'error', provider, start, ...signInDidNotFinish(provider, error_message || status) })
+      setFlow({ status: 'error', provider, start, ...signInDidNotFinish(provider) })
     }
   } catch (error) {
     if (generation !== flowGeneration) {
@@ -883,7 +896,7 @@ async function pollSession(provider: OAuthProvider, start: DeviceStart, ctx: Onb
     }
 
     clearPoll()
-    setFlow({ status: 'error', provider, start, ...signInDidNotFinish(provider, error) })
+    setFlow({ status: 'error', provider, start, ...signInDidNotFinish(provider) })
   }
 }
 
@@ -925,14 +938,14 @@ export async function submitOnboardingCode(ctx: OnboardingContext) {
         })
       )
     } else {
-      setFlow({ status: 'error', provider, start, ...signInDidNotFinish(provider, resp.message) })
+      setFlow({ status: 'error', provider, start, ...signInDidNotFinish(provider) })
     }
   } catch (error) {
     if (generation !== flowGeneration) {
       return
     }
 
-    setFlow({ status: 'error', provider, start, ...signInDidNotFinish(provider, error) })
+    setFlow({ status: 'error', provider, start, ...signInDidNotFinish(provider) })
   }
 }
 
@@ -940,9 +953,11 @@ export function cancelOnboardingFlow() {
   flowGeneration++
   clearPoll()
   const sessionId = sessionIdFor($desktopOnboarding.get().flow)
+  const sessionProfile = flowProfile ?? $desktopOnboarding.get().targetProfile
+  flowProfile = undefined
 
   if (sessionId) {
-    cancelOAuthSession(sessionId, flowProfile ?? $desktopOnboarding.get().targetProfile).catch(() => undefined)
+    cancelOAuthSession(sessionId, sessionProfile).catch(() => undefined)
   }
 
   setFlow({ status: 'idle' })
@@ -1047,10 +1062,14 @@ export async function saveOnboardingApiKey(
   // provider probes, self-hosted endpoints). We now save the value as-is and
   // let the user proceed; an actually-bad key surfaces later at chat time.
   try {
-    await setEnvVar(envKey, trimmed, ctx.profile)
+    const saved = await setEnvVar(envKey, trimmed, ctx.profile)
 
     if (generation !== flowGeneration) {
       return { ok: false }
+    }
+
+    if (saved.ok !== true) {
+      return { ok: false, message: 'Could not save the key. Check the provider and try again.' }
     }
 
     // For API-key flows we don't have a definitive provider id (the
@@ -1061,13 +1080,22 @@ export async function saveOnboardingApiKey(
     // provider returned by /api/model/options if none match.
     const slugCandidates = [envKey.replace(/_API_KEY$/, '').toLowerCase(), label.toLowerCase()]
     // ignoreRuntimeGate=true: never block onboarding on the runtime check.
-    await completeWithModelConfirm(ctx, label, slugCandidates, () => undefined, true)
+    let modelSetupFailed = false
+    await completeWithModelConfirm(ctx, label, slugCandidates, () => {
+      modelSetupFailed = true
+    }, true)
+
+    if (generation !== flowGeneration) {
+      return { ok: false }
+    }
+
+    if (modelSetupFailed) {
+      return { ok: false, message: 'Saved the key, but could not finish model setup. Check the provider and try again.' }
+    }
 
     return { ok: true }
-  } catch (error) {
-    notifyError(error, `Could not save ${label}`)
-
-    return { ok: false, message: errMessage(error) }
+  } catch {
+    return { ok: false, message: 'Could not save the key. Check the provider and try again.' }
   }
 }
 
@@ -1115,23 +1143,23 @@ export async function saveOnboardingLocalEndpoint(baseUrl: string, apiKey: strin
     }
 
     if (!probe.ok && probe.reachable) {
-      return { ok: false, message: probe.message || 'Could not reach that endpoint.' }
+      return { ok: false, message: 'The endpoint responded, but Jarvis could not verify a model. Check its API key and /v1/models response.' }
     }
 
     if (!probe.reachable) {
-      return { ok: false, message: probe.message || `Could not reach ${url}.` }
+      return { ok: false, message: 'Could not reach the endpoint. Check its URL and that the server is running.' }
     }
 
     model = (probe.models?.[0] ?? '').trim()
     resolvedUrl = probe.resolved_base_url?.trim() || url
   } catch {
-    return { ok: false, message: `Could not reach ${url}.` }
+    return { ok: false, message: 'Could not reach the endpoint. Check its URL and that the server is running.' }
   }
 
   if (!model) {
     return {
       ok: false,
-      message: `Connected to ${url}, but it advertised no models at /v1/models. Start a model on that endpoint and try again.`
+      message: 'Connected, but the endpoint advertised no models at /v1/models. Start a model and try again.'
     }
   }
 
@@ -1155,9 +1183,7 @@ export async function saveOnboardingLocalEndpoint(baseUrl: string, apiKey: strin
     }
 
     if (!runtime.ready) {
-      const detail = (runtime.reason ?? '').trim()
-
-      return { ok: false, message: detail || `Saved, but Hermes still cannot reach ${resolvedUrl}.` }
+      return { ok: false, message: 'Saved the endpoint, but Jarvis could not use the selected model. Check that the server is running and the model is available, then retry.' }
     }
 
     notifyReady('Local / custom endpoint')
@@ -1165,10 +1191,8 @@ export async function saveOnboardingLocalEndpoint(baseUrl: string, apiKey: strin
     ctx.onCompleted?.()
 
     return { ok: true }
-  } catch (error) {
-    notifyError(error, 'Could not save local endpoint')
-
-    return { ok: false, message: errMessage(error) }
+  } catch {
+    return { ok: false, message: 'Could not save the endpoint. Check its settings and try again.' }
   }
 }
 
@@ -1204,7 +1228,8 @@ export async function setOnboardingModel(model: string, providerSlug: string, la
         provider: providerSlug,
         model
       },
-      flowProfile ?? $desktopOnboarding.get().targetProfile
+      flowProfile ?? $desktopOnboarding.get().targetProfile,
+      { skipConfirmPrompt: true }
     )
 
     if (generation !== flowGeneration) {
@@ -1214,15 +1239,22 @@ export async function setOnboardingModel(model: string, providerSlug: string, la
     const current = $desktopOnboarding.get().flow
 
     if (current.status === 'confirming_model') {
-      setFlow({ ...current, currentModel: model, providerSlug, label: displayLabel, saving: false })
+      setFlow({ ...current, currentModel: model, providerSlug, label: displayLabel, requiresConfirmation: false, confirmationError: false, saving: false })
     }
   } catch (error) {
     if (generation !== flowGeneration) {
       return
     }
 
-    notifyError(error, 'Could not change model')
     const current = $desktopOnboarding.get().flow
+
+    if (error instanceof ModelConfirmationRequiredError && current.status === 'confirming_model') {
+      setFlow({ ...current, currentModel: model, providerSlug, label: displayLabel, requiresConfirmation: true, confirmationError: false, saving: false })
+
+      return
+    }
+
+    notifyError(new Error('Check the provider and try again.'), 'Could not change model')
 
     if (current.status === 'confirming_model') {
       setFlow({ ...current, ...previous, saving: false })
@@ -1230,15 +1262,63 @@ export async function setOnboardingModel(model: string, providerSlug: string, la
   }
 }
 
-// User clicked "Start chatting" on the confirm card. Finalizes onboarding
-// — the model was already persisted by completeWithModelConfirm (or by
-// setOnboardingModel if they changed it), so all that's left is to mark
-// onboarding done and unblock the rest of the app.
-export function confirmOnboardingModel(ctx: OnboardingContext) {
+// User clicked Begin on the model card. A guarded model is not yet persisted:
+// only an explicit click may acknowledge its cost/data warning, and setup
+// completes only after the backend saves it and runtime readiness succeeds.
+export async function confirmOnboardingModel(ctx: OnboardingContext) {
   const { flow } = $desktopOnboarding.get()
 
-  if (flow.status !== 'confirming_model') {
+  if (flow.status !== 'confirming_model' || flow.saving) {
     return
+  }
+
+  if (flow.requiresConfirmation) {
+    const generation = flowGeneration
+    setFlow({ ...flow, confirmationError: false, saving: true })
+
+    try {
+      const result = await setMainModelAssignment(
+        { provider: flow.providerSlug, model: flow.currentModel, confirm_expensive_model: true },
+        flowProfile ?? $desktopOnboarding.get().targetProfile,
+        { skipConfirmPrompt: true }
+      )
+
+      if (generation !== flowGeneration) {
+        return
+      }
+
+      if (result.ok !== true || result.confirm_required) {
+        throw new Error('Model confirmation was not saved.')
+      }
+
+      await ctx.requestGateway('reload.env').catch(() => undefined)
+
+      if (generation !== flowGeneration) {
+        return
+      }
+
+      const runtime = await checkRuntime(ctx, flow.providerSlug)
+
+      if (generation !== flowGeneration) {
+        return
+      }
+
+      if (!runtime.ready && !flow.ignoreRuntimeGate) {
+        throw new Error('The confirmed model is not ready.')
+      }
+    } catch {
+      if (generation !== flowGeneration) {
+        return
+      }
+
+      const current = $desktopOnboarding.get().flow
+
+      if (current.status === 'confirming_model') {
+        setFlow({ ...current, confirmationError: true, saving: false })
+      }
+
+      return
+    }
   }
 
   // No success toast here: the confirm-model screen already showed "<provider>

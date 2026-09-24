@@ -7,12 +7,15 @@ import type { OAuthProvider } from '@/types/hermes'
 
 import {
   $desktopOnboarding,
+  confirmOnboardingModel,
   type DesktopOnboardingState,
   type OnboardingContext,
   refreshOnboarding,
   requestDesktopOnboarding,
+  saveOnboardingApiKey,
   saveOnboardingLocalEndpoint,
   setOnboardingModel,
+  startManualOnboarding,
   submitOnboardingCode
 } from './onboarding'
 
@@ -398,6 +401,58 @@ describe('OAuth onboarding', () => {
     vi.restoreAllMocks()
   })
 
+  it('never stores raw callback or account details after OAuth start fails', async () => {
+    const { startProviderOAuth } = await import('./onboarding')
+    const privateError = 'callback code=ac_test-secret state=private-state for user@example.com at synthetic-auth-path'
+    installApiMock(async () => { throw new Error(privateError) })
+
+    await startProviderOAuth(makeOAuthProvider('nous', 'Nous Portal'), onboardingContext(emptyOpenRouterGateway()))
+
+    const flow = $desktopOnboarding.get().flow
+    expect(flow.status).toBe('error')
+    expect(JSON.stringify(flow)).not.toContain('ac_test-secret')
+    expect(JSON.stringify(flow)).not.toContain('user@example.com')
+    expect(JSON.stringify(flow)).not.toContain('synthetic-auth-path')
+  })
+
+  it('keeps the newer provider screen when an earlier OAuth start finishes late', async () => {
+    const { startProviderOAuth } = await import('./onboarding')
+    let releaseOld!: (value: unknown) => void
+    const cancelled: string[] = []
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/providers/oauth/old/start') {
+        return new Promise(resolve => {
+          releaseOld = resolve
+        })
+      }
+
+      if (path === '/api/providers/oauth/new/start') {
+        return { flow: 'pkce', session_id: 'new-session', auth_url: 'https://example.test/new', expires_in: 600 }
+      }
+
+      if (path.includes('/sessions/')) {
+        cancelled.push(path)
+
+        return { ok: true }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    const ctx = onboardingContext(emptyOpenRouterGateway())
+    const oldStart = startProviderOAuth(makeOAuthProvider('old', 'Old'), ctx)
+    await vi.waitFor(() => expect(releaseOld).toBeTypeOf('function'))
+
+    await startProviderOAuth(makeOAuthProvider('new', 'New'), ctx)
+    expect($desktopOnboarding.get().flow).toMatchObject({ status: 'awaiting_user', provider: { id: 'new' } })
+
+    releaseOld({ flow: 'pkce', session_id: 'old-session', auth_url: 'https://example.test/old', expires_in: 600 })
+    await oldStart
+
+    expect($desktopOnboarding.get().flow).toMatchObject({ status: 'awaiting_user', provider: { id: 'new' } })
+    expect(cancelled.some(path => path.includes('old-session'))).toBe(true)
+  })
+
   it('clears stale readiness errors after OAuth succeeds and model confirmation is shown', async () => {
     const model = 'anthropic/claude-opus-4.8'
     const calls: { body?: unknown; path: string }[] = []
@@ -491,9 +546,11 @@ describe('OAuth onboarding', () => {
     expect(setIndex).toBeGreaterThan(recommendedIndex)
   })
 
-  it('does not advance when the default model assignment is not persisted', async () => {
+  it('requires an explicit, persisted model confirmation before completing OAuth setup', async () => {
     const model = 'openai/gpt-5.5-pro'
-    installApiMock(async ({ path }: { path: string }) => {
+    let allowConfirm = false
+    const assignmentBodies: unknown[] = []
+    installApiMock(async ({ body, path }: { body?: unknown; path: string }) => {
       if (path === '/api/providers/oauth/nous/submit') {
         return { ok: true, status: 'approved' }
       }
@@ -507,12 +564,18 @@ describe('OAuth onboarding', () => {
       }
 
       if (path === '/api/model/set') {
+        assignmentBodies.push(body)
+
+        if (allowConfirm && (body as { confirm_expensive_model?: boolean })?.confirm_expensive_model) {
+          return { ok: true, provider: 'nous', model }
+        }
+
         return {
           ok: false,
           provider: 'nous',
           model,
           confirm_required: true,
-          confirm_message: 'Confirm this expensive model.'
+          confirm_message: 'Confirm this expensive model. code=private-callback-secret'
         }
       }
 
@@ -522,6 +585,10 @@ describe('OAuth onboarding', () => {
     const requestGatewayMock = vi.fn(async (method: string) => {
       if (method === 'reload.env') {
         return {}
+      }
+
+      if (method === 'setup.runtime_check') {
+        return { ok: true, provider: 'nous' }
       }
 
       throw new Error(`unexpected gateway method: ${method}`)
@@ -548,9 +615,136 @@ describe('OAuth onboarding', () => {
     await submitOnboardingCode(onboardingContext(requestGateway))
 
     const state = $desktopOnboarding.get()
-    expect(state.flow.status).toBe('error')
-    expect(state.flow.status === 'error' ? state.flow.message : '').toContain('Confirm this expensive model.')
+    expect(state.flow.status).toBe('confirming_model')
+    expect(state.flow.status === 'confirming_model' ? state.flow.requiresConfirmation : false).toBe(true)
+    expect(JSON.stringify(state.flow)).not.toContain('private-callback-secret')
     expect(requestGatewayMock).not.toHaveBeenCalledWith('setup.runtime_check', expect.anything())
+
+    await confirmOnboardingModel(onboardingContext(requestGateway))
+    expect($desktopOnboarding.get().configured).toBe(false)
+    expect($desktopOnboarding.get().flow).toMatchObject({ status: 'confirming_model', saving: false, confirmationError: true })
+
+    allowConfirm = true
+    await confirmOnboardingModel(onboardingContext(requestGateway))
+    expect(assignmentBodies).toEqual(expect.arrayContaining([expect.objectContaining({ confirm_expensive_model: true })]))
+    expect(requestGatewayMock).toHaveBeenCalledWith('setup.runtime_check', { provider: 'nous' })
+    expect($desktopOnboarding.get()).toMatchObject({ configured: true, flow: { status: 'idle' } })
+  })
+
+  it('does not finish a guarded setup after switching profiles during the save', async () => {
+    let releaseAssignment!: (value: unknown) => void
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/providers/oauth') {
+        return { providers: [] }
+      }
+
+      if (path === '/api/model/set') {
+        return new Promise(resolve => {
+          releaseAssignment = resolve
+        })
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+    const requestGateway = vi.fn(async () => ({ ok: true })) as OnboardingContext['requestGateway']
+    startManualOnboarding(null, 'alpha')
+    $desktopOnboarding.set(baseState({
+      targetProfile: 'alpha',
+      flow: {
+        status: 'confirming_model',
+        providerSlug: 'nous',
+        currentModel: 'openai/gpt-5.5-pro',
+        label: 'Nous Portal',
+        requiresConfirmation: true,
+        saving: false
+      }
+    }))
+
+    const pending = confirmOnboardingModel(onboardingContext(requestGateway))
+    await vi.waitFor(() => expect(releaseAssignment).toBeTypeOf('function'))
+    startManualOnboarding(null, 'beta')
+    releaseAssignment({ ok: true, provider: 'nous', model: 'openai/gpt-5.5-pro' })
+    await pending
+
+    expect($desktopOnboarding.get()).toMatchObject({ configured: false, targetProfile: 'beta', flow: { status: 'idle' } })
+    expect(requestGateway).not.toHaveBeenCalled()
+  })
+})
+
+describe('saveOnboardingApiKey', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    $desktopOnboarding.set(baseState())
+  })
+
+  afterEach(() => {
+    window.localStorage.clear()
+    $desktopOnboarding.set(baseState())
+    vi.restoreAllMocks()
+  })
+
+  it('does not echo a backend exception containing the submitted key', async () => {
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/env') {
+        throw new Error('write failed for api_key=private-api-key')
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('FIREWORKS_API_KEY', 'private-api-key', 'Fireworks', onboardingContext(emptyOpenRouterGateway()))
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Could not save the key')
+    expect(JSON.stringify(result)).not.toContain('private-api-key')
+  })
+
+  it('does not claim the key was saved when the backend returns ok=false', async () => {
+    const paths: string[] = []
+    installApiMock(async ({ path }: { path: string }) => {
+      paths.push(path)
+
+      if (path === '/api/env') {
+        return { ok: false }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingApiKey('FIREWORKS_API_KEY', 'synthetic-key', 'Fireworks', onboardingContext(emptyOpenRouterGateway()))
+
+    expect(result.ok).toBe(false)
+    expect(paths).toEqual(['/api/env'])
+  })
+
+  it('reports an incomplete model setup after a successful key write', async () => {
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/env') {
+        return { ok: true }
+      }
+
+      if (path.startsWith('/api/model/options')) {
+        return { providers: [{ slug: 'fireworks', name: 'Fireworks', models: ['fixture-model'] }] }
+      }
+
+      if (path.startsWith('/api/model/recommended-default')) {
+        return { provider: 'fireworks', model: 'fixture-model' }
+      }
+
+      if (path === '/api/model/set') {
+        throw new Error('model write failed with api_key=private-api-key')
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+    const gateway = vi.fn(async () => ({})) as OnboardingContext['requestGateway']
+
+    const result = await saveOnboardingApiKey('FIREWORKS_API_KEY', 'private-api-key', 'Fireworks', onboardingContext(gateway))
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Saved the key, but could not finish model setup')
+    expect(JSON.stringify(result)).not.toContain('private-api-key')
+    expect($desktopOnboarding.get().configured).not.toBe(true)
   })
 })
 
@@ -604,6 +798,48 @@ describe('saveOnboardingLocalEndpoint', () => {
     expect(result.message).toContain('no models')
     // Must not attempt to persist an assignment without a model.
     expect(calls).not.toContain('/api/model/set')
+  })
+
+  it('does not echo a credential-bearing URL or probe diagnostic into the form', async () => {
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/providers/validate') {
+        return { ok: false, reachable: false, message: 'token=private-probe-secret for user@example.com' }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingLocalEndpoint('https://user:private-url-secret@example.test/v1?key=hidden', '', {
+      requestGateway: readyGateway()
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Check its URL')
+    expect(JSON.stringify(result)).not.toContain('private-probe-secret')
+    expect(JSON.stringify(result)).not.toContain('private-url-secret')
+    expect(JSON.stringify(result)).not.toContain('user@example.com')
+  })
+
+  it('does not echo model-assignment transport diagnostics into the form', async () => {
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/providers/validate') {
+        return { ok: true, reachable: true, models: ['fixture-model'] }
+      }
+
+      if (path === '/api/model/set') {
+        throw new Error('backend refused api_key=private-assignment-secret')
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const result = await saveOnboardingLocalEndpoint('http://127.0.0.1:8000/v1', 'private-assignment-secret', {
+      requestGateway: readyGateway()
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Could not save the endpoint')
+    expect(JSON.stringify(result)).not.toContain('private-assignment-secret')
   })
 
   it('auto-discovers the model and persists provider=custom + base_url, then finishes', async () => {
@@ -755,7 +991,7 @@ describe('saveOnboardingLocalEndpoint', () => {
       }
 
       if (method === 'setup.runtime_check') {
-        return { ok: false, error: 'No provider can serve the selected model.' } as never
+        return { ok: false, error: 'No provider can serve the selected model. api_key=private-runtime-secret' } as never
       }
 
       throw new Error(`unexpected gateway method: ${method}`)
@@ -766,7 +1002,8 @@ describe('saveOnboardingLocalEndpoint', () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('No provider can serve the selected model.')
+    expect(result.message).toContain('could not use the selected model')
+    expect(JSON.stringify(result)).not.toContain('private-runtime-secret')
     expect($desktopOnboarding.get().configured).not.toBe(true)
   })
 })
@@ -895,8 +1132,9 @@ describe('setOnboardingModel', () => {
   }
 
   it('reverts the model, provider and label when persistence fails', async () => {
+    const notification = vi.spyOn(notifications, 'notifyError').mockReturnValue('')
     installApiMock(async () => {
-      throw new Error('backend down')
+      throw new Error('backend down with token=synthetic-secret')
     })
     $desktopOnboarding.set(confirmingModelState())
 
@@ -911,5 +1149,29 @@ describe('setOnboardingModel', () => {
       expect(flow.label).toBe('OpenAI OAuth (ChatGPT)')
       expect(flow.saving).toBe(false)
     }
+
+    expect(notification).toHaveBeenCalledWith(new Error('Check the provider and try again.'), 'Could not change model')
+    expect(JSON.stringify(notification.mock.calls)).not.toContain('synthetic-secret')
+  })
+
+  it('clears an unpersisted model guard only after a safe replacement saves', async () => {
+    installApiMock(async ({ path }: { path: string }) => {
+      if (path === '/api/model/set') {
+        return { ok: true, provider: 'nous', model: 'deepseek/deepseek-v4-flash-0731' }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+    $desktopOnboarding.set(confirmingModelState({ requiresConfirmation: true }))
+
+    await setOnboardingModel('deepseek/deepseek-v4-flash-0731', 'nous', 'Nous Portal')
+
+    expect($desktopOnboarding.get().flow).toMatchObject({
+      status: 'confirming_model',
+      currentModel: 'deepseek/deepseek-v4-flash-0731',
+      providerSlug: 'nous',
+      requiresConfirmation: false,
+      saving: false
+    })
   })
 })

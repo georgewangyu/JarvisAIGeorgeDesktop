@@ -15,6 +15,7 @@ vi.mock('@/hermes', () => ({
 import {
   CRON_MODEL_IMPACT_NOTIFICATION_ID,
   invalidateCronModelImpactScope,
+  ModelConfirmationRequiredError,
   setMainModelAssignment
 } from '@/store/cron-model-impact'
 
@@ -198,7 +199,7 @@ describe('setMainModelAssignment', () => {
       setMainModelAssignment({ provider: 'openrouter', model: 'openai/gpt-5.5-pro' }, undefined, {
         skipConfirmPrompt: true
       })
-    ).rejects.toThrow('Confirm this expensive model.')
+    ).rejects.toBeInstanceOf(ModelConfirmationRequiredError)
     expect(setModelAssignment).toHaveBeenCalledTimes(1)
     expect($notifications.get()).toEqual([])
   })

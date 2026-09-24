@@ -2988,6 +2988,8 @@ export const en: Translations = {
     endConversation: 'End voice conversation',
     endShort: 'End',
     stopDictation: 'Stop dictation',
+    startingDictation: 'Opening microphone',
+    stoppingDictation: 'Finishing recording',
     transcribingDictation: 'Transcribing dictation',
     voiceControls: 'Voice',
     voiceEngine: 'Voice chat engine',
@@ -3543,6 +3545,9 @@ export const en: Translations = {
     price: (input, output) => `${input} in / ${output} out per Mtok`,
     change: 'Change',
     startChatting: 'Begin',
+    modelConfirmationWarning: 'This model needs explicit confirmation because it may have higher costs or different data terms. Review the model before continuing.',
+    modelConfirmationFailed: 'Could not finish model setup. Check this model or choose a different one, then try again.',
+    confirmModelAndBegin: 'Confirm model and begin',
     docs: provider => `${provider} docs`
   },
 

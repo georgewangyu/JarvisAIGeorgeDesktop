@@ -277,6 +277,14 @@ export function DesktopOnboardingOverlay({
       return
     }
 
+    if (flow.status === 'confirming_model' && flow.requiresConfirmation) {
+      // Keep the card visible until the explicit acknowledgement is persisted
+      // and the chosen model passes the runtime check. A failed save stays here.
+      void confirmOnboardingModel(ctx)
+
+      return
+    }
+
     const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
     if (reduce) {

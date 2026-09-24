@@ -18,6 +18,13 @@ import type {
 
 export const CRON_MODEL_IMPACT_NOTIFICATION_ID = 'cron-model-impact'
 
+export class ModelConfirmationRequiredError extends Error {
+  constructor() {
+    super('Model selection requires explicit confirmation.')
+    this.name = 'ModelConfirmationRequiredError'
+  }
+}
+
 const MAX_JOBS = 50
 const MAX_ID_CODE_POINTS = 256
 const MAX_NAME_CODE_POINTS = 120
@@ -170,6 +177,10 @@ export async function setMainModelAssignment(
     if (request.confirm_expensive_model || options?.skipConfirmPrompt) {
       // Already acked, or headless onboarding (nothing mounted to click).
       // Fail closed instead of recursing / dangling a prompt.
+      if (options?.skipConfirmPrompt && !request.confirm_expensive_model) {
+        throw new ModelConfirmationRequiredError()
+      }
+
       throw new Error(result.confirm_message?.trim() || translateNow('cron.modelImpact.saveFailed'))
     }
 

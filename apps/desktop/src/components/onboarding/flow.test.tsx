@@ -79,6 +79,42 @@ afterEach(() => {
 })
 
 describe('ConfirmingModelPanel model pick', () => {
+  it('shows an explicit guard rather than treating an unpersisted model as ready', () => {
+    const state = confirmingModelState()
+
+    if (state.flow.status !== 'confirming_model') {
+      throw new Error('expected model card')
+    }
+
+    $desktopOnboarding.set({
+      ...state,
+      flow: { ...state.flow, requiresConfirmation: true }
+    })
+
+    render(<Harness />)
+
+    expect(screen.getByText(/higher costs or different data terms/)).toBeTruthy()
+    expect(screen.getByText('Confirm model and begin')).toBeTruthy()
+  })
+
+  it('keeps a refused confirmation visible on the model card', () => {
+    const state = confirmingModelState()
+
+    if (state.flow.status !== 'confirming_model') {
+      throw new Error('expected model card')
+    }
+
+    $desktopOnboarding.set({
+      ...state,
+      flow: { ...state.flow, requiresConfirmation: true, confirmationError: true }
+    })
+
+    render(<Harness />)
+
+    expect(screen.getByRole('alert').textContent).toContain('Could not finish model setup')
+    expect(screen.getByText('Confirm model and begin')).toBeTruthy()
+  })
+
   it('persists a cross-provider pick against the picked model provider, not the sign-in provider', async () => {
     const calls: { body?: unknown; path: string }[] = []
 
@@ -124,4 +160,26 @@ describe('ConfirmingModelPanel model pick', () => {
       expect(flow.label).toBe('Nous Portal')
     }
   })
+})
+
+it('does not render an arbitrary OAuth diagnostic from a malformed error state', () => {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <FlowPanel
+        ctx={ctx}
+        flow={{
+          status: 'error',
+          provider: { id: 'nous', name: 'Nous Portal' } as never,
+          message: 'Sign-in did not finish.',
+          detail: 'callback code=ac_test-secret for user@example.com'
+        } as never}
+        leaving={false}
+        onBegin={() => undefined}
+      />
+    </QueryClientProvider>
+  )
+
+  expect(screen.getByText('Sign-in did not finish.')).toBeTruthy()
+  expect(screen.queryByText(/ac_test-secret/)).toBeNull()
+  expect(screen.queryByText('Details')).toBeNull()
 })

@@ -2464,6 +2464,8 @@ export const zhHant = defineLocale({
     endConversation: '結束語音對話',
     endShort: '結束',
     stopDictation: '停止聽寫',
+    startingDictation: '正在開啟麥克風',
+    stoppingDictation: '正在結束錄音',
     transcribingDictation: '正在轉寫聽寫',
     voiceControls: '語音',
     voiceDictation: '語音聽寫',
@@ -2938,6 +2940,9 @@ export const zhHant = defineLocale({
     price: (input, output) => `${input} 輸入 / ${output} 輸出 每 Mtok`,
     change: '變更',
     startChatting: '開始',
+    modelConfirmationWarning: '此模型可能有較高費用或不同的資料條款，需要明確確認。繼續前請先查看模型。',
+    modelConfirmationFailed: '無法完成模型設定。請檢查此模型或選擇其他模型後重試。',
+    confirmModelAndBegin: '確認模型並開始',
     docs: provider => `${provider} 文件`
   },
 

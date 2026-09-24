@@ -3127,6 +3127,8 @@ export const zh = defineLocale({
     endConversation: '结束语音对话',
     endShort: '结束',
     stopDictation: '停止听写',
+    startingDictation: '正在打开麦克风',
+    stoppingDictation: '正在结束录音',
     transcribingDictation: '正在转写听写',
     voiceControls: '语音',
     voiceEngine: '语音聊天引擎',
@@ -3645,6 +3647,9 @@ export const zh = defineLocale({
     price: (input, output) => `${input} 输入 / ${output} 输出每 Mtok`,
     change: '更改',
     startChatting: '开始',
+    modelConfirmationWarning: '此模型可能有更高费用或不同的数据条款，需要明确确认。继续前请先查看模型。',
+    modelConfirmationFailed: '无法完成模型设置。请检查此模型或选择其他模型后重试。',
+    confirmModelAndBegin: '确认模型并开始',
     docs: provider => `${provider} 文档`
   },
 

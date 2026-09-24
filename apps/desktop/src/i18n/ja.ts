@@ -2479,6 +2479,8 @@ export const ja = defineLocale({
     endConversation: '音声会話を終了',
     endShort: '終了',
     stopDictation: '口述を停止',
+    startingDictation: 'マイクを起動中',
+    stoppingDictation: '録音を終了中',
     transcribingDictation: '口述を文字起こし中',
     voiceControls: '音声',
     voiceDictation: '音声口述',
@@ -2973,6 +2975,9 @@ export const ja = defineLocale({
     price: (input, output) => `${input} 入力 / ${output} 出力 per Mtok`,
     change: '変更',
     startChatting: '始める',
+    modelConfirmationWarning: 'このモデルは料金やデータ利用条件が異なる場合があるため、明示的な確認が必要です。続行前にモデルを確認してください。',
+    modelConfirmationFailed: 'モデルの設定を完了できませんでした。モデルを確認するか別のモデルを選び、再試行してください。',
+    confirmModelAndBegin: 'モデルを確認して始める',
     docs: provider => `${provider} ドキュメント`
   },
 

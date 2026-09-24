@@ -2574,6 +2574,8 @@ export interface Translations {
     endConversation: string
     endShort: string
     stopDictation: string
+    startingDictation: string
+    stoppingDictation: string
     transcribingDictation: string
     voiceControls: string
     voiceEngine: string
@@ -3047,6 +3049,9 @@ export interface Translations {
     price: (input: string, output: string) => string
     change: string
     startChatting: string
+    modelConfirmationWarning: string
+    modelConfirmationFailed: string
+    confirmModelAndBegin: string
     docs: (provider: string) => string
   }
 
