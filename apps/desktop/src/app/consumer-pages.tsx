@@ -183,6 +183,8 @@ export function ConsumerIdeasView() {
     values: readIdeaFeedback(profile, connectionId)
   }))
 
+  const [showNotInterested, setShowNotInterested] = useState(false)
+
   const feedback = feedbackSnapshot.scope === scope ? feedbackSnapshot.values : readIdeaFeedback(profile, connectionId)
 
   const startIdea = (prompt: string) => {
@@ -213,10 +215,28 @@ export function ConsumerIdeasView() {
     'not-interested': 'Not interested'
   }
 
+  type IdeaRow = { description: string; id: string; prompt: string; title: string }
+
+  const allIdeas = IDEA_GROUPS.reduce<IdeaRow[]>((items, group) => [...items, ...group.ideas], [])
+  const savedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'saved')
+  const completedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'done')
+  const notInterestedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'not-interested')
+
+  const sections: { ideas: IdeaRow[]; title: string }[] = [
+    ...(savedIdeas.length ? [{ title: 'Saved for later', ideas: savedIdeas }] : []),
+    ...IDEA_GROUPS.map(group => ({
+      title: group.title,
+      ideas: group.ideas.filter(idea => !feedback[idea.id])
+    })).filter(group => group.ideas.length),
+    ...(completedIdeas.length ? [{ title: 'Completed', ideas: completedIdeas }] : []),
+    ...(showNotInterested && notInterestedIdeas.length ? [{ title: 'Not interested', ideas: notInterestedIdeas }] : [])
+  ]
+
+
   return (
     <ConsumerPage description="Starting points for a chat. Choices are saved on this Mac for this profile; nothing is sent until you choose to send it." title="Ideas">
       <div className="space-y-10">
-        {IDEA_GROUPS.map(group => (
+        {sections.map(group => (
           <section key={group.title}>
             <h2 className="mb-3 text-xl font-semibold tracking-tight">{group.title}</h2>
             <div className="space-y-1">
@@ -245,6 +265,11 @@ export function ConsumerIdeasView() {
             </div>
           </section>
         ))}
+        {notInterestedIdeas.length > 0 ? (
+          <Button onClick={() => setShowNotInterested(value => !value)} size="sm" variant="text">
+            {showNotInterested ? 'Hide' : 'Show'} not interested ({notInterestedIdeas.length})
+          </Button>
+        ) : null}
       </div>
     </ConsumerPage>
   )

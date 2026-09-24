@@ -121,10 +121,33 @@ it('saves and clears Idea feedback without opening a chat or sending a prompt', 
 
   view.unmount()
   render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
-  expect(screen.getByText('Saved for later')).toBeTruthy()
+  expect(screen.getByRole('heading', { name: 'Saved for later' })).toBeTruthy()
   fireEvent.pointerDown(screen.getByRole('button', { name: 'Feedback for Plan my day' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Clear choice' }))
   expect(readIdeaFeedback('default', null)['plan-day']).toBeUndefined()
+})
+
+it('lets feedback change the Ideas surface and recover a hidden idea', async () => {
+  render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Feedback for Plan my day' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Save for later' }))
+  expect(screen.getByRole('heading', { name: 'Saved for later' })).toBeTruthy()
+  expect(screen.getAllByRole('button', { name: /^Plan my day/ })).toHaveLength(1)
+
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Feedback for Catch me up' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Not interested' }))
+  expect(screen.queryByRole('button', { name: /^Catch me up/ })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Show not interested (1)' })).toBeTruthy()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Show not interested (1)' }))
+  expect(screen.getByRole('button', { name: /^Catch me up/ })).toBeTruthy()
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Feedback for Catch me up' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Clear choice' }))
+  expect(screen.queryByRole('button', { name: 'Show not interested (1)' })).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Featured ideas' })).toBeTruthy()
+  expect($freshSessionRequest.get()).toBe(0)
+  expect(takeSessionDraft(null).text).toBe('')
 })
 
 it('requires an explicit choice before adding a goal to an existing unsent draft', async () => {
