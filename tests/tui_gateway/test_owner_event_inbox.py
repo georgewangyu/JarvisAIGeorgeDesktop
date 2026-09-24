@@ -228,3 +228,95 @@ def test_interrupted_jarvis_claim_is_reported_without_replay(tmp_path):
     finally:
         second_lease.release()
         db.close()
+
+
+def test_reviewed_jarvis_retry_has_new_durable_identity_and_runs_at_most_once(tmp_path):
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import claim_pending_delivery, complete_delivery, find_jarvis_live_owner
+    from tui_gateway.owner_event_inbox import (
+        admit_jarvis_event, owner_event_receipt, review_interrupted_jarvis_event,
+        retry_interrupted_jarvis_event,
+    )
+
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+
+    def acquire(live_id):
+        lease, refusal = try_acquire_active_session(
+            session_id="main", surface="desktop", config={}, registry_home=tmp_path,
+            metadata={"live_session_id": live_id, "bot_live_delivery_consumer": True},
+        )
+        assert refusal is None
+        return lease
+
+    old_lease = acquire("old-runtime")
+    try:
+        original = admit_jarvis_event(tmp_path, source="synthetic", event_id="first", text="Review a test plan")
+        assert claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path))["id"] == original["id"]
+        with pytest.raises(ValueError, match="interrupted Jarvis owner"):
+            review_interrupted_jarvis_event(tmp_path, original["id"])
+    finally:
+        old_lease.release()
+
+    with pytest.raises(ValueError, match="not open"):
+        review_interrupted_jarvis_event(tmp_path, original["id"])
+    new_lease = acquire("new-runtime")
+    try:
+        reviewed = review_interrupted_jarvis_event(tmp_path, original["id"])
+        assert reviewed["message"] == original["message"]
+        assert reviewed["status"] == "outcome_unknown"
+        with pytest.raises(ValueError, match="review it again"):
+            retry_interrupted_jarvis_event(tmp_path, original["id"], "wrong")
+        queued = retry_interrupted_jarvis_event(tmp_path, original["id"], reviewed["review_digest"])
+        assert queued["status"] == "queued" and queued["delivery_id"] != original["id"]
+        assert retry_interrupted_jarvis_event(tmp_path, original["id"], reviewed["review_digest"]) == queued
+        assert owner_event_receipt(tmp_path, source="synthetic", event_id="first")["status"] == "claimed"
+        claimed = claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path))
+        assert claimed["id"] == queued["delivery_id"]
+        assert claimed["message"] == original["message"]
+        assert claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path)) is None
+        complete_delivery(tmp_path, claimed["id"], status="settled", reply="Test-only result")
+        assert retry_interrupted_jarvis_event(tmp_path, original["id"], reviewed["review_digest"]) == {
+            "delivery_id": queued["delivery_id"], "status": "settled"}
+    finally:
+        new_lease.release()
+        db.close()
+
+
+def test_interrupted_retry_refuses_if_original_settles_after_review(tmp_path):
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import claim_pending_delivery, complete_delivery, find_jarvis_live_owner
+    from tui_gateway.owner_event_inbox import (
+        admit_jarvis_event, review_interrupted_jarvis_event, retry_interrupted_jarvis_event,
+    )
+
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+    old_lease, refusal = try_acquire_active_session(
+        session_id="main", surface="desktop", config={}, registry_home=tmp_path,
+        metadata={"live_session_id": "old", "bot_live_delivery_consumer": True},
+    )
+    assert refusal is None
+    try:
+        original = admit_jarvis_event(tmp_path, source="synthetic", event_id="first", text="Check")
+        claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path))
+    finally:
+        old_lease.release()
+    new_lease, refusal = try_acquire_active_session(
+        session_id="main", surface="desktop", config={}, registry_home=tmp_path,
+        metadata={"live_session_id": "new", "bot_live_delivery_consumer": True},
+    )
+    assert refusal is None
+    try:
+        reviewed = review_interrupted_jarvis_event(tmp_path, original["id"])
+        complete_delivery(tmp_path, original["id"], status="settled", reply="Already done")
+        with pytest.raises(ValueError, match="no longer awaits review"):
+            retry_interrupted_jarvis_event(tmp_path, original["id"], reviewed["review_digest"])
+        assert claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path)) is None
+    finally:
+        new_lease.release()
+        db.close()

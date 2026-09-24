@@ -632,6 +632,19 @@ def test_interrupted_jarvis_events_rpc_reads_without_replaying(server, hermes_ho
             "status": "outcome_unknown",
         }]
         assert owner_event_receipt(hermes_home, source="calendar", event_id="one")["status"] == "claimed"
+        review = _call(server, "jarvis.events.review", profile="default", delivery_id=receipt["id"])["result"]
+        assert review["message"] == receipt["message"]
+        denied = _call(server, "jarvis.events.retry", profile="default",
+                       delivery_id=receipt["id"], review_digest="not-reviewed")
+        assert denied["error"]["code"] == 4004
+        queued = _call(server, "jarvis.events.retry", profile="default",
+                       delivery_id=receipt["id"], review_digest=review["review_digest"])["result"]
+        assert queued["status"] == "queued" and queued["delivery_id"] != receipt["id"]
+        repeated = _call(server, "jarvis.events.retry", profile="default",
+                         delivery_id=receipt["id"], review_digest=review["review_digest"])["result"]
+        assert repeated == queued
+        assert claim_pending_delivery(hermes_home, find_jarvis_live_owner(hermes_home))["id"] == queued["delivery_id"]
+        assert claim_pending_delivery(hermes_home, find_jarvis_live_owner(hermes_home)) is None
     finally:
         second_lease.release()
         db.close()

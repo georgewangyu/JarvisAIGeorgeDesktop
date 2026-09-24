@@ -255,6 +255,39 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5031, "could not check interrupted activity")
 
 
+@method("jarvis.events.review")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    """Read one ambiguous request for deliberate user review, without a model turn."""
+    from hermes_constants import get_hermes_home
+    from tui_gateway.owner_event_inbox import review_interrupted_jarvis_event
+
+    try:
+        return _ok(rid, review_interrupted_jarvis_event(get_hermes_home(), params["delivery_id"]))
+    except ValueError:
+        return _err(rid, 4004, "This event is no longer available for review. Refresh Activity.")
+    except Exception as exc:
+        logger.debug("jarvis.events.review failed: %s", exc, exc_info=True)
+        return _err(rid, 5031, "could not review interrupted activity")
+
+
+@method("jarvis.events.retry")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    """Queue one new exact-owner event only after matching the reviewed content."""
+    from hermes_constants import get_hermes_home
+    from tui_gateway.owner_event_inbox import retry_interrupted_jarvis_event
+
+    try:
+        return _ok(rid, retry_interrupted_jarvis_event(
+            get_hermes_home(), params["delivery_id"], params["review_digest"]))
+    except ValueError:
+        return _err(rid, 4004, "This request changed or was already handled. Refresh Activity before retrying.")
+    except Exception as exc:
+        logger.debug("jarvis.events.retry failed: %s", exc, exc_info=True)
+        return _err(rid, 5031, "could not request a retry")
+
+
 @method("session.goals.create")
 @_profile_scoped
 def _(rid, params: dict) -> dict:

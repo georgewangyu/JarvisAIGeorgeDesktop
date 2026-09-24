@@ -1285,6 +1285,42 @@
       }
     },
     {
+      "name": "jarvis.events.retry",
+      "summary": "Queue one new deterministic delivery of a reviewed interrupted Jarvis event; never replay its original claim.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/JarvisEventRetryParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/JarvisEventRetryResult"
+        }
+      }
+    },
+    {
+      "name": "jarvis.events.review",
+      "summary": "Read the exact original request of one interrupted Jarvis event for explicit user review without dispatching it.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/JarvisEventReviewParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/JarvisEventReviewResult"
+        }
+      }
+    },
+    {
       "name": "learning.delete",
       "summary": "Archive a skill (restorable via curator) or remove a memory chunk.",
       "params": [
@@ -13150,6 +13186,111 @@
         ],
         "title": "InterruptStatus",
         "type": "string"
+      },
+      "JarvisEventRetryParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "delivery_id": {
+            "title": "Delivery Id",
+            "type": "string"
+          },
+          "review_digest": {
+            "title": "Review Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_id",
+          "review_digest"
+        ],
+        "title": "JarvisEventRetryParams",
+        "type": "object"
+      },
+      "JarvisEventRetryResult": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery_id": {
+            "title": "Delivery Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_id",
+          "status"
+        ],
+        "title": "JarvisEventRetryResult",
+        "type": "object"
+      },
+      "JarvisEventReviewParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "delivery_id": {
+            "title": "Delivery Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_id"
+        ],
+        "title": "JarvisEventReviewParams",
+        "type": "object"
+      },
+      "JarvisEventReviewResult": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery_id": {
+            "title": "Delivery Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "review_digest": {
+            "title": "Review Digest",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_id",
+          "message",
+          "review_digest",
+          "status"
+        ],
+        "title": "JarvisEventReviewResult",
+        "type": "object"
       },
       "JarvisInterruptedEvent": {
         "additionalProperties": false,

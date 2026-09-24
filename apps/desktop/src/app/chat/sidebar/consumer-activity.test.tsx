@@ -114,6 +114,43 @@ describe('consumer activity rows', () => {
 })
 
 describe('interrupted activity', () => {
+  it('requires review and acknowledgement before a single explicit retry', async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === 'jarvis.events.interrupted') {
+        return { events: [{ delivery_id: 'synthetic', claimed_at: 1, status: 'outcome_unknown' }] }
+      }
+
+      if (method === 'jarvis.events.review') {
+        return { delivery_id: 'synthetic', message: 'Review this exact request', review_digest: 'digest', status: 'outcome_unknown' }
+      }
+
+      if (method === 'jarvis.events.retry') {
+        return { delivery_id: 'retry-id', status: 'queued' }
+      }
+
+      throw new Error('Unexpected request')
+    })
+
+    $gateway.set({ request } as never)
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={vi.fn()} sessions={[]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Review request' }))
+    expect(await screen.findByText('Review this exact request')).toBeTruthy()
+    expect(request).not.toHaveBeenCalledWith('jarvis.events.retry', expect.anything())
+    const retry = screen.getByRole('button', { name: 'Retry this request' })
+    expect((retry as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /I understand retrying may repeat actions/ }))
+    fireEvent.click(retry)
+    await waitFor(() => expect(request).toHaveBeenCalledWith('jarvis.events.retry', {
+      profile: 'default', delivery_id: 'synthetic', review_digest: 'digest'
+    }))
+    expect(await screen.findByText('Retry queued. The outcome is not yet known.')).toBeTruthy()
+    expect((retry as HTMLButtonElement).disabled).toBe(true)
+    expect(request).not.toHaveBeenCalledWith('prompt.submit', expect.anything())
+  })
+
   it('warns about an unknown outcome without showing a completed result or replaying it', async () => {
     const request = vi.fn(async () => ({
       events: [{ delivery_id: 'synthetic', claimed_at: 1, status: 'outcome_unknown' }]

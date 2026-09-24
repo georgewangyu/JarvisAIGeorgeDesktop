@@ -880,6 +880,25 @@ export interface JarvisInterruptedEvent {
   claimed_at: number | null
   status: string
 }
+export interface JarvisEventReviewParams {
+  profile?: string | null
+  delivery_id: string
+}
+export interface JarvisEventReviewResult {
+  delivery_id: string
+  message: string
+  review_digest: string
+  status: string
+}
+export interface JarvisEventRetryParams {
+  profile?: string | null
+  delivery_id: string
+  review_digest: string
+}
+export interface JarvisEventRetryResult {
+  delivery_id: string
+  status: string
+}
 export interface SessionControlReadParams {
   profile?: string | null
   session_id: string
@@ -4372,6 +4391,10 @@ export interface RpcMethods {
   'insights.get': { params: InsightsGetParams; result: InsightsGetResult }
   /** List metadata-only outcome-unknown Jarvis events from retired desktop owner leases without replaying them. */
   'jarvis.events.interrupted': { params: JarvisInterruptedEventsParams; result: JarvisInterruptedEventsResult }
+  /** Queue one new deterministic delivery of a reviewed interrupted Jarvis event; never replay its original claim. */
+  'jarvis.events.retry': { params: JarvisEventRetryParams; result: JarvisEventRetryResult }
+  /** Read the exact original request of one interrupted Jarvis event for explicit user review without dispatching it. */
+  'jarvis.events.review': { params: JarvisEventReviewParams; result: JarvisEventReviewResult }
   /** Archive a skill (restorable via curator) or remove a memory chunk. */
   'learning.delete': { params: LearningNodeParams; result: LearningMutationResult }
   /** Node content (SKILL.md or memory chunk) for an edit prefill. */
@@ -4748,6 +4771,8 @@ export const RPC_METHODS = [
   'input.detect_drop',
   'insights.get',
   'jarvis.events.interrupted',
+  'jarvis.events.retry',
+  'jarvis.events.review',
   'learning.delete',
   'learning.detail',
   'learning.edit',

@@ -466,6 +466,35 @@ method("jarvis.events.interrupted", params=JarvisInterruptedEventsParams, result
        doc="List metadata-only outcome-unknown Jarvis events from retired desktop owner leases without replaying them.")
 
 
+class JarvisEventReviewParams(ProfileParams):
+    delivery_id: str
+
+
+class JarvisEventReviewResult(Result):
+    delivery_id: str
+    message: str
+    review_digest: str
+    status: str
+
+
+method("jarvis.events.review", params=JarvisEventReviewParams, result=JarvisEventReviewResult,
+       doc="Read the exact original request of one interrupted Jarvis event for explicit user review without dispatching it.")
+
+
+class JarvisEventRetryParams(ProfileParams):
+    delivery_id: str
+    review_digest: str
+
+
+class JarvisEventRetryResult(Result):
+    delivery_id: str
+    status: str
+
+
+method("jarvis.events.retry", params=JarvisEventRetryParams, result=JarvisEventRetryResult,
+       doc="Queue one new deterministic delivery of a reviewed interrupted Jarvis event; never replay its original claim.")
+
+
 class LoopSnapshot(Result):
     """``_safe_loop_snapshot`` — persisted LoopState fields, never its route."""
 

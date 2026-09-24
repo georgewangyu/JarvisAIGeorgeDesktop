@@ -1,9 +1,10 @@
-import type { JarvisInterruptedEventsResult } from '@hermes/shared'
+import type { JarvisEventRetryResult, JarvisEventReviewResult, JarvisInterruptedEventsResult } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useJarvisCopy } from '@/i18n/jarvis'
 import { sessionTitle } from '@/lib/chat-runtime'
@@ -130,6 +131,64 @@ export function ConsumerActivity({
   } | null>(null)
 
   const [interruptedLoadError, setInterruptedLoadError] = useState(false)
+  const [review, setReview] = useState<null | (JarvisEventReviewResult & { gateway: typeof gateway; profile: string })>(null)
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const [reviewError, setReviewError] = useState('')
+  const [acknowledged, setAcknowledged] = useState(false)
+  const [retryStatus, setRetryStatus] = useState('')
+
+  const currentReview = review?.gateway === gateway && review.profile === profile ? review : null
+
+  useEffect(() => {
+    setReview(null)
+    setAcknowledged(false)
+    setReviewError('')
+    setRetryStatus('')
+  }, [gateway, profile])
+
+  async function openReview(deliveryId: string) {
+    if (!gateway || reviewBusy) {return}
+    setReviewBusy(true)
+    setReviewError('')
+    setRetryStatus('')
+
+    try {
+      const result = await gateway.request<JarvisEventReviewResult>('jarvis.events.review', {
+        profile,
+        delivery_id: deliveryId
+      })
+
+      if ($gateway.get() !== gateway || $activeGatewayProfile.get() !== profile) {return}
+      setReview({ ...result, gateway, profile })
+      setAcknowledged(false)
+    } catch {
+      setReviewError('Could not load the original request. Please try again.')
+    } finally {
+      setReviewBusy(false)
+    }
+  }
+
+  async function retryReviewed() {
+    if (!gateway || !currentReview || !acknowledged || reviewBusy) {return}
+    setReviewBusy(true)
+    setReviewError('')
+
+    try {
+      const result = await gateway.request<JarvisEventRetryResult>('jarvis.events.retry', {
+        profile,
+        delivery_id: currentReview.delivery_id,
+        review_digest: currentReview.review_digest
+      })
+
+      if ($gateway.get() !== gateway || $activeGatewayProfile.get() !== profile) {return}
+      setRetryStatus(result.status === 'queued' ? 'Retry queued. The outcome is not yet known.' : `Retry status: ${result.status}.`)
+      setRefreshIndex(index => index + 1)
+    } catch {
+      setReviewError('Could not queue the retry. The original outcome is still unknown.')
+    } finally {
+      setReviewBusy(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -165,6 +224,7 @@ export function ConsumerActivity({
   const attentionCount = interrupted.length + rows.filter(row => row.status === 'needs-input').length
 
   return (
+    <>
     <Popover onOpenChange={open => {
       if (open) {
         setRefreshIndex(index => index + 1)
@@ -197,6 +257,12 @@ export function ConsumerActivity({
             <p className="mt-1 text-xs leading-5 text-(--ui-text-secondary)">
               {`${interrupted.length === 1 ? 'One background request' : `${interrupted.length} background requests`} may have finished before Jarvis restarted. Check the result before asking Jarvis to try again; nothing was replayed automatically.`}
             </p>
+            {interrupted.map(event => (
+              <Button disabled={reviewBusy} key={event.delivery_id} onClick={() => void openReview(event.delivery_id)} size="inline" variant="textStrong">
+                Review request
+              </Button>
+            ))}
+            {reviewError && !currentReview ? <p className="text-xs text-destructive" role="alert">{reviewError}</p> : null}
           </div>
         ) : null}
         {interruptedLoadError ? (
@@ -266,5 +332,27 @@ export function ConsumerActivity({
         ) : null}
       </PopoverContent>
     </Popover>
+    <Dialog onOpenChange={open => {if (!open) {setReview(null); setAcknowledged(false); setReviewError(''); setRetryStatus('')}}} open={Boolean(currentReview)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Review interrupted request</DialogTitle>
+          <DialogDescription>Jarvis may have already acted on this request before restarting. Review it before choosing to retry.</DialogDescription>
+        </DialogHeader>
+        <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-(--ui-control-hover-background) p-3 text-xs">{currentReview?.message}</pre>
+        <label className="flex items-start gap-2 text-sm">
+          <input checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} type="checkbox" />
+          I understand retrying may repeat actions that already happened.
+        </label>
+        {reviewError ? <p className="text-sm text-destructive" role="alert">{reviewError}</p> : null}
+        {retryStatus ? <p className="text-sm" role="status">{retryStatus}</p> : null}
+        <DialogFooter>
+          <Button onClick={() => setReview(null)} variant="outline">Close</Button>
+          <Button disabled={!acknowledged || reviewBusy || Boolean(retryStatus)} onClick={() => void retryReviewed()}>
+            {reviewBusy ? 'Queuing…' : 'Retry this request'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   )
 }
