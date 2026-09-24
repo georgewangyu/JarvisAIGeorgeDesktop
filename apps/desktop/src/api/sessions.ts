@@ -23,6 +23,22 @@ import {
 
 const SESSION_LIST_REQUEST_TIMEOUT_MS = 60_000
 
+/** Write only visible chats from one local profile to the user's chosen Mac path. */
+export function exportConsumerChatHistory(profile: string, output: string): Promise<{
+  ok: boolean
+  output: string
+  chats: number
+  messages: number
+}> {
+  return hermesApi({
+    body: { profile, output },
+    connectionId: 'local',
+    method: 'POST',
+    path: '/api/sessions/export-consumer-chats',
+    timeoutMs: 120_000
+  })
+}
+
 function sessionScoped(scope?: ProfileScope): { connectionId?: string; profile?: string } {
   if (scope === undefined || scope === null) {
     return {}

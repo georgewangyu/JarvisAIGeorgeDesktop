@@ -16,6 +16,7 @@ from typing import Callable, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from hermes_cli.web_deps import late
 from hermes_cli.web_server_gateway import _strip_session_list_rows
@@ -45,6 +46,33 @@ _NOT_FOUND = "Session not found"
 # Stream-safe import: FastAPI otherwise buffers an arbitrarily large JSON body
 # before SessionDB can enforce its own per-session and transaction limits.
 _SESSION_IMPORT_MAX_BYTES = 25 * 1024 * 1024
+
+
+class ConsumerChatExportRequest(BaseModel):
+    profile: Optional[str] = None
+    output: str
+
+
+def _export_consumer_chat_history(body: ConsumerChatExportRequest):
+    from hermes_cli.config import get_hermes_home
+    from hermes_cli.consumer_chat_export import export_consumer_chats
+
+    profile_home = _cron_profile_home(body.profile)[1] if body.profile else get_hermes_home()
+    db = _open_session_db_for_profile(body.profile, read_only=True)
+    try:
+        return export_consumer_chats(db, profile_home, body.output)
+    finally:
+        db.close()
+
+
+@manage_router.post("/api/sessions/export-consumer-chats")
+async def export_consumer_chat_history_endpoint(body: ConsumerChatExportRequest):
+    """Save only visible Desktop chats to the local path the user picked."""
+    try:
+        result = await asyncio.to_thread(_export_consumer_chat_history, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **result}
 
 
 async def _read_session_import_body(request: Request) -> bytes:
