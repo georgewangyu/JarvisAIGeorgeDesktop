@@ -191,6 +191,12 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
       ? raw as CalendarAuthorization
       : 'unknown'
 
+    // An observed OS revocation ends the app grant too. A later macOS regrant
+    // must still require the user's explicit Connect action.
+    if (enabled(configPath) && authorization !== 'fullAccess' && authorization !== 'unknown') {
+      saveEnabled(configPath, false)
+    }
+
     return { authorization, connected: enabled(configPath) && authorization === 'fullAccess', supported: platform === 'darwin' && response.ok }
   }
 

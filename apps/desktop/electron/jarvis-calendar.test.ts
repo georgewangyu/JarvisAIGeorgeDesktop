@@ -145,6 +145,12 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
       .toEqual({ ok: false, code: 'not_connected' })
     expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(false)
+    osGrant = true
+    const restarted = bridge(run, userData)
+    expect(await restarted('status')).toMatchObject({ connected: false, authorization: 'fullAccess' })
+    expect(await restarted('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
+      .toEqual({ ok: false, code: 'not_connected' })
+    expect(await restarted('connect')).toMatchObject({ connected: true, authorization: 'fullAccess' })
   })
 
   it('keeps app opt-in separate across profiles, restarts and the old global config', async () => {
@@ -348,6 +354,7 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(await reading).toEqual({ ok: false, code: 'not_connected' })
 
     granted = true
+    expect(await call('connect')).toMatchObject({ connected: true })
     const creating = call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z')
     await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(true))
     granted = false

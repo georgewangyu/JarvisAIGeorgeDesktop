@@ -88,6 +88,11 @@ function ConnectionRow({
   )
 }
 
+function calendarAccessRevoked(status: JarvisCalendarStatus | null): boolean {
+  return status?.authorization === 'denied' || status?.authorization === 'restricted'
+    || status?.authorization === 'writeOnly' || status?.authorization === 'notDetermined'
+}
+
 export function ConnectionsView() {
   const s = useJarvisCopy()
   const activeConnectionId = useStore($activeConnectionId)
@@ -118,6 +123,12 @@ export function ConnectionsView() {
   const [eventTitle, setEventTitle] = useState('')
   const [eventStart, setEventStart] = useState('')
   const [eventEnd, setEventEnd] = useState('')
+
+  const clearCalendarDraft = useCallback(() => {
+    setEventTitle('')
+    setEventStart('')
+    setEventEnd('')
+  }, [])
 
   const [accountState, setAccountState] = useState<'checking' | 'connected' | 'disconnected' | 'unavailable'>(
     'checking'
@@ -159,9 +170,12 @@ export function ConnectionsView() {
         failures.push('Could not check Mac permissions.')
       }
 
-      setCalendar(calendarResult.status === 'fulfilled' ? calendarResult.value ?? null : null)
+      const nextCalendar = calendarResult.status === 'fulfilled' ? calendarResult.value ?? null : null
+      setCalendar(nextCalendar)
       // A status refresh cannot prove that a previously read event is still authorized.
       setCalendarEvents(null)
+
+      if (calendarAccessRevoked(nextCalendar)) {clearCalendarDraft()}
 
       setError(failures.length > 0 ? failures.join(' ') : null)
     } catch {
@@ -169,7 +183,7 @@ export function ConnectionsView() {
     } finally {
       if (isCurrent()) {setRefreshing(false)}
     }
-  }, [])
+  }, [clearCalendarDraft])
 
   useEffect(() => {
     setAccountState('checking')
@@ -244,7 +258,11 @@ export function ConnectionsView() {
       if (owner !== calendarScopeRef.current) {return}
       setCalendar(next)
 
-      if (!next.connected) {setCalendarEvents(null)}
+      if (!next.connected) {
+        setCalendarEvents(null)
+
+        if (!connect || calendarAccessRevoked(next)) {clearCalendarDraft()}
+      }
 
       if (connect && !next.connected) {setCalendarError('Calendar access was not granted. You can try again from macOS Settings.')}
     } catch {
@@ -277,7 +295,11 @@ export function ConnectionsView() {
       setCalendarEvents(null)
       const next = await bridge.status().catch(() => null)
 
-      if (owner === calendarScopeRef.current) {setCalendar(next)}
+      if (owner === calendarScopeRef.current) {
+        setCalendar(next)
+
+        if (calendarAccessRevoked(next)) {clearCalendarDraft()}
+      }
     } finally {
       if (owner === calendarScopeRef.current) {setCalendarBusy(false)}
     }
@@ -310,7 +332,11 @@ export function ConnectionsView() {
         setCalendarEvents(null)
         const next = await bridge.status().catch(() => null)
 
-        if (owner === calendarScopeRef.current) {setCalendar(next)}
+        if (owner === calendarScopeRef.current) {
+          setCalendar(next)
+
+          if (calendarAccessRevoked(next)) {clearCalendarDraft()}
+        }
 
         return
       }
@@ -326,7 +352,11 @@ export function ConnectionsView() {
       setCalendarEvents(null)
       const next = await bridge.status().catch(() => null)
 
-      if (owner === calendarScopeRef.current) {setCalendar(next)}
+      if (owner === calendarScopeRef.current) {
+        setCalendar(next)
+
+        if (calendarAccessRevoked(next)) {clearCalendarDraft()}
+      }
     } finally {
       if (owner === calendarScopeRef.current) {setCalendarBusy(false)}
     }

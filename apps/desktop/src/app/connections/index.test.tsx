@@ -382,6 +382,41 @@ it('does not resurrect previously read events after Calendar access is revoked a
   expect(within(section).queryByText('Previously read event')).toBeNull()
 })
 
+it('clears cached events and an in-progress draft when focus reveals revoked Calendar access', async () => {
+  let granted = true
+  const status = vi.fn(async () => ({ supported: true, authorization: granted ? 'fullAccess' : 'denied', connected: granted }))
+  const connect = vi.fn(async () => ({ supported: true, authorization: 'fullAccess', connected: true }))
+
+  const list = vi.fn().mockResolvedValue({
+    ok: true, command: 'list-events',
+    events: [{
+      id: 'synthetic', title: 'Synthetic event', start: '2026-09-23T10:00:00.000Z',
+      end: '2026-09-23T11:00:00.000Z', isAllDay: false, calendarId: 'synthetic'
+    }]
+  })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisCalendar: { status, connect, disconnect: vi.fn(), list, create: vi.fn() } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'View upcoming' })).toBeTruthy())
+  fireEvent.click(within(section).getByRole('button', { name: 'View upcoming' }))
+  await within(section).findByText('Synthetic event')
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Event title' }), { target: { value: 'Private draft' } })
+  granted = false
+
+  fireEvent(window, new Event('focus'))
+  await waitFor(() => expect(within(section).getByText('Needs macOS access')).toBeTruthy())
+  expect(within(section).queryByText('Synthetic event')).toBeNull()
+  granted = true
+
+  fireEvent.click(within(section).getByRole('button', { name: 'Connect' }))
+  await waitFor(() => expect(within(section).getByRole('textbox', { name: 'Event title' })).toHaveProperty('value', ''))
+})
+
 it('drops a delayed Calendar read and draft even after the active profile changes away and back', async () => {
   $activeGatewayProfile.set('alpha')
   let finishList!: (value: unknown) => void
