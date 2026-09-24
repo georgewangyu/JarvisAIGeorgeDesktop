@@ -14,6 +14,7 @@ vi.mock('@/store/gateway', async () => {
   }
 })
 vi.mock('@/hermes', () => ({
+  exportConsumerSetupArchive: vi.fn(async () => ({ archive: '/tmp/setup.tar.gz', ok: true })),
   exportProfileArchive: vi.fn(async () => ({ archive: '/tmp/out.tar.gz', ok: true })),
   getProfiles: vi.fn(async () => ({ profiles: [] })),
   importProfileArchive: vi.fn(async () => ({ desktop: null, name: 'imported', ok: true, path: '/tmp/p' })),
@@ -22,12 +23,12 @@ vi.mock('@/hermes', () => ({
 vi.mock('@/lib/query-client', () => ({ invalidateProfileScopedQueries: vi.fn() }))
 vi.mock('@/store/starmap', () => ({ resetStarmapGraph: vi.fn() }))
 
-const { applyDesktopOverlay, buildDesktopOverlay, exportProfileBundle } = await import('./profile-share')
+const { applyDesktopOverlay, buildDesktopOverlay, exportProfileBundle, runExportProfileFlow } = await import('./profile-share')
 const { $profileColors, setProfileColor } = await import('./profile')
 const { modePref, skinPref } = await import('@/themes/context')
 const { $userThemes } = await import('@/themes/user-themes')
 const { $layoutTree } = await import('@/components/pane-shell/tree/store')
-const { exportProfileArchive } = await import('@/hermes')
+const { exportConsumerSetupArchive, exportProfileArchive } = await import('@/hermes')
 
 // isValidTheme only requires background/foreground/primary at runtime; the
 // static type wants the full palette, hence the cast.
@@ -122,5 +123,29 @@ describe('exportProfileBundle', () => {
     const overlay = JSON.parse(call[1]?.extraFiles?.['desktop.json'] ?? '{}') as ProfileDesktopOverlay
     expect(overlay.skin).toBe('mono')
     expect(call[1]?.output).toBe('/tmp/glam.tar.gz')
+  })
+
+  it('requests the narrow setup export only for the consumer flow', async () => {
+    await exportProfileBundle('glam', '/tmp/glam-setup.tar.gz', { consumerSetup: true })
+
+    expect(exportProfileArchive).not.toHaveBeenCalled()
+    const options = vi.mocked(exportConsumerSetupArchive).mock.calls[0]?.[1]
+    const overlay = JSON.parse(options?.extraFiles?.['desktop.json'] ?? '{}') as ProfileDesktopOverlay
+    expect(overlay.layoutTree).toBeUndefined()
+    expect(overlay.themes).toBeUndefined()
+  })
+
+  it('routes the consumer save flow to the narrow export and keeps the advanced flow unchanged', async () => {
+    const original = window.hermesDesktop
+    window.hermesDesktop = { ...original, selectSavePath: vi.fn(async () => '/synthetic/setup.tar.gz') } as typeof original
+
+    try {
+      await runExportProfileFlow('glam', { consumer: true })
+      await runExportProfileFlow('glam')
+      expect(exportConsumerSetupArchive).toHaveBeenCalledTimes(1)
+      expect(exportProfileArchive).toHaveBeenCalledTimes(1)
+    } finally {
+      window.hermesDesktop = original
+    }
   })
 })

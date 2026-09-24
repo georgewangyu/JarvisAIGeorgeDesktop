@@ -20,7 +20,7 @@ it('exports the selected local profile only after an explicit click', async () =
   render(<ConsumerBackupSettings profile="writer" />)
 
   expect(exportFlow).not.toHaveBeenCalled()
-  expect(screen.getByText(/chats and sign-in credentials aren’t included/i)).toBeTruthy()
+  expect(screen.getByText(/chat history, routines, sign-in files, and internal worker data aren’t included/i)).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
   await waitFor(() => expect(exportFlow).toHaveBeenCalledWith('writer', { consumer: true }))
 })
@@ -39,7 +39,7 @@ it('shows a retryable picker error without exporting', async () => {
   render(<ConsumerBackupSettings profile="writer" />)
 
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
-  expect((await screen.findByRole('alert')).textContent).toContain('Couldn’t open the save dialog.')
+  expect((await screen.findByRole('alert')).textContent).toContain('Couldn’t save assistant setup.')
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
   await waitFor(() => expect(exportFlow).toHaveBeenCalledTimes(2))
   await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())

@@ -989,6 +989,26 @@ async def export_profile_endpoint(name: str, body: ProfileExport):
     return {"ok": True, "archive": str(result)}
 
 
+@router.post("/api/profiles/{name}/export-consumer-setup")
+async def export_consumer_setup_endpoint(name: str, body: ProfileExport):
+    from hermes_cli import profiles as profiles_mod
+    from hermes_cli.consumer_setup_export import export_consumer_setup
+
+    output = (body.output or "").strip()
+    if not output:
+        try:
+            output = str(profiles_mod.get_profile_export_path(name))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Could not create export directory: {exc}") from exc
+
+    with _profile_errors("POST /api/profiles/%s/export-consumer-setup failed", name):
+        result = await run_in_threadpool(
+            export_consumer_setup, name, output, extra_files=body.extra_files or None)
+    return {"ok": True, "archive": str(result)}
+
+
 @router.post("/api/profiles/import")
 async def import_profile_endpoint(body: ProfileImport):
     from hermes_cli import profiles as profiles_mod

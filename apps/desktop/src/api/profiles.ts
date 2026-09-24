@@ -102,6 +102,20 @@ export function exportProfileArchive(
   })
 }
 
+/** A separate route deliberately fails closed on older runtimes that only know
+ *  the broader profile transfer export. */
+export function exportConsumerSetupArchive(
+  name: string,
+  opts: { extraFiles?: Record<string, string>; output: string }
+): Promise<{ archive: string; ok: boolean }> {
+  return hermesApi<{ archive: string; ok: boolean }>({
+    path: `/api/profiles/${encodeURIComponent(name)}/export-consumer-setup`,
+    method: 'POST',
+    body: { extra_files: opts.extraFiles ?? {}, output: opts.output },
+    timeoutMs: STARTUP_REQUEST_TIMEOUT_MS
+  })
+}
+
 /** Import a profile .tar.gz as a new profile. Returns the bundled desktop
  *  appearance overlay too (when the archive carried one) so the caller can
  *  apply theme/layout without another round-trip. */

@@ -32,13 +32,13 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
     <section className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
       <h2 className="text-base font-semibold">Back up assistant setup</h2>
       <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-        Save settings, routines, skills, and memories. The file may contain personal details; chats and sign-in credentials aren’t included.
+        Save selected preferences, skill instructions, and memory notes. The file may contain personal details; chat history, routines, sign-in files, and internal worker data aren’t included.
       </p>
       <Button className="mt-4" disabled={!local || saving} onClick={() => void save()} variant="secondary">
         {saving ? 'Saving…' : 'Save setup backup'}
       </Button>
       {!local && <p className="mt-2 text-xs text-muted-foreground">Available when Jarvis is running on this Mac.</p>}
-      {error && <p className="mt-2 text-sm text-destructive" role="alert">Couldn’t open the save dialog. Try again.</p>}
+      {error && <p className="mt-2 text-sm text-destructive" role="alert">Couldn’t save assistant setup. Choose another location and try again.</p>}
     </section>
   )
 }

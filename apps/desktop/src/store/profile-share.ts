@@ -15,7 +15,7 @@
 
 import { isLayoutNode, normalize } from '@/components/pane-shell/tree/model'
 import { $layoutTree, markActivePreset, persistTree } from '@/components/pane-shell/tree/store'
-import { exportProfileArchive, importProfileArchive } from '@/hermes'
+import { exportConsumerSetupArchive, exportProfileArchive, importProfileArchive } from '@/hermes'
 import { translateNow } from '@/i18n'
 import { modePref, skinPref, type ThemeMode } from '@/themes/context'
 import { BUILTIN_THEMES } from '@/themes/presets'
@@ -69,13 +69,26 @@ export function buildDesktopOverlay(profile: string): ProfileDesktopOverlay {
 
 /** Export `profile` (backend archive + desktop overlay) to `output` (or the
  *  backend's staging dir when omitted). Returns the archive path. */
-export async function exportProfileBundle(profile: string, output?: string): Promise<string> {
+export async function exportProfileBundle(profile: string, output?: string, options?: { consumerSetup?: boolean }): Promise<string> {
   const overlay = buildDesktopOverlay(profile)
 
-  const { archive } = await exportProfileArchive(profile, {
-    extraFiles: { [DESKTOP_OVERLAY_FILENAME]: JSON.stringify(overlay, null, 2) },
+  // The consumer backup carries portable, built-in appearance only. Custom
+  // themes and the current window layout may contain paths or working state.
+  const appearance = options?.consumerSetup ? {
+    version: 1,
+    mode: overlay.mode,
+    profileColor: /^#[0-9a-f]{6}$/i.test(overlay.profileColor ?? '') ? overlay.profileColor : null,
+    ...(overlay.skin && BUILTIN_THEMES[overlay.skin] ? { skin: overlay.skin } : {})
+  } : overlay
+
+  const exportOptions = {
+    extraFiles: { [DESKTOP_OVERLAY_FILENAME]: JSON.stringify(appearance, null, 2) },
     output
-  })
+  }
+
+  const { archive } = options?.consumerSetup
+    ? await exportConsumerSetupArchive(profile, { ...exportOptions, output: output ?? '' })
+    : await exportProfileArchive(profile, exportOptions)
 
   return archive
 }
@@ -175,12 +188,16 @@ export async function runExportProfileFlow(profile?: string, options?: { consume
   }
 
   try {
-    const archive = await exportProfileBundle(target, output)
+    const archive = await exportProfileBundle(target, output, { consumerSetup: options?.consumer })
     notify({ kind: 'success', title: translateNow('profiles.exported'), message: archive })
 
     return archive
   } catch (error) {
     notifyError(error, translateNow('profiles.failedExport'))
+
+    if (options?.consumer) {
+      throw error
+    }
 
     return null
   }
