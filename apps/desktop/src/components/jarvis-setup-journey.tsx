@@ -451,6 +451,11 @@ export function JarvisSetupJourney({
               {alreadyConnected ? 'Return to Jarvis' : signingIn ? 'Finish sign-in in your browser' : 'Continue with ChatGPT / Codex'}
             </Button>
           )}
+          {onSkip && !reviewMode && bootstrapComplete && !signingIn ? (
+            <Button onClick={onSkip} size="sm" variant="text">
+              I'll choose a provider later
+            </Button>
+          ) : null}
           {signInError ? <p className="text-sm text-destructive">{signInError}</p> : null}
         </div>
       </div>

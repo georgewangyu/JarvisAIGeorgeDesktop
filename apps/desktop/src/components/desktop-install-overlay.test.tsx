@@ -232,6 +232,26 @@ describe('DesktopInstallOverlay first-run setup', () => {
     await waitFor(() => expect(onboardingSurfaceActive()).toBe(false))
   })
 
+  it('lets a finished first-run journey defer sign-in directly from its final screen', async () => {
+    $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
+    const desktop = installDesktopMock(bootstrapState())
+    const startCodexOAuth = vi.fn()
+    Object.assign(desktop, { jarvisOnboarding: { startCodexOAuth } })
+    render(<DesktopInstallOverlay />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Get started' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue without access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    fireEvent.click(await screen.findByRole('button', { name: "I'll choose a provider later" }))
+
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Finish connecting Jarvis' })).toBeNull())
+    expect($desktopOnboarding.get().firstRunSkipped).toBe(true)
+    expect($desktopOnboarding.get().configured).toBe(false)
+    expect(startCodexOAuth).not.toHaveBeenCalled()
+    await waitFor(() => expect(onboardingSurfaceActive()).toBe(false))
+  })
+
   it('closes the guided setup after bootstrap when the user goes back and chooses a provider later', async () => {
     $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
 

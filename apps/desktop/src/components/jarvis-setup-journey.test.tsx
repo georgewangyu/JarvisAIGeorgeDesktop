@@ -41,6 +41,53 @@ afterEach(() => {
 })
 
 describe('Jarvis permission onboarding recovery', () => {
+  it('does not offer provider deferral while local setup is unfinished', async () => {
+    render(
+      <JarvisSetupJourney
+        bootstrapComplete={false}
+        bootstrapError={null}
+        onBeginSetup={vi.fn().mockResolvedValue(undefined)}
+        onConnectOther={vi.fn()}
+        onFinish={vi.fn().mockResolvedValue(undefined)}
+        onShowInstallDetails={vi.fn()}
+        onSkip={vi.fn()}
+      />
+    )
+
+    await reachMicrophoneStep()
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+    expect(await screen.findByRole('heading', { name: 'Preparing Jarvis' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: "I'll choose a provider later" })).toBeNull()
+  })
+
+  it('offers a final provider deferral only after setup is ready and no sign-in is active', async () => {
+    const onSkip = vi.fn()
+    let finishSignIn: (() => void) | undefined
+    const onFinish = vi.fn(() => new Promise<void>((resolve) => {finishSignIn = resolve}))
+
+    render(
+      <JarvisSetupJourney
+        bootstrapComplete={true}
+        bootstrapError={null}
+        onBeginSetup={vi.fn().mockResolvedValue(undefined)}
+        onConnectOther={vi.fn()}
+        onFinish={onFinish}
+        onShowInstallDetails={vi.fn()}
+        onSkip={onSkip}
+      />
+    )
+
+    await reachMicrophoneStep()
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+    expect(await screen.findByRole('button', { name: "I'll choose a provider later" })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with ChatGPT / Codex' }))
+    await waitFor(() => expect(onFinish).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('button', { name: "I'll choose a provider later" })).toBeNull()
+    expect(onSkip).not.toHaveBeenCalled()
+    finishSignIn?.()
+  })
+
   it('explains that Full Disk Access opens Settings and allows retry after failure', async () => {
     const openFullDiskAccess = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
 
