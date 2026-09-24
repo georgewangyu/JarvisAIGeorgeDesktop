@@ -758,6 +758,7 @@ export function preserveLocalPendingTurnMessages(
 const safelyPersistedInflightUser = Symbol('safelyPersistedInflightUser')
 
 type LiveSessionProjection = Pick<SessionResumeResult, 'inflight' | 'queued' | 'session_id'> & {
+  turn_started_at?: number | null
   [safelyPersistedInflightUser]?: true
 }
 
@@ -821,6 +822,40 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
   const latestUserIndex = messages.map(message => message.role).lastIndexOf('user')
   const latestUserRun: ChatMessage[] = []
 
+  // The retained failure may already be the last durable reply. Match the
+  // immediately preceding user as well as the failure itself: the same prompt
+  // and error can occur on a later turn, and that later turn needs its own card.
+  const savedReply = messages[messages.length - 1]
+  const savedUser = messages[latestUserIndex]
+  const savedSurface = savedReply?.errorSurface
+  const turnStartedAt = projection.turn_started_at
+
+  // Both clocks are Unix seconds: the gateway stamps the persisted user row
+  // with time.time(), and toChatMessages preserves SessionMessage.timestamp.
+  const savedUserBelongsToTurn = Boolean(
+    typeof turnStartedAt === 'number' &&
+      turnStartedAt > 0 &&
+      savedUser?.timestamp !== undefined &&
+      savedUser.timestamp >= turnStartedAt
+  )
+
+  const savedFailureOfCurrentTurn = Boolean(
+    inflightError &&
+      savedUserBelongsToTurn &&
+      savedReply?.role === 'assistant' &&
+      savedReply.error &&
+      savedReply.timestamp !== undefined &&
+      savedReply.timestamp >= (turnStartedAt as number) &&
+      savedUser?.role === 'user' &&
+      inflightUser &&
+      textWithoutReferenceLines(chatMessageText(savedUser)) === textWithoutReferenceLines(inflightUser) &&
+      (savedReply.error === inflightError ||
+        (savedSurface &&
+          inflightErrorSurface &&
+          savedSurface.layer === inflightErrorSurface.layer &&
+          savedSurface.code === inflightErrorSurface.code))
+  )
+
   for (let index = latestUserIndex; index >= 0; index -= 1) {
     const candidate = messages[index]
 
@@ -843,9 +878,10 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
     )
 
   const inflightUserAlreadyPersisted =
-    projection[safelyPersistedInflightUser] === true || (Boolean(inflightUser) && persistedInLatestRun(inflightUser))
+    projection[safelyPersistedInflightUser] === true ||
+    (Boolean(inflightUser) && persistedInLatestRun(inflightUser) && (!inflightError || savedUserBelongsToTurn))
 
-  if (inflightUser && !inflightUserAlreadyPersisted) {
+  if (inflightUser && !inflightUserAlreadyPersisted && !savedFailureOfCurrentTurn) {
     // A synthetic starting prompt (process_complete, hidden, …) carries the
     // display typing its persisted row will get: render it through the same
     // timeline projection history uses instead of as a user bubble (#112144).
@@ -918,10 +954,8 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
     inflightAssistant || inflightStreaming || inflightError || (inflightUser && queuedUser)
   )
 
-  // A classified failure already stamped on this turn's saved reply survives
-  // process restart. Live resume may also retain the old inflight failure;
-  // do not show a second card beside the durable one.
-  const savedFailureOfCurrentTurn = Boolean(inflightError && liveAssistantOfCurrentTurn?.errorSurface)
+  // A failed reply already saved for this turn survives process restart. Live
+  // resume may retain its failure too; keep the durable row as the only card.
   const projectAssistantDump = wantsAssistantRow && !savedFailureOfCurrentTurn && !(turnAlreadyStructured && !inflightError)
 
   const pushCorrection = (correction: string, index: number): void => {

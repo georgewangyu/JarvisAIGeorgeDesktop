@@ -1264,12 +1264,67 @@ describe('preserveLocalPendingTurnMessages', () => {
 })
 
 describe('appendLiveSessionProjection', () => {
+  it('shows each of two identical failed turns once after a retained failure is replayed', () => {
+    const failure = 'API call failed after 3 retries: unavailable'
+    const firstStartedAt = 1_795_000_000
+
+    const firstTurn = [
+      msg('user-1', 'user', 'try this', { timestamp: firstStartedAt + 0.1 }),
+      msg('failure-1', 'assistant', '', { error: failure, timestamp: firstStartedAt + 1 })
+    ]
+
+    const retained = {
+      session_id: 'runtime-1',
+      inflight: { user: 'try this', assistant: '', error: failure, streaming: false },
+      turn_started_at: firstStartedAt
+    }
+
+    const firstResume = appendLiveSessionProjection(firstTurn, retained)
+
+    expect(firstResume).toBe(firstTurn)
+
+    // The next identical request has its own durable user row. Its failure
+    // must remain visible even though the preceding turn failed identically.
+    const secondRetained = { ...retained, turn_started_at: firstStartedAt + 10 }
+    const secondTurnStarted = [...firstResume, msg('user-2', 'user', 'try this', { timestamp: firstStartedAt + 10.1 })]
+    const secondResume = appendLiveSessionProjection(secondTurnStarted, secondRetained)
+
+    expect(secondResume.filter(message => message.role === 'user')).toHaveLength(2)
+    expect(secondResume.filter(message => message.error)).toHaveLength(2)
+
+    const secondTurnSaved = [
+      ...secondTurnStarted,
+      msg('failure-2', 'assistant', '', { error: failure, timestamp: firstStartedAt + 11 })
+    ]
+
+    const afterRestart = appendLiveSessionProjection(secondTurnSaved, secondRetained)
+
+    expect(afterRestart).toBe(secondTurnSaved)
+    expect(afterRestart.filter(message => message.error)).toHaveLength(2)
+
+    // A third request can start after the second failure while its user row
+    // has not appeared in this transcript read. Identical text is not proof
+    // that the retained third failure belongs to the second saved turn.
+    const thirdRetained = { ...retained, turn_started_at: firstStartedAt + 20 }
+    const thirdResume = appendLiveSessionProjection(secondTurnSaved, thirdRetained)
+
+    expect(thirdResume.filter(message => message.error)).toHaveLength(3)
+    expect(thirdResume.filter(message => message.role === 'user')).toHaveLength(3)
+
+    const unknownTurn = appendLiveSessionProjection(secondTurnSaved, { ...retained, turn_started_at: null })
+
+    expect(unknownTurn.filter(message => message.error)).toHaveLength(3)
+  })
+
   it('does not duplicate a saved failure card with the retained live failure', () => {
+    const startedAt = 1_795_000_000
+
     const stored = [
-      msg('user', 'user', 'synthetic request'),
+      msg('user', 'user', 'synthetic request', { timestamp: startedAt + 0.1 }),
       msg('saved-failure', 'assistant', 'The provider refused the format.', {
         error: 'The provider refused the format.',
-        errorSurface: { layer: 'provider', code: 'format_error', retryable: false }
+        errorSurface: { layer: 'provider', code: 'format_error', retryable: false },
+        timestamp: startedAt + 1
       })
     ]
 
@@ -1281,7 +1336,8 @@ describe('appendLiveSessionProjection', () => {
         error: 'format refused',
         error_surface: { layer: 'provider', code: 'format_error', retryable: false },
         streaming: false
-      }
+      },
+      turn_started_at: startedAt
     })
 
     expect(restored.filter(message => message.error)).toHaveLength(1)
