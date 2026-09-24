@@ -19,6 +19,55 @@ afterEach(() => {
 })
 
 describe('useMicRecorder startup recovery', () => {
+  it('keeps native permission denial ahead of capture and allows a granted retry', async () => {
+    const requestMicrophoneAccess = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    vi.stubGlobal('hermesDesktop', { requestMicrophoneAccess })
+
+    const stopTrack = vi.fn()
+    const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [{ stop: stopTrack }] })
+    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia } })
+
+    class TestMediaRecorder {
+      static isTypeSupported = () => true
+      state = 'inactive'
+      ondataavailable: ((event: BlobEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+      onstop: (() => void) | null = null
+
+      start() { this.state = 'recording' }
+      stop() { this.state = 'inactive' }
+    }
+    vi.stubGlobal('MediaRecorder', TestMediaRecorder)
+    vi.stubGlobal('AudioContext', undefined)
+
+    const { result } = renderHook(() => useMicRecorder(copy))
+    await expect(act(() => result.current.handle.start())).rejects.toThrow(copy.microphoneAccessDenied)
+    expect(getUserMedia).not.toHaveBeenCalled()
+    expect(result.current.recording).toBe(false)
+
+    await act(async () => result.current.handle.start())
+    expect(requestMicrophoneAccess).toHaveBeenCalledTimes(2)
+    expect(getUserMedia).toHaveBeenCalledOnce()
+    expect(result.current.recording).toBe(true)
+
+    act(() => result.current.handle.cancel())
+    expect(stopTrack).toHaveBeenCalledOnce()
+  })
+
+  it('shows a microphone error if the native permission request fails', async () => {
+    const getUserMedia = vi.fn()
+    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia } })
+    vi.stubGlobal('MediaRecorder', class {})
+    vi.stubGlobal('hermesDesktop', {
+      requestMicrophoneAccess: vi.fn().mockRejectedValue(new Error('Electron IPC details'))
+    })
+
+    const { result } = renderHook(() => useMicRecorder(copy))
+    await expect(act(() => result.current.handle.start())).rejects.toThrow(copy.microphoneStartFailed)
+    expect(getUserMedia).not.toHaveBeenCalled()
+    expect(result.current.recording).toBe(false)
+  })
+
   it('releases a granted stream when recorder start fails and allows another attempt', async () => {
     const stopTracks = [vi.fn(), vi.fn()]
 
