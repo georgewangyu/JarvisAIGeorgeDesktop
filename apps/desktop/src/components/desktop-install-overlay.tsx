@@ -506,7 +506,10 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           closeConsumerSetupReview()
           setGuidedSetup(false)
         }}
-        onSkip={reviewReady ? closeConsumerSetupReview : installedFirstRun ? dismissFirstRunOnboarding : undefined}
+        onSkip={reviewReady ? closeConsumerSetupReview : installedFirstRun ? () => {
+          dismissFirstRunOnboarding()
+          setGuidedSetup(false)
+        } : undefined}
         reviewMode={reviewReady}
       />
     )
