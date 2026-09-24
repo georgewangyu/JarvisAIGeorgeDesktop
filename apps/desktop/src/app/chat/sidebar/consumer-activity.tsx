@@ -153,6 +153,27 @@ export function buildConsumerActivityRows(
     .slice(0, 6)
 }
 
+/** Keep the always-visible Jarvis navigation cue scoped to the current
+ *  connection/profile. An unowned row or hidden worker must not light it. */
+export function hasConsumerChatAttention(
+  sessions: readonly SessionInfo[],
+  states: Readonly<Record<string, SessionDotState>>,
+  receipts: readonly ApprovalRecoveryReceipt[],
+  connectionId: null | string,
+  profile: string
+): boolean {
+  if (!connectionId) {return false}
+
+  const owned = sessions.filter(session => {
+    const owner = sessionOwnerRouteFromRow(session) ?? knownOwnerForSession(session.id)
+
+    return isSessionOwnerRoute(owner) && owner.connectionId === connectionId && owner.profile === profile
+  })
+
+  return buildConsumerActivityRows(owned, states).some(row => row.status === 'needs-input') ||
+    buildUnavailableApprovalRows(owned, receipts.filter(row => row.connectionId === connectionId && row.profile === profile)).length > 0
+}
+
 export function ConsumerActivity({
   automationJobs = [],
   automationSessions = [],

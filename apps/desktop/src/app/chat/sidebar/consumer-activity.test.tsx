@@ -10,7 +10,7 @@ import type { SessionDotState } from '@/store/session-dot-state'
 import { clearAllSessionStates, publishSessionState } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
 
-import { buildConsumerActivityRows, buildUnavailableApprovalRows, ConsumerActivity, openConsumerActivityRow } from './consumer-activity'
+import { buildConsumerActivityRows, buildUnavailableApprovalRows, ConsumerActivity, hasConsumerChatAttention, openConsumerActivityRow } from './consumer-activity'
 
 afterEach(() => {
   cleanup()
@@ -40,6 +40,20 @@ const session = (id: string, title: string, lastActive: number): SessionInfo => 
 })
 
 describe('consumer activity rows', () => {
+  it('lights only the owning connection for a consumer approval needing input', () => {
+    const local = { connectionId: 'local', profile: 'default' }
+    const remote = { connectionId: 'remote', profile: 'default' }
+    const visible = { ...session('approval-chat', 'Plan a trip', 10), connection_id: 'local', profile: 'default' }
+    const worker = { ...session('worker-chat', 'Private worker', 9), connection_id: 'local', profile: 'default', source: 'subagent' }
+    const states: Record<string, SessionDotState> = { 'approval-chat': 'needs-input', 'worker-chat': 'needs-input' }
+
+    expect(hasConsumerChatAttention([worker, visible], states, [], local.connectionId, local.profile)).toBe(true)
+    expect(hasConsumerChatAttention([worker, visible], states, [], remote.connectionId, remote.profile)).toBe(false)
+    expect(hasConsumerChatAttention([worker], states, [], local.connectionId, local.profile)).toBe(false)
+    expect(hasConsumerChatAttention([visible], states, [], null, local.profile)).toBe(false)
+    expect(hasConsumerChatAttention([visible], { 'approval-chat': 'working' }, [], local.connectionId, local.profile)).toBe(false)
+  })
+
   it('links an unavailable approval only to its exact visible owner', () => {
     const visible = session('approval-chat', 'Plan a trip', 10)
     const worker = { ...session('worker-chat', 'Private worker', 9), source: 'subagent' }

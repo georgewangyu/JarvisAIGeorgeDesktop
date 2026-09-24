@@ -50,6 +50,7 @@ import {
   sessionPinId,
   shouldMigrateComposerScope
 } from '@/store/session'
+import { $sessionDotStateById } from '@/store/session-dot-state'
 import { $focusedStoredSessionId, $sessionStates, sessionTileDelegate } from '@/store/session-states'
 import { $transcriptTailBySessionId, transcriptTailState } from '@/store/transcript-tail'
 import { isAuxiliaryWindow, isWatchWindow } from '@/store/windows'
@@ -76,7 +77,7 @@ import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { useSessionView } from './session-view'
-import { buildUnavailableApprovalRows } from './sidebar/consumer-activity'
+import { hasConsumerChatAttention } from './sidebar/consumer-activity'
 import { requestConsumerChats } from './sidebar/consumer-chats-request'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
@@ -140,6 +141,7 @@ function ChatHeader({
   const navigate = useNavigate()
   const { themeName } = useTheme()
   const sessions = useStore($sessions)
+  const dotStates = useStore($sessionDotStateById)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const profiles = useStore($profiles)
   const approvalReceipts = useStore($approvalRecoveryReceipts)
@@ -147,10 +149,7 @@ function ChatHeader({
   const connection = useStore($connection)
   const connectionId = connection?.connectionId ?? (connection?.mode === 'local' ? 'local' : null)
 
-  const hasUnavailableApproval = Boolean(connectionId && buildUnavailableApprovalRows(
-    sessions,
-    approvalReceipts.filter(receipt => receipt.connectionId === connectionId && receipt.profile === activeProfile)
-  ).length)
+  const hasAttention = hasConsumerChatAttention(sessions, dotStates, approvalReceipts, connectionId, activeProfile)
 
   const activeStoredSession =
     (selectedSessionId && sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))) || null
@@ -181,7 +180,7 @@ function ChatHeader({
         >
           <Codicon aria-hidden name="menu" size="0.9rem" />
           <span>Chats</span>
-          {hasUnavailableApproval ? <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" /> : null}
+          {hasAttention ? <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" /> : null}
         </button>
         <span className="consumer-chat-title">{title === NEW_SESSION_TITLE ? 'Jarvis' : title}</span>
         <div className="flex items-center gap-2">

@@ -28,6 +28,7 @@ import { useJarvisCopy } from '@/i18n/jarvis'
 import { sessionMatchesSearch } from '@/lib/session-search'
 import { normalizeSessionSource, sessionSourceLabel } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
+import { $approvalRecoveryReceipts } from '@/store/approval-recovery'
 import { $activeConnectionId } from '@/store/connections'
 import { $cronJobs, setCronFocusJobId } from '@/store/cron'
 import {
@@ -70,6 +71,7 @@ import {
 } from '@/store/layout'
 import { notifyError } from '@/store/notifications'
 import {
+  $activeGatewayProfile,
   $newChatProfile,
   $profiles,
   $profileScope,
@@ -145,7 +147,7 @@ import type { SidebarNavItem } from '../../types'
 import type { NewSessionSplitHandler } from '../new-session-drag'
 
 import { SidebarSectionAddButton } from './chrome'
-import { ConsumerActivity } from './consumer-activity'
+import { ConsumerActivity, hasConsumerChatAttention } from './consumer-activity'
 import { consumeConsumerChatsRequest, OPEN_CONSUMER_CHATS_EVENT, restoreConsumerChatsLayout } from './consumer-chats-request'
 import { SidebarFilterMenu } from './filter-menu'
 import { useGatewaySessionGroups } from './gateway-group-model'
@@ -380,6 +382,7 @@ export function ChatSidebar({
   const cardRows = useStore($sidebarCardRows)
   const archivedSessions = useStore($archivedSessions)
   const dotStates = useStore($sessionDotStateById)
+  const approvalReceipts = useStore($approvalRecoveryReceipts)
   // The active sort key as an id order. The flat list applies it within its
   // dividers; groups apply it to their own lanes.
   const sortOrderIds = useStore($sidebarSessionRankIds)
@@ -406,6 +409,7 @@ export function ChatSidebar({
   const profiles = useStore($profiles)
   const profileScope = useStore($profileScope)
   const activeConnectionId = useStore($activeConnectionId)
+  const activeGatewayProfile = useStore($activeGatewayProfile)
 
   // Toggle the persisted read-state watermark from a row menu. The row's own
   // `unread` prop mirrors what the dot paints; flip it and let the backend
@@ -552,6 +556,10 @@ export function ChatSidebar({
   }, [sessions, archivedSessions, showArchived, profileScope])
 
   const activitySessions = useMemo(() => filterSessionsByProfileScope(sessions, profileScope), [sessions, profileScope])
+
+  const hasChatAttention = hasConsumerChatAttention(
+    activitySessions, dotStates, approvalReceipts, activeConnectionId, activeGatewayProfile
+  )
 
   const mainChatRecent = useMemo(
     () => activitySessions.filter(isJarvisMainChat).sort((a, b) => sessionTime(b) - sessionTime(a))[0],
@@ -1634,7 +1642,7 @@ export function ChatSidebar({
                       // resolved region has been observed to swallow clicks on the
                       // top rows. Same carve-out as USER_BUBBLE_BASE_CLASS in
                       // thread.tsx.
-                      'flex size-10 w-10 justify-center gap-0 rounded-xl border border-transparent p-0 text-(--ui-text-secondary) transition-colors duration-100 ease-out [-webkit-app-region:no-drag] hover:bg-(--ui-control-hover-background) hover:text-foreground hover:transition-none',
+                      'relative flex size-10 w-10 justify-center gap-0 rounded-xl border border-transparent p-0 text-(--ui-text-secondary) transition-colors duration-100 ease-out [-webkit-app-region:no-drag] hover:bg-(--ui-control-hover-background) hover:text-foreground hover:transition-none',
                       active &&
                         'border-(--ui-stroke-tertiary) bg-(--ui-control-active-background) text-foreground shadow-none hover:border-(--ui-stroke-tertiary)!',
                       !isInteractive &&
@@ -1673,6 +1681,9 @@ export function ChatSidebar({
                     type="button"
                   >
                     <item.icon className="size-4 shrink-0 text-[color-mix(in_srgb,currentColor_72%,transparent)]" />
+                    {isNewSession && hasChatAttention ? (
+                      <span aria-hidden="true" className="absolute right-1 top-1 size-1.5 rounded-full bg-amber-500" />
+                    ) : null}
                     {/* Shrink-to-fit, not flex-1: the label carries the row's
                         `data-tour` handle, and anything anchored to it should
                         land at the end of the WORD, not out at the sidebar's
