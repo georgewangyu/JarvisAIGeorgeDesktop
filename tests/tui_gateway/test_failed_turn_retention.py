@@ -208,7 +208,8 @@ def test_returned_error_result_carries_error_surface(emits, turn_env):
     assert snapshot["error_surface"]["layer"] == "provider"
 
 
-def test_returned_error_stamps_saved_reply_for_restart(emits, turn_env):
+def test_returned_error_stamps_saved_reply_for_restart(emits, turn_env, monkeypatch):
+    monkeypatch.setattr(server, "_adopt_submit_user_row", lambda *args: 17)
     stamped = []
     db = types.SimpleNamespace(mark_latest_turn_failure=lambda *args: stamped.append(args))
     agent = types.SimpleNamespace(
@@ -231,7 +232,8 @@ def test_returned_error_stamps_saved_reply_for_restart(emits, turn_env):
 
     assert len(stamped) == 1
     assert stamped[0][0] == "session-key"
-    assert stamped[0][1]["code"] == "format_error"
+    assert stamped[0][1] == 17
+    assert stamped[0][2]["code"] == "format_error"
 
 
 def test_returned_error_without_reason_omits_no_frame(emits, turn_env):

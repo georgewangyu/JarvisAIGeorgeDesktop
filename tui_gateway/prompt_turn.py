@@ -483,6 +483,7 @@ class _TurnRun:
     error_retained: bool = False
     error_detail: str = ""
     prompt_text: str = ""
+    user_row_id: int | None = None
     marker_key: str = ""
     receipt_attempted: bool = False
 
@@ -669,7 +670,7 @@ def _invoke_agent(
         run_kwargs["persist_user_display_metadata"] = display_metadata
     if turn_author and "turn_author" in run_params:
         run_kwargs["turn_author"] = turn_author
-    _adopt_submit_user_row(session, agent, run_kwargs["persist_user_message"], text)
+    st.user_row_id = _adopt_submit_user_row(session, agent, run_kwargs["persist_user_message"], text)
     # Live-rename hook: auto-titling fires inside the turn prologue.
     _title_key = session.get("session_key") or sid
     agent._on_session_title = lambda t, _src, _k=_title_key: _emit(
@@ -781,7 +782,7 @@ def _complete_turn_payload(session: dict, st: _TurnRun, status_note: str | None,
     if rendered := render_message(raw, cols):
         payload["rendered"] = rendered
     error_value = result.get("error")
-    if status == "error" and _error_surface:
+    if status == "error" and _error_surface and st.user_row_id is not None:
         # The retained inflight snapshot survives reconnects to this process,
         # but not a gateway restart. Stamp the already-saved assistant row so
         # history can restore the same classified failure without a second row.
@@ -789,7 +790,7 @@ def _complete_turn_payload(session: dict, st: _TurnRun, status_note: str | None,
             db = getattr(agent, "_session_db", None)
             current_session_id = getattr(agent, "session_id", None) or session.get("session_key")
             if db is not None and current_session_id:
-                db.mark_latest_turn_failure(current_session_id, _error_surface)
+                db.mark_latest_turn_failure(current_session_id, st.user_row_id, _error_surface)
         except Exception:
             logger.debug("failed to persist turn failure presentation", exc_info=True)
     with session["history_lock"]:

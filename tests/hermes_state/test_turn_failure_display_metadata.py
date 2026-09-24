@@ -8,16 +8,21 @@ def test_turn_failure_marks_only_current_matching_reply_and_keeps_metadata(tmp_p
     db = SessionDB(db_path=path)
     try:
         db.create_session("s", source="desktop")
-        assert not db.mark_latest_turn_failure("s", {
+        assert not db.mark_latest_turn_failure("s", 1, {
             "layer": "provider", "code": "format_error", "retryable": False})
         old = db.append_message("s", "assistant", "same reply")
-        db.append_message("s", "user", "new turn")
-        assert not db.mark_latest_turn_failure("s", {
+        user = db.append_message("s", "user", "new turn")
+        assert not db.mark_latest_turn_failure("s", user, {
             "layer": "provider", "code": "format_error", "retryable": False})
         current = db.append_message("s", "assistant", "different saved failure", display_metadata={"reactions": []})
-        assert db.mark_latest_turn_failure("s", {
+        assert db.mark_latest_turn_failure("s", user, {
             "layer": "provider", "code": "format_error", "retryable": False,
             "secret": "never persist this", "provider": "openai"})
+        newer_user = db.append_message("s", "user", "later turn")
+        assert not db.mark_latest_turn_failure("s", user, {
+            "layer": "provider", "code": "auth", "retryable": False})
+        assert not db.mark_latest_turn_failure("s", newer_user, {
+            "layer": "provider", "code": "auth", "retryable": False})
     finally:
         db.close()
 

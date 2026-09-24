@@ -370,7 +370,7 @@ def _persist_submit_user_row(session: dict, text: Any, display_kind: str | None)
     session["_submit_user_row"] = staged
 
 
-def _adopt_submit_user_row(session: dict, agent, persist_user_message: Any, text: Any) -> None:
+def _adopt_submit_user_row(session: dict, agent, persist_user_message: Any, text: Any) -> int | None:
     """Hand the row written at submit to the turn as its user dict (``agent._pending_cli_user_message``,
     adopted by ``_stage_turn_user_message`` when the content matches). A prompt the prologue rewrote
     (@-expansion, image parts) first updates that row so the durable transcript replays what the model
@@ -395,6 +395,7 @@ def _adopt_submit_user_row(session: dict, agent, persist_user_message: Any, text
     from agent.session_persistence import _persist_lock
     with _persist_lock(agent):
         agent._pending_cli_user_message = staged
+    return _message_row_id(staged)
 
 
 # Yielded by _workdir_owner_db when the profile db failed to OPEN (vs "no store in this context"); row creation fails loud.

@@ -62,7 +62,8 @@ def test_turn_adopts_the_submit_row_and_writes_no_duplicate(monkeypatch, tmp_pat
         agent = _flush_agent(db, key)
         # The prologue rewrote the persisted prompt (@-expansion): the early row follows it.
         expanded = "look at @notes.md\n\n<file notes.md>todo</file>"
-        server._adopt_submit_user_row(session, agent, expanded, "look at @notes.md")
+        adopted_row_id = server._adopt_submit_user_row(session, agent, expanded, "look at @notes.md")
+        assert adopted_row_id == db.get_messages(key)[0]["id"]
         assert "_submit_user_row" not in session
         user_msg, _pending = _stage_turn_user_message(agent, expanded, expanded, None, None, None, None)
         assert user_msg is agent._pending_cli_user_message  # adopted by identity, not rebuilt
