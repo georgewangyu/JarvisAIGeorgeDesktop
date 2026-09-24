@@ -94,6 +94,7 @@ export function ConnectionsView() {
   const activeProfile = useStore($activeGatewayProfile)
   const calendarScope = JSON.stringify([activeConnectionId, activeProfile])
   const calendarScopeRef = useRef({ key: calendarScope })
+  const refreshGeneration = useRef(0)
 
   // Each observed profile/connection switch gets a new identity. Comparing
   // only the scope string would accept a late A result after A → B → A.
@@ -124,6 +125,8 @@ export function ConnectionsView() {
 
   const refresh = useCallback(async () => {
     const owner = calendarScopeRef.current
+    const generation = ++refreshGeneration.current
+    const isCurrent = () => owner === calendarScopeRef.current && generation === refreshGeneration.current
     setRefreshing(true)
 
     try {
@@ -132,6 +135,8 @@ export function ConnectionsView() {
       const [snapshotResult, accountsResult, calendarResult] = await Promise.allSettled([
         getPermissions?.(), listOAuthProviders(), window.hermesDesktop?.jarvisCalendar?.status()
       ])
+
+      if (!isCurrent()) {return}
 
       const failures: string[] = []
 
@@ -154,21 +159,21 @@ export function ConnectionsView() {
         failures.push('Could not check Mac permissions.')
       }
 
-      if (owner === calendarScopeRef.current) {
-        setCalendar(calendarResult.status === 'fulfilled' ? calendarResult.value ?? null : null)
-        // A status refresh cannot prove that a previously read event is still authorized.
-        setCalendarEvents(null)
-      }
+      setCalendar(calendarResult.status === 'fulfilled' ? calendarResult.value ?? null : null)
+      // A status refresh cannot prove that a previously read event is still authorized.
+      setCalendarEvents(null)
 
       setError(failures.length > 0 ? failures.join(' ') : null)
     } catch {
-      setError('Could not check this Mac. Try again.')
+      if (isCurrent()) {setError('Could not check this Mac. Try again.')}
     } finally {
-      setRefreshing(false)
+      if (isCurrent()) {setRefreshing(false)}
     }
   }, [])
 
   useEffect(() => {
+    setAccountState('checking')
+    setError(null)
     setCalendar(null)
     setCalendarEvents(null)
     setCalendarError(null)

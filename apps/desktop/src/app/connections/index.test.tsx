@@ -112,6 +112,29 @@ it('recovers the account state after a failed check and refresh', async () => {
   expect(screen.queryByText('Could not check your AI account.')).toBeNull()
 })
 
+it('does not revive an old account refresh after A to B to A or a newer refresh', async () => {
+  $activeGatewayProfile.set('alpha')
+  const connected = makeOAuthProvider('openai-codex')
+  connected.status.logged_in = true
+  let finishOld!: (value: { providers: ReturnType<typeof makeOAuthProvider>[] }) => void
+  const oldResult = new Promise<{ providers: ReturnType<typeof makeOAuthProvider>[] }>(resolve => {finishOld = resolve})
+  vi.mocked(listOAuthProviders)
+    .mockReturnValueOnce(oldResult)
+    .mockResolvedValue({ providers: [makeOAuthProvider('openai-codex')] })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  await waitFor(() => expect(listOAuthProviders).toHaveBeenCalledTimes(1))
+  act(() => $activeGatewayProfile.set('beta'))
+  await waitFor(() => expect(listOAuthProviders).toHaveBeenCalledTimes(2))
+  act(() => $activeGatewayProfile.set('alpha'))
+  await waitFor(() => expect(listOAuthProviders).toHaveBeenCalledTimes(3))
+  expect(await screen.findByText('Not connected')).toBeTruthy()
+
+  await act(async () => finishOld({ providers: [connected] }))
+  expect(screen.getByText('Not connected')).toBeTruthy()
+  expect(screen.queryByText('Connected')).toBeNull()
+})
+
 it('keeps a verified AI account when the Mac permission check fails', async () => {
   const connected = makeOAuthProvider('openai-codex')
   connected.status.logged_in = true
