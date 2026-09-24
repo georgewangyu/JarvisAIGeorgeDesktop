@@ -30,6 +30,7 @@ import { isTodoToolName } from '@/lib/todos'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { $reasoningCollapsedByDefault, $showReasoning } from '@/store/reasoning-disclosure'
+import { useTheme } from '@/themes'
 
 type TimelineToolCallProps = ToolCallMessagePartProps & { completedAt?: number; timestamp?: number }
 
@@ -58,10 +59,19 @@ const ImageGenerateTool: FC<TimelineToolCallProps> = props => {
 }
 
 const DelegateToolPart: FC<TimelineToolCallProps> = props => {
+  const { themeName } = useTheme()
+
   // A call that failed outright dispatched nothing — there are no children to
   // list, only an error. The generic row extracts and expands it properly.
   if (props.isError || settledWithoutResult(props)) {
     return <ToolFallback {...props} />
+  }
+
+  // Jarvis keeps workers behind the assistant. Their goals, model names, and
+  // transcript links are implementation details; the parent response and the
+  // background-resume notice are the consumer-facing progress/result.
+  if (themeName === 'jarvis') {
+    return null
   }
 
   return (

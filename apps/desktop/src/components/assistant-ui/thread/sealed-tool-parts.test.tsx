@@ -16,7 +16,7 @@ stubThreadViewportSize()
 const createdAt = new Date('2026-09-11T12:00:00Z')
 const sealedAt = createdAt.getTime() / 1000 + 5
 
-function sealedMessage(toolName: string, args: Record<string, unknown>): ThreadMessage {
+function sealedMessage(toolName: string, args: Record<string, unknown>, result?: unknown): ThreadMessage {
   return {
     id: `assistant-sealed-${toolName}`,
     role: 'assistant',
@@ -27,6 +27,7 @@ function sealedMessage(toolName: string, args: Record<string, unknown>): ThreadM
         toolName,
         args,
         argsText: JSON.stringify(args),
+        ...(result === undefined ? {} : { result }),
         completedAt: sealedAt
       }
     ],
@@ -54,6 +55,19 @@ afterEach(() => {
 })
 
 describe('tool parts sealed without a result', () => {
+  it('keeps a dispatched worker goal out of the Jarvis consumer transcript', async () => {
+    $activeSessionId.set('sess-1')
+
+    const { container } = render(<Harness message={sealedMessage(
+      'delegate_task',
+      { tasks: [{ goal: 'Private worker task' }] },
+      { mode: 'background', status: 'dispatched' }
+    )} />)
+
+    expect(container.querySelector('[data-delegate-card]')).toBeNull()
+    expect(screen.queryByText('Private worker task')).toBeNull()
+  })
+
   it('renders a sealed delegate_task as the generic row, not a running task list', async () => {
     $activeSessionId.set('sess-1')
     const { container } = render(<Harness message={sealedMessage('delegate_task', { tasks: [{ goal: 'inspect' }] })} />)
