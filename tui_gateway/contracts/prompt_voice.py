@@ -292,6 +292,7 @@ class ApprovalPendingParams(SessionParams):
 
 class ApprovalPendingResult(Result):
     approvals: list[PendingApproval]
+    settled_request_ids: list[str]
 
 
 method("approval.pending", params=ApprovalPendingParams, result=ApprovalPendingResult,

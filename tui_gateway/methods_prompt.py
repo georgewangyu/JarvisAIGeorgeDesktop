@@ -1187,8 +1187,11 @@ def _(rid, params: dict) -> dict:
     session, err = _sess(params, rid)
     if err:
         return err
-    return _approval_reply(
-        rid, "approvals", lambda a: a.list_gateway_approvals(session["session_key"]))
+    try:
+        from tools.approval import gateway_approval_snapshot
+        return _ok(rid, gateway_approval_snapshot(session["session_key"]))
+    except Exception as e:
+        return _err(rid, 5004, str(e))
 
 
 @method("approval.received")

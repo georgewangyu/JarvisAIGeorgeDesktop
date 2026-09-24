@@ -51,6 +51,18 @@ describe('approval recovery receipt', () => {
     expect(receipts.$approvalRecoveryReceipts.get()).toHaveLength(1)
   })
 
+  it('removes only same-session accepted decisions and leaves lost requests visible', async () => {
+    const receipts = await import('./approval-recovery')
+    receipts.noteApprovalPending(ownerA, 'stored-1', 'runtime-1', 'answered')
+    receipts.noteApprovalPending(ownerA, 'stored-1', 'runtime-1', 'unknown')
+    receipts.noteApprovalPending(ownerB, 'stored-1', 'runtime-2', 'answered')
+    receipts.reconcileApprovalRecovery(ownerA, 'stored-1', new Set(), new Set(['answered']))
+    expect(receipts.$approvalRecoveryReceipts.get().map(row => [row.connectionId, row.requestId, row.state])).toEqual([
+      ['local', 'unknown', 'interrupted'],
+      ['remote', 'answered', 'pending']
+    ])
+  })
+
   it('migrates and drops only a local profile after rename/delete', async () => {
     const receipts = await import('./approval-recovery')
     receipts.noteApprovalPending(ownerA, 's', 'r', 'a')

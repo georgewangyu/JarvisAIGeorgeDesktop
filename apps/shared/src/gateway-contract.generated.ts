@@ -2353,6 +2353,7 @@ export interface ApprovalPendingParams {
 }
 export interface ApprovalPendingResult {
   approvals: PendingApproval[]
+  settled_request_ids: string[]
 }
 /** One unresolved ``tools/approval.py`` gateway queue entry as ``server._approval_request_payload`` renders it (command redacted; ``choices`` precomputed). The key set is owned by the approval tool. */
 export interface PendingApproval {

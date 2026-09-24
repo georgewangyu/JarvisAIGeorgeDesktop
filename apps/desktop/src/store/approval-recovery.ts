@@ -99,19 +99,26 @@ export function noteApprovalAnswered(owner: ApprovalOwner, storedSessionId: stri
 export function reconcileApprovalRecovery(
   owner: ApprovalOwner,
   storedSessionId: string,
-  pendingIds: ReadonlySet<string>
+  pendingIds: ReadonlySet<string>,
+  settledIds: ReadonlySet<string> = new Set()
 ): void {
   const rows = $approvalRecoveryReceipts.get()
   let changed = false
 
-  const next = rows.map(row => {
-    if (!sameOwner(row, owner) || row.storedSessionId !== storedSessionId || row.state !== 'pending' || pendingIds.has(row.requestId)) {
-      return row
+  const next = rows.flatMap(row => {
+    if (!sameOwner(row, owner) || row.storedSessionId !== storedSessionId) {return [row]}
+
+    if (settledIds.has(row.requestId) && !pendingIds.has(row.requestId)) {
+      changed = true
+
+      return []
     }
+
+    if (row.state !== 'pending' || pendingIds.has(row.requestId)) {return [row]}
 
     changed = true
 
-    return { ...row, state: 'interrupted' as const }
+    return [{ ...row, state: 'interrupted' as const }]
   })
 
   if (changed) {write(next)}

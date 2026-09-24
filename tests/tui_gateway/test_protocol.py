@@ -563,13 +563,37 @@ def test_approval_pending_replays_unresolved_requests(server, monkeypatch):
 
     server._sessions["ui-1"] = {"session_key": "agent-1", "history": []}
     pending = [{"request_id": "req-1", "command": "danger"}]
-    monkeypatch.setattr(approval, "list_gateway_approvals", lambda key: pending if key == "agent-1" else [])
+    monkeypatch.setattr(approval, "gateway_approval_snapshot", lambda key: {
+        "approvals": pending if key == "agent-1" else [],
+        "settled_request_ids": ["req-answered"] if key == "agent-1" else [],
+    })
 
     response = server.handle_request(
         {"id": "r1", "method": "approval.pending", "params": {"session_id": "ui-1"}}
     )
 
-    assert response["result"] == {"approvals": pending}
+    assert response["result"] == {"approvals": pending, "settled_request_ids": ["req-answered"]}
+
+
+def test_approval_pending_distinguishes_a_decision_accepted_in_this_gateway(server):
+    from tools import approval
+    from tools.approval_gateway_wait import _ApprovalEntry
+
+    key = "synthetic-settled-session"
+    request_id = "synthetic-settled-request"
+    server._sessions["synthetic-ui"] = {"session_key": key, "history": []}
+    with approval._lock:
+        approval._gateway_queues[key] = [_ApprovalEntry({"request_id": request_id, "command": "synthetic"})]
+    try:
+        assert approval.resolve_gateway_approval(key, "deny", request_id=request_id) == 1
+        response = server.handle_request(
+            {"id": "r1", "method": "approval.pending", "params": {"session_id": "synthetic-ui"}}
+        )
+        assert response["result"] == {"approvals": [], "settled_request_ids": [request_id]}
+    finally:
+        with approval._lock:
+            approval._gateway_queues.pop(key, None)
+            approval._gateway_settlements.pop((key, request_id), None)
 
 
 def test_approval_received_acknowledges_exact_request(server, monkeypatch):

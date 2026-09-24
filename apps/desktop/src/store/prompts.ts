@@ -304,7 +304,9 @@ export async function replayPendingApproval(gateway: ApprovalGateway | null, ses
   }
 
   const result =
-    rawResult && typeof rawResult === 'object' ? (rawResult as { approvals?: PendingApprovalPayload[] }) : {}
+    rawResult && typeof rawResult === 'object'
+      ? (rawResult as { approvals?: PendingApprovalPayload[]; settled_request_ids?: unknown })
+      : {}
 
   if (
     revision !== approvalRevision ||
@@ -322,7 +324,13 @@ export async function replayPendingApproval(gateway: ApprovalGateway | null, ses
   const route = approvalOwner(sessionId)
 
   if (route) {
-    reconcileApprovalRecovery(route.owner, route.storedSessionId, new Set([...ids].filter((id): id is string => typeof id === 'string')))
+    const pendingIds = new Set([...ids].filter((id): id is string => typeof id === 'string'))
+
+    const settledIds = new Set(Array.isArray(result.settled_request_ids)
+      ? result.settled_request_ids.filter((id): id is string => typeof id === 'string' && Boolean(id))
+      : [])
+
+    reconcileApprovalRecovery(route.owner, route.storedSessionId, pendingIds, settledIds)
   }
 
   for (const request of previous ?? EMPTY_APPROVALS) {

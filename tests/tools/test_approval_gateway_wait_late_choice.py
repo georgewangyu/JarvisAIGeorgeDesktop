@@ -16,6 +16,7 @@ APPROVAL = {"command": "rm -rf build", "description": "d", "pattern_key": "dange
 def _clear():
     mod._gateway_queues.clear()
     mod._gateway_notify_cbs.clear()
+    mod._gateway_settlements.clear()
 
 
 def test_choice_landing_after_the_deadline_check_is_resolved(monkeypatch):
@@ -35,6 +36,7 @@ def test_choice_landing_after_the_deadline_check_is_resolved(monkeypatch):
     assert decision == {"resolved": True, "choice": "once", "reason": None}
     assert hooks[-1][0] == "post_approval_response" and hooks[-1][1]["choice"] == "once"
     assert SESSION_KEY not in mod._gateway_queues
+    assert mod.gateway_approval_snapshot(SESSION_KEY)["settled_request_ids"]
 
 
 def test_plain_timeout_still_reports_unresolved(monkeypatch):
@@ -47,6 +49,22 @@ def test_plain_timeout_still_reports_unresolved(monkeypatch):
     assert decision == {"resolved": False, "choice": None, "reason": None}
     # Nothing is left for a late /approve to hit: the client learns nothing was pending.
     assert mod.resolve_gateway_approval(SESSION_KEY, "once") == 0
+    assert mod.gateway_approval_snapshot(SESSION_KEY)["settled_request_ids"] == []
+
+
+def test_settlement_snapshot_is_session_scoped_and_expires(monkeypatch):
+    _clear()
+    entry = wait_mod._ApprovalEntry({**APPROVAL, "request_id": "answered-once"})
+    mod._gateway_queues[SESSION_KEY] = [entry]
+    assert mod.resolve_gateway_approval(SESSION_KEY, "deny", request_id="answered-once") == 1
+    assert mod.gateway_approval_snapshot(SESSION_KEY) == {
+        "approvals": [], "settled_request_ids": ["answered-once"]
+    }
+    assert mod.gateway_approval_snapshot("other-session")["settled_request_ids"] == []
+    assert "deny" not in repr(mod._gateway_settlements)
+    recorded_at = mod._gateway_settlements[(SESSION_KEY, "answered-once")]
+    monkeypatch.setattr(mod.time, "monotonic", lambda: recorded_at + mod._GATEWAY_SETTLEMENT_TTL)
+    assert mod.gateway_approval_snapshot(SESSION_KEY)["settled_request_ids"] == []
 
 
 def test_resolve_commits_the_choice_before_releasing_the_approval_lock(monkeypatch):

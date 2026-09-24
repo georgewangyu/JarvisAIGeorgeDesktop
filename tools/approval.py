@@ -17,6 +17,7 @@ import importlib
 import logging
 import os
 import threading
+import time
 from typing import Optional
 
 from utils import env_var_enabled, is_truthy_value
@@ -117,6 +118,19 @@ def _denial_breaker_addendum(session_key: str) -> str:
 # instead of only hearing "denied". Ported from qwibitai/nanoclaw#2832.
 _gateway_queues: dict[str, list] = {}        # session_key → [_ApprovalEntry, …]
 _gateway_notify_cbs: dict[str, object] = {}  # session_key → callable(approval_data)
+# Process-local evidence that a decision was accepted. A gateway restart loses this
+# evidence, so an absent approval after restart must remain outcome-unknown.
+_gateway_settlements: dict[tuple[str, str], float] = {}
+_GATEWAY_SETTLEMENT_TTL = 3600
+_GATEWAY_SETTLEMENT_LIMIT = 512
+
+
+def _prune_gateway_settlements(now: float) -> None:
+    for key, recorded_at in list(_gateway_settlements.items()):
+        if now - recorded_at >= _GATEWAY_SETTLEMENT_TTL:
+            _gateway_settlements.pop(key, None)
+    while len(_gateway_settlements) > _GATEWAY_SETTLEMENT_LIMIT:
+        _gateway_settlements.pop(next(iter(_gateway_settlements)))
 
 
 def register_gateway_notify(session_key: str, cb) -> None:
@@ -168,7 +182,13 @@ def resolve_gateway_approval(session_key: str, choice: str,
             entry.result = choice
             if reason:
                 entry.reason = reason
+            request_id_value = entry.data.get("request_id")
+            if isinstance(request_id_value, str) and request_id_value:
+                key = (session_key, request_id_value)
+                _gateway_settlements.pop(key, None)
+                _gateway_settlements[key] = time.monotonic()
             entry.event.set()
+        _prune_gateway_settlements(time.monotonic())
     return len(targets)
 
 
@@ -193,6 +213,20 @@ def list_gateway_approvals(session_key: str) -> list[dict]:
     """Return replay-safe snapshots of unresolved approvals for one session."""
     with _lock:
         return [dict(entry.data) for entry in _gateway_queues.get(session_key, [])]
+
+
+def gateway_approval_snapshot(session_key: str) -> dict:
+    """Atomically report pending requests and recent accepted decision IDs for one session.
+
+    The latter proves only that this live process accepted a decision, not that
+    the corresponding tool completed. No command, choice, or reason is retained.
+    """
+    with _lock:
+        _prune_gateway_settlements(time.monotonic())
+        return {
+            "approvals": [dict(entry.data) for entry in _gateway_queues.get(session_key, [])],
+            "settled_request_ids": [request_id for (owner, request_id) in _gateway_settlements if owner == session_key],
+        }
 
 
 def register_gateway_settle(session_key: str, request_id: str, settle) -> bool:

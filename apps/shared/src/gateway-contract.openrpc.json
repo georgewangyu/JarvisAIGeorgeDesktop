@@ -4429,10 +4429,18 @@
             },
             "title": "Approvals",
             "type": "array"
+          },
+          "settled_request_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Settled Request Ids",
+            "type": "array"
           }
         },
         "required": [
-          "approvals"
+          "approvals",
+          "settled_request_ids"
         ],
         "title": "ApprovalPendingResult",
         "type": "object"
