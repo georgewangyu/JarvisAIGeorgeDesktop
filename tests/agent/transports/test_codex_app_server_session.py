@@ -144,6 +144,34 @@ class TestApprovalChoiceMapping:
         assert _approval_choice_to_codex_decision(choice) == expected
 
 
+def test_codex_exec_bypass_still_honors_hardline_and_user_deny(monkeypatch):
+    from tools import approval_context
+
+    monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {
+        "mode": "off", "deny": ["git push --force*"],
+    })
+    session = make_session(FakeClient(), request_routing=_ServerRequestRouting(auto_approve_exec=True))
+    assert session._decide_exec_approval({"command": "rm -rf /"}) == "decline"
+    assert session._decide_exec_approval({"command": "git push --force origin main"}) == "decline"
+    assert session._decide_exec_approval({"command": "git status"}) == "accept"
+
+
+def test_codex_exec_floor_precedes_interactive_approval(monkeypatch):
+    from tools import approval_context
+
+    monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"mode": "manual"})
+    prompted = []
+
+    def approve(command, description, *, allow_permanent):
+        prompted.append(command)
+        return "once"
+
+    session = make_session(FakeClient(), approval_callback=approve)
+    assert session._decide_exec_approval({"command": "rm -rf /"}) == "decline"
+    assert session._decide_exec_approval({"command": "git status"}) == "accept"
+    assert prompted == ["git status"]
+
+
 class TestTurnInputCoercion:
     def test_image_parts_ride_natively_in_turn_start(self):
         """#51053: image attachments must reach the model as app-server image inputs, not a text marker."""

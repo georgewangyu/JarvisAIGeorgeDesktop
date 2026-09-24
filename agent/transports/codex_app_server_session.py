@@ -738,12 +738,21 @@ class CodexAppServerSession:
             return "decline"
 
     def _decide_exec_approval(self, params: dict) -> str:
+        # Codex executes this command outside Hermes' terminal middleware. Its approval
+        # request must still honor the unconditional hardline and user-deny floors before
+        # an Off/Yolo bypass or an interactive callback can grant it.
+        from tools.approval import _floor_block
+
+        command = params.get("command")
+        if not isinstance(command, str) or not command or _floor_block(command, sudo_guard=True) is not None:
+            return "decline"
+
         def prompt() -> tuple[str, str]:
             # ``cwd`` is Optional on codex's side; fall back so the prompt is never empty.
             description = f"Codex requests exec in {params.get('cwd') or self._cwd or '<unknown>'}"
             if params.get("reason"):
                 description += f" — {params['reason']}"
-            return params.get("command") or "", description
+            return command, description
 
         return self._run_approval_callback(self._routing.auto_approve_exec, prompt, "exec request")
 
