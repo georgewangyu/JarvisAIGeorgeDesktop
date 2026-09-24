@@ -81,6 +81,7 @@ import {
   $sessionResumeRequest,
   $sessions,
   forgetSessionOwnerHintsForSession,
+  markSessionRead,
   requestSessionResume,
   sessionMatchesStoredId,
   sessionOwnerRouteFromRow,
@@ -89,6 +90,7 @@ import {
   setBusy,
   setMessages
 } from '@/store/session'
+import { ackStoredSessionId } from '@/store/session-unread'
 import { $titlebarAppActionsSide, titlebarAppActionsClusterCounts } from '@/store/titlebar-app-actions'
 import { clearSessionTodos, setSessionTodos, todosForHydration } from '@/store/todos'
 import { armWakeWord, stopClientCapture } from '@/store/wake-word'
@@ -333,6 +335,16 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   useEffect(() => {
     syncWorkspaceRoute(location.pathname)
   }, [location.pathname])
+
+  // Back/forward can reveal a chat already selected beneath a full-page
+  // route without changing its selection atom. Acknowledge only when that
+  // exact chat route is visible; selection alone is not proof of reading.
+  useEffect(() => {
+    if (routedSessionId && routedSessionId === selectedStoredSessionId) {
+      markSessionRead(routedSessionId)
+      ackStoredSessionId(routedSessionId)
+    }
+  }, [routedSessionId, selectedStoredSessionId])
 
   const {
     agentsOpen,

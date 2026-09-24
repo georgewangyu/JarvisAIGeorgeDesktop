@@ -1,3 +1,4 @@
+import { $workspaceIsPage } from '@/app/routes'
 import { Codecs, persistentAtom } from '@/lib/persisted'
 import { stableArray } from '@/lib/stable-array'
 import { readKey } from '@/lib/storage'
@@ -363,7 +364,7 @@ export function forgetSessionUnread(
  *  up green on first sight. Known, unselected rows are left alone — the gap
  *  between their watermark and live count IS the unread signal. */
 function ingestRows(rows: readonly SessionInfo[]): void {
-  const selected = $selectedStoredSessionId.get()
+  const selected = $workspaceIsPage.get() ? null : $selectedStoredSessionId.get()
   // Only the OWNING profile's row counts as on-screen: a same-id row in
   // another profile is a different session and keeps its unread gap.
   const selectedProfile = selected ? resolveProfile(selected) : null
@@ -455,7 +456,7 @@ function pruneSeenCounts(seen: SeenCounts, rows: readonly SessionInfo[]): SeenCo
  *  brand-new session's first turn isn't flushed to the list until persisted —
  *  are preserved, not dropped. */
 function recomputeUnread(): void {
-  const selected = $selectedStoredSessionId.get()
+  const selected = $workspaceIsPage.get() ? null : $selectedStoredSessionId.get()
   const markers = $unreadFinishedMarkers.get()
   const seen = $sessionSeenCounts.get()
   const unread: string[] = []
@@ -572,6 +573,7 @@ if (!isSecondaryWindow() && !isBrowserWindow()) {
   $sessions.listen(onListChange)
   $cronSessions.listen(onListChange)
   $messagingSessions.listen(onListChange)
+  $workspaceIsPage.listen(() => recomputeUnread())
 
   // Opening a session acks it durably (the transient atom is already cleared
   // synchronously by setSelectedStoredSessionId — this is the persisted half).

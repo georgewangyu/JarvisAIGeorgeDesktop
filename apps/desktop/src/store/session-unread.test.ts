@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import { $workspaceIsPage } from '@/app/routes'
+import { createClientSessionState } from '@/lib/chat-runtime'
 import type { SessionInfo } from '@/types/hermes'
 
 import { makeSessionInfo } from '../test/session-info'
@@ -14,10 +16,11 @@ import {
   setSelectedStoredSessionId,
   setSessions
 } from './session'
-import { clearAllSessionStates } from './session-states'
+import { clearAllSessionStates, publishSessionState } from './session-states'
 import {
   $sessionSeenCounts,
   $unreadFinishedMarkers,
+  ackStoredSessionId,
   forgetSessionUnread,
   markSessionUnreadFinished
 } from './session-unread'
@@ -32,6 +35,7 @@ function resetAll() {
   $cronSessions.set([])
   $messagingSessions.set([])
   $selectedStoredSessionId.set(null)
+  $workspaceIsPage.set(false)
   $activeGatewayProfile.set('default')
   $sessionSeenCounts.set({})
   $unreadFinishedMarkers.set({})
@@ -103,6 +107,26 @@ describe('persisted unread (session-unread)', () => {
     setSelectedStoredSessionId(null)
     setSessions([session({ id: 's1', message_count: 7 })])
     expect($unreadFinishedSessionIds.get()).toEqual([])
+  })
+
+  it('keeps a completion unread while the selected chat is hidden behind Feed', () => {
+    $selectedStoredSessionId.set('s1')
+    setSessions([session({ id: 's1', message_count: 2 })])
+    $workspaceIsPage.set(true)
+    publishSessionState('runtime-s1', { ...createClientSessionState('s1'), busy: true })
+    publishSessionState('runtime-s1', { ...createClientSessionState('s1'), busy: false })
+
+    expect($unreadFinishedSessionIds.get()).toEqual(['s1'])
+    expect($unreadFinishedMarkers.get()).toEqual({ default: ['s1'] })
+    setSessions([session({ id: 's1', message_count: 3 })])
+    expect($unreadFinishedSessionIds.get()).toEqual(['s1'])
+
+    // Merely returning to a chat route does not change the selected atom;
+    // its route owner explicitly acknowledges the same selected chat.
+    $workspaceIsPage.set(false)
+    ackStoredSessionId('s1')
+    expect($unreadFinishedSessionIds.get()).toEqual([])
+    expect($unreadFinishedMarkers.get()).toEqual({})
   })
 
   it('follows auto-compression id rotation via the durable lineage id', () => {

@@ -21,6 +21,7 @@ import { atom, computed } from 'nanostores'
 
 import { dropFeedPreferencesForProfile, migrateFeedPreferencesForProfile } from '@/app/feed/preferences-lifecycle'
 import { dropIdeaFeedbackForProfile, migrateIdeaFeedbackForProfile } from '@/app/ideas/feedback'
+import { $workspaceIsPage } from '@/app/routes'
 import type { ClientSessionState } from '@/app/types'
 import { findGroupOfPane, type LayoutNode } from '@/components/pane-shell/tree/model'
 import {
@@ -485,7 +486,9 @@ function handleTransition(previous: ClientSessionState | null, next: ClientSessi
 function lightUnreadCompletion(storedId: string) {
   // FOCUSED, not selected: a session finishing in the tile the user is
   // watching is already seen, and a tile is never the primary selection.
-  if (storedId === $focusedStoredSessionId.get()) {
+  // The selected chat remains mounted beneath full-page routes such as Feed.
+  // Its focus id alone does not mean the user saw a result that arrived there.
+  if (!$workspaceIsPage.get() && storedId === $focusedStoredSessionId.get()) {
     return
   }
 
