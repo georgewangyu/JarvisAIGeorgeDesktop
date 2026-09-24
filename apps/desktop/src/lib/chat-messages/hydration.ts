@@ -162,6 +162,30 @@ function timelineDisplayText(metadata: SessionMessage['display_metadata']): stri
   return typeof text === 'string' && text.trim() ? text : undefined
 }
 
+function delegationNeedsAttention(metadata: SessionMessage['display_metadata']): boolean | undefined {
+  const details = parseDisplayMetadata(metadata)
+  const count = details?.task_count
+  const completed = details?.completed_count
+  const failed = details?.failed_count
+
+  if (typeof failed === 'number' && failed > 0) {
+    return true
+  }
+
+  if (typeof count === 'number' && typeof completed === 'number' && completed < count) {
+    return true
+  }
+
+  // Older backends may omit counts, or count an unknown outcome as finished.
+  const title = details?.display_text
+
+  if (typeof title === 'string' && /Failed|Incomplete|Cancelled|Interrupted|Timed Out|Unknown|Finished with Issues/.test(title)) {
+    return true
+  }
+
+  return typeof count === 'number' && typeof completed === 'number' ? false : undefined
+}
+
 function messageReactions(metadata: SessionMessage['display_metadata']): MessageReaction[] {
   const reactions = parseDisplayMetadata(metadata)?.reactions
 
@@ -448,6 +472,10 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
         ? { asyncResult: asyncResultBody(displayContentForMessage(message.role, message.content || content)) }
         : {}),
       ...(message.display_kind === 'process_complete' ? { asyncResultKind: 'process' as const } : {}),
+      ...(message.display_kind === 'async_delegation_complete'
+        ? { asyncResultKind: 'delegation' as const,
+            asyncResultNeedsAttention: delegationNeedsAttention(message.display_metadata) }
+        : {}),
       timestamp: earliestTimestamp(message.timestamp, ...parts.map(part => part.timestamp)),
       ...(rowId !== undefined ? { rowId } : {}),
       ...(reactions.length ? { reactions } : {}),

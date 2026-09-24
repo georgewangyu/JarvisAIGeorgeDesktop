@@ -159,6 +159,7 @@ const _chatMessageFieldsExhaustive: {
 const COMPARED_FIELDS = [
   'asyncResult',
   'asyncResultKind',
+  'asyncResultNeedsAttention',
   'id',
   'role',
   'pending',

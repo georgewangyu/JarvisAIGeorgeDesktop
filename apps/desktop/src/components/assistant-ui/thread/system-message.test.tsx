@@ -18,13 +18,23 @@ $displayTimestamps.set(true)
 const timestamp = new Date('2026-05-01T00:00:00.000Z')
 stubThreadEnvironment()
 
-function Harness({ text, asyncResult }: { text: string; asyncResult?: string }) {
+function Harness({ text, asyncResult, delegationNeedsAttention }: {
+  text: string
+  asyncResult?: string
+  delegationNeedsAttention?: boolean
+}) {
   const message = {
     id: 'system-1',
     role: 'system',
     content: [{ type: 'text', text }],
     createdAt: timestamp,
-    metadata: { custom: { timelineTimestamp: timestamp.getTime() / 1000, asyncResult } }
+    metadata: { custom: {
+      timelineTimestamp: timestamp.getTime() / 1000,
+      asyncResult,
+      ...(delegationNeedsAttention !== undefined
+        ? { asyncResultKind: 'delegation', asyncResultNeedsAttention: delegationNeedsAttention }
+        : {})
+    } }
   } as unknown as ThreadMessage
 
   const runtime = useExternalStoreRuntime<ThreadMessage>({
@@ -76,6 +86,28 @@ describe('background report inline code', () => {
 })
 
 describe('background report disclosure', () => {
+  it('hides successful worker topology and keeps a generic failure signal in Jarvis', () => {
+    const completed = render(<Harness
+      asyncResult="Private worker transcript"
+      delegationNeedsAttention={false}
+      text="Subagent Task Completed: private goal"
+    />)
+
+    expect(completed.container.textContent).not.toContain('private goal')
+    expect(completed.container.textContent).not.toContain('Private worker transcript')
+    completed.unmount()
+
+    const failed = render(<Harness
+      asyncResult="Private worker failure detail"
+      delegationNeedsAttention
+      text="Subagent Task Failed: private goal"
+    />)
+
+    expect(failed.container.textContent).toContain('Background work needs attention')
+    expect(failed.container.textContent).not.toContain('private goal')
+    expect(failed.container.textContent).not.toContain('Private worker failure detail')
+  })
+
   it('keeps result bodies out of the transcript until opened and removes them when collapsed', () => {
     const report = '{"blockers":[{"title":"Local-model readiness uses the wrong endpoint"}]}'
     const { container, getByRole } = render(<Harness asyncResult={report} text="2 background agents finished" />)

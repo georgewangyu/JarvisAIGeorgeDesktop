@@ -21,7 +21,31 @@ function hydrate(content: string) {
   )
 }
 
+function hydrateWithOutcome(displayText: string, completed: number, failed: number) {
+  return toRuntimeMessage(toChatMessages([{
+    role: 'user',
+    content: envelope(report),
+    display_kind: 'async_delegation_complete',
+    display_metadata: {
+      display_text: displayText,
+      task_count: 1,
+      completed_count: completed,
+      failed_count: failed
+    }
+  }])[0])
+}
+
 describe('async report hydration', () => {
+  it('carries producer-owned delegation outcome without exposing its goal', () => {
+    const done = hydrateWithOutcome('Subagent Task Completed: private goal', 1, 0)
+    const failed = hydrateWithOutcome('Subagent Task Failed: private goal', 0, 1)
+    const timedOut = hydrateWithOutcome('Subagent Task Timed Out: private goal', 1, 0)
+
+    expect(done.metadata.custom).toMatchObject({ asyncResultKind: 'delegation', asyncResultNeedsAttention: false })
+    expect(failed.metadata.custom).toMatchObject({ asyncResultKind: 'delegation', asyncResultNeedsAttention: true })
+    expect(timedOut.metadata.custom).toMatchObject({ asyncResultKind: 'delegation', asyncResultNeedsAttention: true })
+  })
+
   it('keeps only result bodies beside compact system metadata across current and legacy deliveries', () => {
     for (const input of [
       envelope(report),

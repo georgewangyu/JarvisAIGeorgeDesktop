@@ -10,6 +10,7 @@ import { LogView } from '@/components/ui/log-view'
 import { ToolIcon } from '@/components/ui/tool-icon'
 import { LinkifiedText } from '@/lib/external-link'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/themes'
 
 const SLASH_STATUS_RE = /^slash:(?<command>\/[^\n]+)\n(?<output>[\s\S]*)$/
 const STEER_NOTE_RE = /^steer:(?<text>[\s\S]+)$/
@@ -64,9 +65,29 @@ export const SystemMessage: FC = () => {
   const text = useAuiState(s => messageContentText(s.message.content))
   const asyncResult = useAuiState(s => s.message.metadata.custom?.asyncResult)
   const processResult = useAuiState(s => s.message.metadata.custom?.asyncResultKind === 'process')
+  const delegationResult = useAuiState(s => s.message.metadata.custom?.asyncResultKind === 'delegation')
+  const needsAttention = useAuiState(s => s.message.metadata.custom?.asyncResultNeedsAttention)
+  const { themeName } = useTheme()
 
   if (!text) {
     return null
+  }
+
+  if (themeName === 'jarvis' && delegationResult) {
+    // The parent answer carries the useful result. A separate completion row
+    // would reveal child goals and transcript details in the consumer chat.
+    if (needsAttention === false) {
+      return null
+    }
+
+    return (
+      <MessagePrimitive.Root className="w-full min-w-0 self-start" data-role="system" data-slot="aui_system-message-root">
+        <BackgroundResult
+          report=""
+          text={needsAttention ? 'Background work needs attention' : 'Background work updated'}
+        />
+      </MessagePrimitive.Root>
+    )
   }
 
   if (processResult || (typeof asyncResult === 'string' && asyncResult)) {
