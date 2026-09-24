@@ -53,6 +53,61 @@ class ConsumerChatExportRequest(BaseModel):
     output: str
 
 
+class ConsumerImageExportRequest(BaseModel):
+    profile: Optional[str] = None
+    output: str
+
+
+def _consumer_image_context(profile: Optional[str]):
+    from hermes_cli.config import get_hermes_home
+
+    if profile:
+        name, home = _cron_profile_home(profile)
+    else:
+        name, home = _serving_profile(None), get_hermes_home()
+    return name, home, _open_session_db_for_profile(profile, read_only=True)
+
+
+def _list_consumer_chat_images(profile: Optional[str]):
+    from hermes_cli.consumer_image_export import list_consumer_images
+
+    name, home, db = _consumer_image_context(profile)
+    try:
+        return list_consumer_images(db, home, name)
+    finally:
+        db.close()
+
+
+@manage_router.get("/api/sessions/consumer-images")
+async def list_consumer_chat_images_endpoint(profile: Optional[str] = None):
+    """List verified TUI image uploads of visible Desktop chats in one profile."""
+    try:
+        images = await asyncio.to_thread(_list_consumer_chat_images, profile)
+    except (ValueError, PermissionError, OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail="Image ownership data is unavailable") from exc
+    return {"images": images}
+
+
+def _export_consumer_chat_images(body: ConsumerImageExportRequest):
+    from hermes_cli.consumer_image_export import export_consumer_images
+
+    name, home, db = _consumer_image_context(body.profile)
+    try:
+        return export_consumer_images(db, home, name, body.output)
+    finally:
+        db.close()
+
+
+@manage_router.post("/api/sessions/export-consumer-images")
+async def export_consumer_chat_images_endpoint(body: ConsumerImageExportRequest):
+    """Save only verified TUI image uploads from visible Desktop chats."""
+    try:
+        result = await asyncio.to_thread(_export_consumer_chat_images, body)
+    except (ValueError, PermissionError, OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail="Image export could not be completed") from exc
+    return {"ok": True, **result}
+
+
 def _export_consumer_chat_history(body: ConsumerChatExportRequest):
     from hermes_cli.config import get_hermes_home
     from hermes_cli.consumer_chat_export import export_consumer_chats

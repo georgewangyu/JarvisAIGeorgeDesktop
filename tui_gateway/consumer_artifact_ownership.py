@@ -7,6 +7,7 @@ agent-created file has no ownership proof from this ingestion point.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import stat
@@ -18,6 +19,7 @@ _STORE_DIR = "consumer-artifacts"
 _IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"})
 _MAX_IMAGE_BYTES = 25 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 4096
+_KEY_FILE = "consumer-artifacts.key"
 
 
 def _store(profile_home: Path | str) -> tuple[Path, Path]:
@@ -28,6 +30,31 @@ def _store(profile_home: Path | str) -> tuple[Path, Path]:
     if store.is_symlink():
         raise ValueError("artifact store cannot be a symlink")
     return home, store
+
+
+def _key(home: Path, *, create: bool) -> bytes:
+    path = home / _KEY_FILE
+    if create:
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(os.urandom(32))
+                handle.flush()
+                os.fsync(handle.fileno())
+    key = _read_regular(path, 32)
+    if path.stat().st_mode & 0o077:
+        raise ValueError("artifact signing key has insecure permissions")
+    if len(key) != 32:
+        raise ValueError("invalid artifact signing key")
+    return key
+
+
+def _signature(key: bytes, record: dict) -> str:
+    payload = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hmac.new(key, payload, hashlib.sha256).hexdigest()
 
 
 def record_uploaded_image(
@@ -64,6 +91,7 @@ def record_uploaded_image(
         "byte_size": len(image),
         "sha256": digest,
     }
+    record["signature"] = _signature(_key(home, create=True), record)
     blob_tmp = store / f".{artifact_id}.blob.tmp"
     manifest_tmp = store / f".{artifact_id}.json.tmp"
     published = False
@@ -72,12 +100,14 @@ def record_uploaded_image(
             handle.write(image)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(blob_tmp, blob)
+        os.link(blob_tmp, blob)
+        blob_tmp.unlink()
         with manifest_tmp.open("x", encoding="utf-8") as handle:
             json.dump(record, handle, sort_keys=True)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(manifest_tmp, manifest)
+        os.link(manifest_tmp, manifest)
+        manifest_tmp.unlink()
         published = True
     finally:
         blob_tmp.unlink(missing_ok=True)
@@ -96,7 +126,10 @@ def _read_regular(path: Path, max_bytes: int) -> bytes:
         file_stat = os.fstat(handle.fileno())
         if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_size > max_bytes:
             raise ValueError("invalid artifact file")
-        return handle.read(max_bytes + 1)
+        data = handle.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValueError("invalid artifact file")
+        return data
 
 
 def read_uploaded_image(
@@ -114,7 +147,15 @@ def read_uploaded_image(
         raise FileNotFoundError("artifact store unavailable")
     manifest = store / f"{artifact_id}.json"
     record = json.loads(_read_regular(manifest, _MAX_MANIFEST_BYTES).decode("utf-8"))
-    if not isinstance(record, dict) or any((
+    if not isinstance(record, dict):
+        raise ValueError("invalid artifact manifest")
+    signature = record.get("signature")
+    signed = {key: value for key, value in record.items() if key != "signature"}
+    if not isinstance(signature, str) or not hmac.compare_digest(
+        signature, _signature(_key(home, create=False), signed)
+    ):
+        raise ValueError("artifact manifest signature mismatch")
+    if any((
         record.get("version") != 1,
         record.get("artifact_id") != artifact_id,
         record.get("source") != "tui:image.attach_bytes",

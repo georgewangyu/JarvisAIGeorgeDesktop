@@ -79,7 +79,7 @@ def test_copy_survives_attachment_removal_and_rejects_tampering(tmp_path):
     altered = json.loads(manifest.read_text())
     altered["blob_name"] = "../other.png"
     manifest.write_text(json.dumps(altered))
-    with pytest.raises(ValueError, match="blob name"):
+    with pytest.raises(ValueError, match="signature"):
         read_uploaded_image(home, "session-1", artifact_id)
 
 
