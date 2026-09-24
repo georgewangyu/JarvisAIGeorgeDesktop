@@ -456,6 +456,7 @@ class JarvisInterruptedEvent(Result):
     delivery_id: str
     claimed_at: int | None
     status: str
+    retry_status: str | None = None
 
 
 class JarvisInterruptedEventsResult(Result):

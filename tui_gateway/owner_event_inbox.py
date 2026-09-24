@@ -98,8 +98,17 @@ def interrupted_jarvis_event_receipts(profile_home: Path | str) -> list[dict[str
     try:
         with _locked(home) as root:
             interrupted = []
+            retries: dict[str, str] = {}
+            records = []
             for path in root.glob("*.json"):
                 receipt = _scan_read(path)
+                if receipt is not None:
+                    records.append(receipt)
+                    if (isinstance(receipt.get("reviewed_retry_of"), str)
+                            and isinstance(receipt.get("owner"), dict)
+                            and receipt["owner"].get("profile_home") == str(home)):
+                        retries[receipt["reviewed_retry_of"]] = receipt.get("status", "unknown")
+            for receipt in records:
                 if receipt is None or receipt.get("status") != "claimed":
                     continue
                 pinned = receipt.get("owner")
@@ -114,11 +123,14 @@ def interrupted_jarvis_event_receipts(profile_home: Path | str) -> list[dict[str
                     continue
                 if db.get_compression_tip(original_session) != owner["session_id"]:
                     continue
-                interrupted.append({
+                event = {
                     "delivery_id": receipt["delivery_id"],
                     "claimed_at": receipt.get("claimed_at"),
                     "status": "outcome_unknown",
-                })
+                }
+                if receipt["delivery_id"] in retries:
+                    event["retry_status"] = retries[receipt["delivery_id"]]
+                interrupted.append(event)
     finally:
         db.close()
     return sorted(interrupted, key=lambda item: (item["claimed_at"] or 0, item["delivery_id"]))

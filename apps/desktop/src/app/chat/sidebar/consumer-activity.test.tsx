@@ -114,6 +114,20 @@ describe('consumer activity rows', () => {
 })
 
 describe('interrupted activity', () => {
+  it('reports a settled reviewed retry without presenting another retry action', async () => {
+    const request = vi.fn(async () => ({
+      events: [{ delivery_id: 'synthetic', claimed_at: 1, status: 'outcome_unknown', retry_status: 'settled' }]
+    }))
+
+    $gateway.set({ request } as never)
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={vi.fn()} sessions={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+
+    expect(await screen.findByText('Reviewed retry finished')).toBeTruthy()
+    expect(screen.getByText(/original outcome remains unknown/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Review request' })).toBeNull()
+  })
+
   it('requires review and acknowledgement before a single explicit retry', async () => {
     const request = vi.fn(async (method: string) => {
       if (method === 'jarvis.events.interrupted') {

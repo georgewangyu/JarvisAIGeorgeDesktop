@@ -235,7 +235,8 @@ def test_reviewed_jarvis_retry_has_new_durable_identity_and_runs_at_most_once(tm
     from hermes_state import SessionDB
     from tools.bot_live_delivery import claim_pending_delivery, complete_delivery, find_jarvis_live_owner
     from tui_gateway.owner_event_inbox import (
-        admit_jarvis_event, owner_event_receipt, review_interrupted_jarvis_event,
+        admit_jarvis_event, interrupted_jarvis_event_receipts, owner_event_receipt,
+        review_interrupted_jarvis_event,
         retry_interrupted_jarvis_event,
     )
 
@@ -271,6 +272,7 @@ def test_reviewed_jarvis_retry_has_new_durable_identity_and_runs_at_most_once(tm
             retry_interrupted_jarvis_event(tmp_path, original["id"], "wrong")
         queued = retry_interrupted_jarvis_event(tmp_path, original["id"], reviewed["review_digest"])
         assert queued["status"] == "queued" and queued["delivery_id"] != original["id"]
+        assert interrupted_jarvis_event_receipts(tmp_path)[0]["retry_status"] == "queued"
         assert retry_interrupted_jarvis_event(tmp_path, original["id"], reviewed["review_digest"]) == queued
         assert owner_event_receipt(tmp_path, source="synthetic", event_id="first")["status"] == "claimed"
         claimed = claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path))
@@ -278,6 +280,7 @@ def test_reviewed_jarvis_retry_has_new_durable_identity_and_runs_at_most_once(tm
         assert claimed["message"] == original["message"]
         assert claim_pending_delivery(tmp_path, find_jarvis_live_owner(tmp_path)) is None
         complete_delivery(tmp_path, claimed["id"], status="settled", reply="Test-only result")
+        assert interrupted_jarvis_event_receipts(tmp_path)[0]["retry_status"] == "settled"
         assert retry_interrupted_jarvis_event(tmp_path, original["id"], reviewed["review_digest"]) == {
             "delivery_id": queued["delivery_id"], "status": "settled"}
     finally:

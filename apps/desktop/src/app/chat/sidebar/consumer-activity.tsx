@@ -221,7 +221,7 @@ export function ConsumerActivity({
 
   const rows = buildConsumerActivityRows(sessions, states, automationSessions)
   const sessionById = new Map([...sessions, ...automationSessions].map(session => [session.id, session]))
-  const attentionCount = interrupted.length + rows.filter(row => row.status === 'needs-input').length
+  const attentionCount = interrupted.filter(event => event.retry_status !== 'settled').length + rows.filter(row => row.status === 'needs-input').length
 
   return (
     <>
@@ -251,20 +251,30 @@ export function ConsumerActivity({
             {rows.length > 0 || interrupted.length > 0 ? copy.activityDetail : copy.activityReadyDetail}
           </p>
         </div>
-        {interrupted.length > 0 ? (
-          <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3" role="status">
-            <p className="text-sm font-medium text-foreground">Outcome unknown after restart</p>
-            <p className="mt-1 text-xs leading-5 text-(--ui-text-secondary)">
-              {`${interrupted.length === 1 ? 'One background request' : `${interrupted.length} background requests`} may have finished before Jarvis restarted. Check the result before asking Jarvis to try again; nothing was replayed automatically.`}
+        {interrupted.map(event => (
+          <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3" key={event.delivery_id} role="status">
+            <p className="text-sm font-medium text-foreground">
+              {event.retry_status === 'settled' ? 'Reviewed retry finished'
+                : event.retry_status === 'queued' || event.retry_status === 'claimed' ? 'Reviewed retry in progress'
+                  : event.retry_status ? 'Reviewed retry could not finish' : 'Outcome unknown after restart'}
             </p>
-            {interrupted.map(event => (
-              <Button disabled={reviewBusy} key={event.delivery_id} onClick={() => void openReview(event.delivery_id)} size="inline" variant="textStrong">
+            <p className="mt-1 text-xs leading-5 text-(--ui-text-secondary)">
+              {event.retry_status === 'settled'
+                ? 'The original outcome remains unknown. Your reviewed retry finished; see its reply in the Jarvis chat.'
+                : event.retry_status === 'queued' || event.retry_status === 'claimed'
+                  ? 'The original outcome remains unknown. Your reviewed retry has not finished yet.'
+                  : event.retry_status
+                    ? 'The original outcome remains unknown. The reviewed retry did not finish; check Jarvis before asking again.'
+                    : 'One background request may have finished before Jarvis restarted. Check the result before asking Jarvis to try again; nothing was replayed automatically.'}
+            </p>
+            {!event.retry_status ? (
+              <Button disabled={reviewBusy} onClick={() => void openReview(event.delivery_id)} size="inline" variant="textStrong">
                 Review request
               </Button>
-            ))}
+            ) : null}
             {reviewError && !currentReview ? <p className="text-xs text-destructive" role="alert">{reviewError}</p> : null}
           </div>
-        ) : null}
+        ))}
         {interruptedLoadError ? (
           <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3 text-xs text-(--ui-text-secondary)">
             Could not check interrupted activity.{' '}

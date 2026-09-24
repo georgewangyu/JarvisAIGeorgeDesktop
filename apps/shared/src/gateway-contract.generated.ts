@@ -879,6 +879,7 @@ export interface JarvisInterruptedEvent {
   delivery_id: string
   claimed_at: number | null
   status: string
+  retry_status?: string | null
 }
 export interface JarvisEventReviewParams {
   profile?: string | null

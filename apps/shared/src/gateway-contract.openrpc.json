@@ -13313,6 +13313,18 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "retry_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Retry Status"
           }
         },
         "required": [
