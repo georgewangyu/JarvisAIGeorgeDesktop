@@ -3049,7 +3049,7 @@ export const zh = defineLocale({
       sessionRunning: '会话运行中',
       needsInput: '需要你输入',
       waitingForAnswer: '正在等待你的回答',
-      finishedUnread: '已完成 — 未读',
+      finishedUnread: '有新更新 — 未读',
       backgroundRunning: '后台任务运行中',
       draftSession: '草稿 — 尚未发送',
       handoffOrigin: platform => `从 ${platform} 转接`,

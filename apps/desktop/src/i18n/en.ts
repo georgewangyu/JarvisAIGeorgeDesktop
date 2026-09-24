@@ -2910,7 +2910,7 @@ export const en: Translations = {
       sessionRunning: 'Session running',
       needsInput: 'Needs your input',
       waitingForAnswer: 'Waiting for your answer',
-      finishedUnread: 'Finished — unread',
+      finishedUnread: 'New update — unread',
       backgroundRunning: 'Background task running',
       draftSession: 'Draft — nothing sent yet',
       handoffOrigin: platform => `Handed off from ${platform}`,

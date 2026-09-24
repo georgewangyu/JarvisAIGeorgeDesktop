@@ -57,3 +57,28 @@ it('reconciles only the represented failed tail, retaining its structured error 
   expect(merged.map(message => message.id)).toEqual(stored.map(message => message.id))
   expect(merged.at(-1)).toMatchObject({ error: failed.error, errorSurface: failed.errorSurface })
 })
+
+it('prefers a durable failed tail over a differently worded transient failure bubble', () => {
+  const user = row('stored-user', 'user', 'Fail the synthetic background check.')
+
+  const durable = row('stored-failure', 'assistant', 'Your request was not processed.', {
+    rowId: 8,
+    error: 'Your request was not processed.',
+    errorSurface: { layer: 'provider', code: 'overloaded', retryable: true }
+  })
+
+  const transient = row('live-failure', 'assistant', 'HTTP 503: provider unavailable', {
+    error: 'HTTP 503: provider unavailable',
+    errorSurface: { layer: 'provider', code: 'overloaded', retryable: true }
+  })
+
+  const merged = preserveLocalAssistantErrors([user, durable], [
+    row('local-user', 'user', 'Fail the synthetic background check.'), transient
+  ])
+
+  expect(merged).toEqual([user, durable])
+  expect(preserveLocalAssistantErrors([user, { ...durable, rowId: 9 }], [user, { ...transient, rowId: 8 }]))
+    .toHaveLength(3)
+  expect(preserveLocalAssistantErrors([row('different-user', 'user', 'Different request'), durable], [user, transient])
+    .find(message => message.id === transient.id)).toMatchObject(transient)
+})

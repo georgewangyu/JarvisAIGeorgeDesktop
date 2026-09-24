@@ -2390,7 +2390,7 @@ export const zhHant = defineLocale({
       sessionRunning: '工作階段執行中',
       needsInput: '需要您的輸入',
       waitingForAnswer: '等待您的回答',
-      finishedUnread: '已完成 — 未讀',
+      finishedUnread: '有新更新 — 未讀',
       backgroundRunning: '背景任務執行中',
       draftSession: '草稿 — 尚未傳送',
       handoffOrigin: platform => `從 ${platform} 轉接`,

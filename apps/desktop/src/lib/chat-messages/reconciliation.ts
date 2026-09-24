@@ -99,6 +99,37 @@ const tailTurnAssistantMatchIndex = (
   return storedMessages.findLastIndex(visibleAssistant)
 }
 
+/** A durable failed tail is authoritative even when its safe, persisted
+ *  response text differs from the transient error bubble. Keep the same
+ *  user-turn, assistant-count and row-id guards used by tail reconciliation. */
+const hasDurableFailedTail = (
+  storedMessages: ChatMessage[],
+  localMessages: ChatMessage[],
+  localAssistantIndex: number
+) => {
+  if (localMessages.slice(localAssistantIndex + 1).some(message =>
+    (message.role === 'user' || message.role === 'assistant') && !message.hidden
+  )) {return false}
+
+  const visibleUser = (message: ChatMessage) => message.role === 'user' && !message.hidden
+  const visibleAssistant = (message: ChatMessage) => message.role === 'assistant' && !message.hidden
+  const localUserIndex = localMessages.findLastIndex(visibleUser)
+  const storedUserIndex = storedMessages.findLastIndex(visibleUser)
+
+  if (localUserIndex < 0 || storedUserIndex < 0 ||
+    localMessages.filter(visibleUser).length !== storedMessages.filter(visibleUser).length ||
+    !userTurnMatch(storedMessages[storedUserIndex], localMessages[localUserIndex])) {return false}
+
+  const localAssistants = localMessages.slice(localUserIndex + 1).filter(visibleAssistant)
+  const storedAssistants = storedMessages.slice(storedUserIndex + 1).filter(visibleAssistant)
+  const localTail = localAssistants.at(-1)
+  const storedTail = storedAssistants.at(-1)
+
+  return Boolean(storedTail?.error && localTail?.error &&
+    localAssistants.length === storedAssistants.length &&
+    (storedTail.rowId === undefined || localTail.rowId === undefined || storedTail.rowId === localTail.rowId))
+}
+
 const timelinePartMatch = (stored: ChatMessagePart, local: ChatMessagePart) => {
   if (stored.type !== local.type) {
     return false
@@ -232,6 +263,10 @@ export function preserveLocalAssistantErrors(
         pending: false
       }
 
+      continue
+    }
+
+    if (hasDurableFailedTail(mergedNextMessages, currentMessages, index)) {
       continue
     }
 

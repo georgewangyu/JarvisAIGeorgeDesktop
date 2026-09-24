@@ -99,7 +99,7 @@ describe('consumer activity rows', () => {
     expect(openChat).toHaveBeenCalledWith(visible.id, visible)
 
     act(() => publishSessionState('approval-runtime', { ...pending, busy: false, needsInput: false }))
-    await waitFor(() => expect(screen.getByText('Finished — new update')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('New update')).toBeTruthy())
     expect(screen.queryByText('Needs your input')).toBeNull()
   })
 

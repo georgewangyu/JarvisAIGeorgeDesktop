@@ -2063,7 +2063,7 @@ export const ar = defineLocale({
       waitingForAnswer: 'بانتظار إجابة',
       backgroundRunning: 'تعمل في الخلفية',
       draftSession: 'مسودة — لم تُرسل بعد',
-      finishedUnread: 'اكتملت وفيها جديد',
+      finishedUnread: 'تحديث جديد غير مقروء',
       hideTabBar: 'إخفاء شريط التبويبات',
       openInNewTab: 'فتح في تبويب جديد',
       openInSplit: 'فتح في تقسيم',

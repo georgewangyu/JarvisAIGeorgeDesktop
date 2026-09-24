@@ -2405,7 +2405,7 @@ export const ja = defineLocale({
       sessionRunning: 'セッション実行中',
       needsInput: '入力が必要です',
       waitingForAnswer: '回答を待っています',
-      finishedUnread: '完了 — 未読',
+      finishedUnread: '新しい更新 — 未読',
       backgroundRunning: 'バックグラウンドタスク実行中',
       draftSession: '下書き — 未送信',
       handoffOrigin: platform => `${platform} から引き継ぎ`,

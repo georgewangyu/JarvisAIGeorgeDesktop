@@ -2671,7 +2671,7 @@ export const ru = defineLocale({
       sessionRunning: 'Сеанс выполняется',
       needsInput: 'Нужен ваш ввод',
       waitingForAnswer: 'Ждёт вашего ответа',
-      finishedUnread: 'Завершён — не прочитан',
+      finishedUnread: 'Новое обновление — не прочитано',
       backgroundRunning: 'Фоновая задача выполняется',
       draftSession: 'Черновик — ещё ничего не отправлено',
       handoffOrigin: platform => `Передано из ${platform}`,

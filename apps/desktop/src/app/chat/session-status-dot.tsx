@@ -59,10 +59,8 @@ const DOT_VARIANTS: Record<SessionDotState, DotVariant> = {
     role: 'status',
     title: r => r.backgroundRunning
   },
-  // Emerald — the turn finished while the user was looking elsewhere. The
-  // color is theme-derived (`--ui-success`, a success green rotated toward the
-  // accent) so eight finished dots can't sit in the sidebar fighting a palette
-  // they don't belong to. Under a green accent it stays emerald.
+  // An update arrived while the user was looking elsewhere. This state does
+  // not imply success: a saved assistant failure can produce the same cue.
   unread: {
     ariaLabel: r => r.finishedUnread,
     className: `${DOT_BASE} bg-(--ui-success)`,
