@@ -17,6 +17,7 @@ import {
   isPinnedCommit,
   resolveInstallScript,
   resolveMarkerPinnedCommit,
+  retryPinnedInstallScript404,
   runBootstrap
 } from './bootstrap-runner'
 
@@ -29,6 +30,34 @@ test('packaged bootstrap fetches the installer from the Jarvis fork at its pinne
     installScriptUrl(ref, SCRIPT_NAME),
     `https://raw.githubusercontent.com/georgewangyu/JarvisAIGeorgeDesktop/${ref}/scripts/${SCRIPT_NAME}`
   )
+})
+
+test('a newly pushed pinned installer gets one cache-busted retry after raw GitHub returns 404', async () => {
+  const ref = 'a'.repeat(40)
+  const attempts: boolean[] = []
+
+  const result = await retryPinnedInstallScript404(ref, async (cacheBust: boolean) => {
+    attempts.push(cacheBust)
+
+    if (!cacheBust) {throw new Error('Failed to download install.sh: HTTP 404')}
+
+    return 'downloaded'
+  })
+
+  assert.equal(result, 'downloaded')
+  assert.deepEqual(attempts, [false, true])
+  assert.match(installScriptUrl(ref, SCRIPT_NAME, true), /\?retry=\d+$/)
+})
+
+test('installer retry does not mask a missing ref or non-404 failure', async () => {
+  for (const [ref, message] of [['main', 'HTTP 404'], ['a'.repeat(40), 'HTTP 403']]) {
+    let attempts = 0
+    await assert.rejects(retryPinnedInstallScript404(ref, async () => {
+      attempts += 1
+      throw new Error(message)
+    }), new RegExp(message))
+    assert.equal(attempts, 1)
+  }
 })
 
 function mkTmpHome() {

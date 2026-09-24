@@ -51,8 +51,10 @@ const FALLBACK_COMMIT_RE = /^0{7,40}$/
 const FALLBACK_BRANCH = 'main'
 const INSTALL_SOURCE_REPOSITORY = 'georgewangyu/JarvisAIGeorgeDesktop'
 
-function installScriptUrl(ref: string, scriptName: string): string {
-  return `https://raw.githubusercontent.com/${INSTALL_SOURCE_REPOSITORY}/${ref}/scripts/${scriptName}`
+function installScriptUrl(ref: string, scriptName: string, cacheBust = false): string {
+  const url = `https://raw.githubusercontent.com/${INSTALL_SOURCE_REPOSITORY}/${ref}/scripts/${scriptName}`
+
+  return cacheBust ? `${url}?retry=${Date.now()}` : url
 }
 
 function isPinnedCommit(commit) {
@@ -241,17 +243,38 @@ function cachedScriptPath(hermesHome, commit) {
   return path.join(bootstrapCacheDir(hermesHome), `install-${commit}.${process.platform === 'win32' ? 'ps1' : 'sh'}`)
 }
 
+async function retryPinnedInstallScript404(ref, attempt) {
+  try {
+    return await attempt(false)
+  } catch (error) {
+    // GitHub's raw CDN can briefly cache a 404 for a newly pushed immutable
+    // commit even after the API and branch URL can see the file. A fresh URL
+    // gets one bounded retry; a genuinely absent script still fails closed.
+    if (!isPinnedCommit(ref) || !/HTTP 404\b/.test(String(error))) {
+      throw error
+    }
+
+    return attempt(true)
+  }
+}
+
 function downloadInstallScript(ref, destPath) {
+  return retryPinnedInstallScript404(ref, cacheBust => downloadInstallScriptAttempt(ref, destPath, cacheBust))
+}
+
+function downloadInstallScriptAttempt(ref, destPath, cacheBust) {
   // Fetch from GitHub raw at the install ref. Normal production builds pass a
   // pinned SHA (immutable). Non-git fallback builds pass an unpinned branch
   // ref so local builds can still bootstrap without pretending the all-zero
   // placeholder is a real GitHub commit.
   const scriptName = installScriptName()
-  const url = installScriptUrl(ref, scriptName)
+  const url = installScriptUrl(ref, scriptName, cacheBust)
 
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(destPath), { recursive: true })
-    const tmpPath = destPath + '.tmp'
+    // The retry must not reuse a file while the failed request's stream is
+    // still closing on another event-loop tick.
+    const tmpPath = destPath + (cacheBust ? '.retry.tmp' : '.tmp')
     const out = fs.createWriteStream(tmpPath)
     https
       .get(url, res => {
@@ -1094,5 +1117,6 @@ export {
   resolveInstallScript,
   resolveLocalInstallScript,
   resolveMarkerPinnedCommit,
+  retryPinnedInstallScript404,
   runBootstrap
 }
