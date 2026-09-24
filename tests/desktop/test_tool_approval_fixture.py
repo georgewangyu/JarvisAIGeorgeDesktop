@@ -10,6 +10,9 @@ Manual rehearsal, from the repo root with its Python environment::
     # chat. The loopback model requests a permission change on a dummy file in
     # fixture's sandbox-target directory; approve or reject the card.
     python tests/desktop/test_tool_approval_fixture.py status --root /tmp/hermes-approval-UNIQUE
+    # After stopping/crashing only this fixture process, reuse its exact
+    # test-owned root and token to inspect gateway-restart behavior:
+    python tests/desktop/test_tool_approval_fixture.py resume --root /tmp/hermes-approval-UNIQUE
     python tests/desktop/test_tool_approval_fixture.py stop --root /tmp/hermes-approval-UNIQUE
 
 The explicit trigger uses a synthetic tool name with no executor. The model
@@ -160,14 +163,30 @@ def create_fixture(root: Path) -> dict:
     return data
 
 
-def serve(root: Path) -> None:
+def load_fixture_for_resume(root: Path) -> dict:
+    data = read_fixture(root)
+    _marker, _home, state_path = paths(root)
+    current = json.loads(state_path.read_text(encoding="utf-8"))
+    if current.get("state") == "waiting":
+        # Only the old process held the executable approval queue. Do not
+        # report that stale state as a live approval or infer its outcome.
+        pending_path = state_path.with_suffix(".tmp")
+        pending_path.write_text(
+            json.dumps({**current, "state": "interrupted", "outcome": "unknown", "pending": False}) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(pending_path, state_path)
+    return data
+
+
+def serve(root: Path, *, resume: bool = False) -> None:
     # In particular, never let a cold session build see the caller's provider
     # tokens, even when this fixture is launched manually from a signed-in shell.
     fixture_env = isolated_environment(root)
     os.environ.clear()
     os.environ.update(fixture_env)
     os.environ["APPROVAL_FIXTURE_API_KEY"] = "synthetic-loopback-only"
-    data = create_fixture(root)
+    data = load_fixture_for_resume(root) if resume else create_fixture(root)
     _marker, _home, state_path = paths(root)
     # Import the production app only after binding it to this disposable home.
     os.environ["HERMES_DASHBOARD_SESSION_TOKEN"] = data["session_token"]
@@ -190,7 +209,9 @@ def serve(root: Path) -> None:
             raise HTTPException(status_code=401, detail="fixture token required")
 
     def write_state(value: dict) -> None:
-        state_path.write_text(json.dumps({**value, "tool_executed": False}) + "\n", encoding="utf-8")
+        pending_path = state_path.with_suffix(".tmp")
+        pending_path.write_text(json.dumps({**value, "tool_executed": False}) + "\n", encoding="utf-8")
+        os.replace(pending_path, state_path)
 
     @app.get("/fixture/approval/status")
     def fixture_status(x_hermes_session_token: str | None = Header(default=None)):
@@ -316,6 +337,21 @@ def test_fixture_owns_only_a_new_root(tmp_path: Path) -> None:
         raise AssertionError("fixture reused an occupied root")
 
 
+def test_resume_marks_a_lost_wait_unknown_without_replaying_it(tmp_path: Path) -> None:
+    root = tmp_path / "approval-fixture"
+    data = create_fixture(root)
+    state_path = paths(root)[2]
+    state_path.write_text(
+        json.dumps({"state": "waiting", "session_id": "synthetic-runtime", "tool_executed": False}) + "\n",
+        encoding="utf-8",
+    )
+    assert load_fixture_for_resume(root) == data
+    assert json.loads(state_path.read_text(encoding="utf-8")) == {
+        "state": "interrupted", "session_id": "synthetic-runtime", "tool_executed": False,
+        "outcome": "unknown", "pending": False,
+    }
+
+
 def test_model_rehearsal_is_exact_and_test_owned(tmp_path: Path) -> None:
     root = tmp_path / "approval-fixture"
     create_fixture(root)
@@ -412,6 +448,31 @@ def test_loopback_gateway_denial_round_trip(tmp_path: Path) -> None:
             }
         assert request(root, "stop") == {"stopping": True}
         assert child.wait(timeout=10) == 0
+        resumed = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), "resume", "--root", str(root)],
+            cwd=ROOT, env=isolated_environment(root), stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, bufsize=1,
+        )
+        try:
+            readable, _, _ = select.select([resumed.stdout], [], [], 15)
+            assert readable, "resumed fixture did not print its connection details"
+            resumed_details = json.loads(resumed.stdout.readline())
+            assert resumed_details == details
+            deadline = time.monotonic() + 15
+            while True:
+                try:
+                    assert request(root, "status")["state"] == "denied"
+                    break
+                except (URLError, ConnectionError):
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.05)
+            assert request(root, "stop") == {"stopping": True}
+            assert resumed.wait(timeout=10) == 0
+        finally:
+            if resumed.poll() is None:
+                resumed.send_signal(signal.SIGINT)
+                resumed.wait(timeout=10)
     finally:
         if child.poll() is None:
             child.send_signal(signal.SIGINT)
@@ -424,11 +485,11 @@ def test_loopback_gateway_denial_round_trip(tmp_path: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("start", "trigger", "status", "stop"))
+    parser.add_argument("command", choices=("start", "resume", "trigger", "status", "stop"))
     parser.add_argument("--root", type=Path, required=True)
     args = parser.parse_args()
     selected_root = args.root.expanduser().resolve(strict=False)
-    if args.command == "start":
-        serve(selected_root)
+    if args.command in {"start", "resume"}:
+        serve(selected_root, resume=args.command == "resume")
     else:
         print(json.dumps(request(selected_root, args.command), indent=2))
