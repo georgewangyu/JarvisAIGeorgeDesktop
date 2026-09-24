@@ -26,6 +26,7 @@ or account is used.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import secrets
@@ -47,6 +48,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MARKER = ".hermes-desktop-tool-approval-fixture"
 KIND = "hermes-desktop-tool-approval-fixture-v1"
 MODEL_APPROVAL_PROMPT = "Request the synthetic approval action."
+MODEL_BACKGROUND_SUCCESS_PROMPT = "Finish the synthetic background check."
+MODEL_BACKGROUND_FAILURE_PROMPT = "Fail the synthetic background check."
 
 
 def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
@@ -61,7 +64,9 @@ def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
     user_index = next((index for index in range(len(messages) - 1, -1, -1)
                        if isinstance(messages[index], dict) and messages[index].get("role") == "user"), -1)
     if user_index < 0 or messages[user_index].get("content") != MODEL_APPROVAL_PROMPT:
-        raise ValueError("only the synthetic approval rehearsal is supported")
+        if user_index >= 0 and messages[user_index].get("content") == MODEL_BACKGROUND_SUCCESS_PROMPT:
+            return {"role": "assistant", "content": "The synthetic background check finished."}, "stop"
+        raise ValueError("only synthetic approval or background-check rehearsals are supported")
     after_user = messages[user_index + 1:]
     tool_results = [message for message in after_user
                     if isinstance(message, dict) and message.get("role") == "tool"]
@@ -227,6 +232,16 @@ def serve(root: Path, *, resume: bool = False) -> None:
     @app.post("/v1/chat/completions")
     async def fixture_model(request: FastAPIRequest):
         body = await request.json()
+        messages = body.get("messages")
+        if isinstance(messages, list):
+            latest_user = next((item.get("content") for item in reversed(messages)
+                                if isinstance(item, dict) and item.get("role") == "user"), None)
+            if latest_user in {MODEL_BACKGROUND_SUCCESS_PROMPT, MODEL_BACKGROUND_FAILURE_PROMPT}:
+                # Allow a native test to leave the owning chat before the
+                # provider returns. No external model or user data is touched.
+                await asyncio.sleep(8)
+                if latest_user == MODEL_BACKGROUND_FAILURE_PROMPT:
+                    raise HTTPException(status_code=503, detail="synthetic provider unavailable")
         try:
             message, finish_reason = fixture_completion(body, root)
         except ValueError as exc:
@@ -371,6 +386,11 @@ def test_model_rehearsal_is_exact_and_test_owned(tmp_path: Path) -> None:
     request_body["messages"][-1]["content"] = '{"status":"success"}'
     allowed, _ = fixture_completion(request_body, root)
     assert "denied" not in allowed["content"]
+    request_body["messages"] = [{"role": "user", "content": MODEL_BACKGROUND_SUCCESS_PROMPT}]
+    finished, finished_reason = fixture_completion(request_body, root)
+    assert finished == {"role": "assistant", "content": "The synthetic background check finished."}
+    assert finished_reason == "stop"
+    assert "data: [DONE]" in fixture_sse(finished, finished_reason)
     request_body["messages"] = [{"role": "user", "content": "Unrelated real request"}]
     try:
         fixture_completion(request_body, root)

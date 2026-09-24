@@ -10,7 +10,7 @@ import type { SessionDotState } from '@/store/session-dot-state'
 import { clearAllSessionStates, publishSessionState } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
 
-import { buildConsumerActivityRows, buildUnavailableApprovalRows, ConsumerActivity, hasConsumerChatAttention, openConsumerActivityRow } from './consumer-activity'
+import { buildConsumerActivityRows, buildUnavailableApprovalRows, ConsumerActivity, consumerChatCue, openConsumerActivityRow } from './consumer-activity'
 
 afterEach(() => {
   cleanup()
@@ -47,11 +47,15 @@ describe('consumer activity rows', () => {
     const worker = { ...session('worker-chat', 'Private worker', 9), connection_id: 'local', profile: 'default', source: 'subagent' }
     const states: Record<string, SessionDotState> = { 'approval-chat': 'needs-input', 'worker-chat': 'needs-input' }
 
-    expect(hasConsumerChatAttention([worker, visible], states, [], local.connectionId, local.profile)).toBe(true)
-    expect(hasConsumerChatAttention([worker, visible], states, [], remote.connectionId, remote.profile)).toBe(false)
-    expect(hasConsumerChatAttention([worker], states, [], local.connectionId, local.profile)).toBe(false)
-    expect(hasConsumerChatAttention([visible], states, [], null, local.profile)).toBe(false)
-    expect(hasConsumerChatAttention([visible], { 'approval-chat': 'working' }, [], local.connectionId, local.profile)).toBe(false)
+    expect(consumerChatCue([worker, visible], states, [], local.connectionId, local.profile)).toBe('needs-input')
+    expect(consumerChatCue([worker, visible], states, [], remote.connectionId, remote.profile)).toBeNull()
+    expect(consumerChatCue([worker], states, [], local.connectionId, local.profile)).toBeNull()
+    expect(consumerChatCue([visible], states, [], null, local.profile)).toBeNull()
+    expect(consumerChatCue([visible], { 'approval-chat': 'working' }, [], local.connectionId, local.profile)).toBeNull()
+    expect(consumerChatCue([visible], { 'approval-chat': 'unread' }, [], local.connectionId, local.profile)).toBe('unread')
+    expect(consumerChatCue([worker, visible], { 'worker-chat': 'unread' }, [], local.connectionId, local.profile)).toBeNull()
+    expect(consumerChatCue([worker, visible], { 'approval-chat': 'unread', 'worker-chat': 'needs-input' }, [], local.connectionId, local.profile)).toBe('unread')
+    expect(consumerChatCue([visible], { 'approval-chat': 'needs-input' }, [], local.connectionId, local.profile)).toBe('needs-input')
   })
 
   it('links an unavailable approval only to its exact visible owner', () => {

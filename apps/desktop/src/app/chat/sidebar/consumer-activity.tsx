@@ -155,14 +155,14 @@ export function buildConsumerActivityRows(
 
 /** Keep the always-visible Jarvis navigation cue scoped to the current
  *  connection/profile. An unowned row or hidden worker must not light it. */
-export function hasConsumerChatAttention(
+export function consumerChatCue(
   sessions: readonly SessionInfo[],
   states: Readonly<Record<string, SessionDotState>>,
   receipts: readonly ApprovalRecoveryReceipt[],
   connectionId: null | string,
   profile: string
-): boolean {
-  if (!connectionId) {return false}
+): 'needs-input' | 'unread' | null {
+  if (!connectionId) {return null}
 
   const owned = sessions.filter(session => {
     const owner = sessionOwnerRouteFromRow(session) ?? knownOwnerForSession(session.id)
@@ -170,8 +170,14 @@ export function hasConsumerChatAttention(
     return isSessionOwnerRoute(owner) && owner.connectionId === connectionId && owner.profile === profile
   })
 
-  return buildConsumerActivityRows(owned, states).some(row => row.status === 'needs-input') ||
-    buildUnavailableApprovalRows(owned, receipts.filter(row => row.connectionId === connectionId && row.profile === profile)).length > 0
+  const activityRows = buildConsumerActivityRows(owned, states)
+
+  if (activityRows.some(row => row.status === 'needs-input') ||
+    buildUnavailableApprovalRows(owned, receipts.filter(row => row.connectionId === connectionId && row.profile === profile)).length > 0) {
+    return 'needs-input'
+  }
+
+  return activityRows.some(row => row.status === 'unread') ? 'unread' : null
 }
 
 export function ConsumerActivity({

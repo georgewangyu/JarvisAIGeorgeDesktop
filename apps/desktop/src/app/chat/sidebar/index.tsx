@@ -147,7 +147,7 @@ import type { SidebarNavItem } from '../../types'
 import type { NewSessionSplitHandler } from '../new-session-drag'
 
 import { SidebarSectionAddButton } from './chrome'
-import { ConsumerActivity, hasConsumerChatAttention } from './consumer-activity'
+import { ConsumerActivity, consumerChatCue } from './consumer-activity'
 import { consumeConsumerChatsRequest, OPEN_CONSUMER_CHATS_EVENT, restoreConsumerChatsLayout } from './consumer-chats-request'
 import { SidebarFilterMenu } from './filter-menu'
 import { useGatewaySessionGroups } from './gateway-group-model'
@@ -557,7 +557,7 @@ export function ChatSidebar({
 
   const activitySessions = useMemo(() => filterSessionsByProfileScope(sessions, profileScope), [sessions, profileScope])
 
-  const hasChatAttention = hasConsumerChatAttention(
+  const chatCue = consumerChatCue(
     activitySessions, dotStates, approvalReceipts, activeConnectionId, activeGatewayProfile
   )
 
@@ -1681,8 +1681,8 @@ export function ChatSidebar({
                     type="button"
                   >
                     <item.icon className="size-4 shrink-0 text-[color-mix(in_srgb,currentColor_72%,transparent)]" />
-                    {isNewSession && hasChatAttention ? (
-                      <span aria-hidden="true" className="absolute right-1 top-1 size-1.5 rounded-full bg-amber-500" />
+                    {isNewSession && chatCue ? (
+                      <span aria-hidden="true" className={cn('absolute right-1 top-1 size-1.5 rounded-full', chatCue === 'needs-input' ? 'bg-amber-500' : 'bg-(--ui-accent)')} />
                     ) : null}
                     {/* Shrink-to-fit, not flex-1: the label carries the row's
                         `data-tour` handle, and anything anchored to it should

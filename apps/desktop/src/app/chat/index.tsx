@@ -77,7 +77,7 @@ import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { useSessionView } from './session-view'
-import { hasConsumerChatAttention } from './sidebar/consumer-activity'
+import { consumerChatCue } from './sidebar/consumer-activity'
 import { requestConsumerChats } from './sidebar/consumer-chats-request'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
@@ -149,7 +149,7 @@ function ChatHeader({
   const connection = useStore($connection)
   const connectionId = connection?.connectionId ?? (connection?.mode === 'local' ? 'local' : null)
 
-  const hasAttention = hasConsumerChatAttention(sessions, dotStates, approvalReceipts, connectionId, activeProfile)
+  const chatCue = consumerChatCue(sessions, dotStates, approvalReceipts, connectionId, activeProfile)
 
   const activeStoredSession =
     (selectedSessionId && sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))) || null
@@ -180,7 +180,7 @@ function ChatHeader({
         >
           <Codicon aria-hidden name="menu" size="0.9rem" />
           <span>Chats</span>
-          {hasAttention ? <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-500" /> : null}
+          {chatCue ? <span aria-hidden="true" className={cn('size-1.5 rounded-full', chatCue === 'needs-input' ? 'bg-amber-500' : 'bg-(--ui-accent)')} /> : null}
         </button>
         <span className="consumer-chat-title">{title === NEW_SESSION_TITLE ? 'Jarvis' : title}</span>
         <div className="flex items-center gap-2">
