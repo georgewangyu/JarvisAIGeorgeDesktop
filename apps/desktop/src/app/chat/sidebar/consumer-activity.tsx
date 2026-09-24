@@ -1,4 +1,6 @@
+import type { JarvisInterruptedEventsResult } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
+import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -8,6 +10,8 @@ import { sessionTitle } from '@/lib/chat-runtime'
 import { Activity, iconSize } from '@/lib/icons'
 import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
+import { $gateway } from '@/store/gateway'
+import { $activeGatewayProfile } from '@/store/profile'
 import {
   $sessionDotStateById,
   type SessionDotState,
@@ -115,16 +119,61 @@ export function ConsumerActivity({
 }) {
   const copy = useJarvisCopy()
   const states = useStore($sessionDotStateById)
+  const gateway = useStore($gateway)
+  const profile = useStore($activeGatewayProfile)
+  const [refreshIndex, setRefreshIndex] = useState(0)
+
+  const [interruptedSnapshot, setInterruptedSnapshot] = useState<{
+    events: JarvisInterruptedEventsResult['events']
+    gateway: typeof gateway
+    profile: string
+  } | null>(null)
+
+  const [interruptedLoadError, setInterruptedLoadError] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    setInterruptedLoadError(false)
+
+    if (gateway) {
+      void gateway.request<JarvisInterruptedEventsResult>('jarvis.events.interrupted', { profile }).then(
+        result => {
+          if (!cancelled) {
+            setInterruptedSnapshot({ events: result.events, gateway, profile })
+          }
+        },
+        () => {
+          if (!cancelled) {
+            setInterruptedLoadError(true)
+          }
+        }
+      )
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [gateway, profile, refreshIndex])
+
+  const interrupted = interruptedSnapshot?.gateway === gateway && interruptedSnapshot.profile === profile
+    ? interruptedSnapshot.events
+    : []
+
   const rows = buildConsumerActivityRows(sessions, states, automationSessions)
   const sessionById = new Map([...sessions, ...automationSessions].map(session => [session.id, session]))
-  const attentionCount = rows.filter(row => row.status === 'needs-input').length
+  const attentionCount = interrupted.length + rows.filter(row => row.status === 'needs-input').length
 
   return (
-    <Popover>
+    <Popover onOpenChange={open => {
+      if (open) {
+        setRefreshIndex(index => index + 1)
+      }
+    }}>
       <PopoverTrigger asChild>
         <Button aria-label={copy.activity} className="relative" size="icon-sm" variant="ghost">
           <Activity className={iconSize.sm} />
-          {rows.length > 0 ? (
+          {rows.length > 0 || interrupted.length > 0 ? (
             <span
               aria-hidden="true"
               className={cn(
@@ -139,14 +188,28 @@ export function ConsumerActivity({
         <div className="px-3 pb-2 pt-3">
           <p className="text-sm font-medium">{copy.activity}</p>
           <p className="mt-0.5 text-xs text-(--ui-text-tertiary)">
-            {rows.length > 0 ? copy.activityDetail : copy.activityReadyDetail}
+            {rows.length > 0 || interrupted.length > 0 ? copy.activityDetail : copy.activityReadyDetail}
           </p>
         </div>
-        {rows.length === 0 ? (
+        {interrupted.length > 0 ? (
+          <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3" role="status">
+            <p className="text-sm font-medium text-foreground">Outcome unknown after restart</p>
+            <p className="mt-1 text-xs leading-5 text-(--ui-text-secondary)">
+              {`${interrupted.length === 1 ? 'One background request' : `${interrupted.length} background requests`} may have finished before Jarvis restarted. Check the result before asking Jarvis to try again; nothing was replayed automatically.`}
+            </p>
+          </div>
+        ) : null}
+        {interruptedLoadError ? (
+          <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3 text-xs text-(--ui-text-secondary)">
+            Could not check interrupted activity.{' '}
+            <Button onClick={() => setRefreshIndex(index => index + 1)} size="inline" variant="textStrong">Retry</Button>
+          </div>
+        ) : null}
+        {rows.length === 0 && interrupted.length === 0 && !interruptedLoadError ? (
           <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3 text-sm text-(--ui-text-secondary)">
             {copy.activityReady}
           </div>
-        ) : (
+        ) : rows.length > 0 ? (
           <div className="border-t border-(--ui-stroke-tertiary) py-1">
             {rows.map(row => (
               <button
@@ -200,7 +263,7 @@ export function ConsumerActivity({
               </button>
             ))}
           </div>
-        )}
+        ) : null}
       </PopoverContent>
     </Popover>
   )

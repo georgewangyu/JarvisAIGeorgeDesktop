@@ -1,9 +1,18 @@
-import { describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { $gateway } from '@/store/gateway'
+import { $activeGatewayProfile } from '@/store/profile'
 import type { SessionDotState } from '@/store/session-dot-state'
 import type { SessionInfo } from '@/types/hermes'
 
-import { buildConsumerActivityRows, openConsumerActivityRow } from './consumer-activity'
+import { buildConsumerActivityRows, ConsumerActivity, openConsumerActivityRow } from './consumer-activity'
+
+afterEach(() => {
+  cleanup()
+  $gateway.set(null as never)
+  $activeGatewayProfile.set('default')
+})
 
 const session = (id: string, title: string, lastActive: number): SessionInfo => ({
   ended_at: null,
@@ -101,5 +110,63 @@ describe('consumer activity rows', () => {
 
     openConsumerActivityRow(row, undefined, vi.fn(), openAutomations, [{ id: 'known', enabled: true }])
     expect(openAutomations).toHaveBeenCalledWith(null)
+  })
+})
+
+describe('interrupted activity', () => {
+  it('warns about an unknown outcome without showing a completed result or replaying it', async () => {
+    const request = vi.fn(async () => ({
+      events: [{ delivery_id: 'synthetic', claimed_at: 1, status: 'outcome_unknown' }]
+    }))
+
+    $gateway.set({ request } as never)
+
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={vi.fn()} sessions={[]} />)
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith('jarvis.events.interrupted', { profile: 'default' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    expect(await screen.findByText('Outcome unknown after restart')).toBeTruthy()
+    expect(screen.getByText(/nothing was replayed automatically/)).toBeTruthy()
+    expect(screen.queryByText('Finished')).toBeNull()
+    expect(request).not.toHaveBeenCalledWith('prompt.submit', expect.anything())
+  })
+
+  it('offers a retry when the read fails, without inventing a settled state', async () => {
+    let shouldFail = true
+
+    const request = vi.fn(async () => {
+      if (shouldFail) {throw new Error('temporary')}
+
+      return { events: [] }
+    })
+
+    $gateway.set({ request } as never)
+
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={vi.fn()} sessions={[]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    expect(await screen.findByText(/Could not check interrupted activity/)).toBeTruthy()
+    shouldFail = false
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(3))
+    expect(screen.queryByText('Outcome unknown after restart')).toBeNull()
+  })
+
+  it('drops an interrupted warning immediately when the active profile changes', async () => {
+    const request = vi.fn(async (_method: string, params: { profile: string }) => ({
+      events: params.profile === 'default'
+        ? [{ delivery_id: 'synthetic', claimed_at: 1, status: 'outcome_unknown' }]
+        : []
+    }))
+
+    $gateway.set({ request } as never)
+
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={vi.fn()} sessions={[]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    expect(await screen.findByText('Outcome unknown after restart')).toBeTruthy()
+
+    act(() => $activeGatewayProfile.set('other'))
+    await waitFor(() => expect(request).toHaveBeenCalledWith('jarvis.events.interrupted', { profile: 'other' }))
+    expect(screen.queryByText('Outcome unknown after restart')).toBeNull()
   })
 })

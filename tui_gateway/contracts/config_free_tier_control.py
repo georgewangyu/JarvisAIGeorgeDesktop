@@ -448,6 +448,24 @@ method("session.goals.set_completed", params=SessionGoalSetCompletedParams, resu
        doc="Mark a visible conversation's persisted goal complete or reopen it without a model turn.")
 
 
+class JarvisInterruptedEventsParams(ProfileParams):
+    pass
+
+
+class JarvisInterruptedEvent(Result):
+    delivery_id: str
+    claimed_at: int | None
+    status: str
+
+
+class JarvisInterruptedEventsResult(Result):
+    events: list[JarvisInterruptedEvent]
+
+
+method("jarvis.events.interrupted", params=JarvisInterruptedEventsParams, result=JarvisInterruptedEventsResult,
+       doc="List metadata-only outcome-unknown Jarvis events from retired desktop owner leases without replaying them.")
+
+
 class LoopSnapshot(Result):
     """``_safe_loop_snapshot`` — persisted LoopState fields, never its route."""
 

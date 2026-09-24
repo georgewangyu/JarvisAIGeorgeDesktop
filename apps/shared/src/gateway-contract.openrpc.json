@@ -1267,6 +1267,24 @@
       }
     },
     {
+      "name": "jarvis.events.interrupted",
+      "summary": "List metadata-only outcome-unknown Jarvis events from retired desktop owner leases without replaying them.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/JarvisInterruptedEventsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/JarvisInterruptedEventsResult"
+        }
+      }
+    },
+    {
       "name": "learning.delete",
       "summary": "Archive a skill (restorable via curator) or remove a memory chunk.",
       "params": [
@@ -13132,6 +13150,73 @@
         ],
         "title": "InterruptStatus",
         "type": "string"
+      },
+      "JarvisInterruptedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery_id": {
+            "title": "Delivery Id",
+            "type": "string"
+          },
+          "claimed_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_id",
+          "claimed_at",
+          "status"
+        ],
+        "title": "JarvisInterruptedEvent",
+        "type": "object"
+      },
+      "JarvisInterruptedEventsParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          }
+        },
+        "title": "JarvisInterruptedEventsParams",
+        "type": "object"
+      },
+      "JarvisInterruptedEventsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/JarvisInterruptedEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "JarvisInterruptedEventsResult",
+        "type": "object"
       },
       "LayoutApplyPayload": {
         "additionalProperties": true,

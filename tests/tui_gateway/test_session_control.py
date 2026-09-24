@@ -595,3 +595,43 @@ class TestUpdatePublication:
         assert "message.complete" in order and "session.control.update" in order
         assert order.index("message.complete") < order.index("session.control.update")
         assert emitted[order.index("session.control.update")][2]["control"]["goal"]["turns_used"] == 4
+
+
+def test_interrupted_jarvis_events_rpc_reads_without_replaying(server, hermes_home):
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import claim_pending_delivery, find_jarvis_live_owner
+    from tui_gateway.owner_event_inbox import admit_jarvis_event, owner_event_receipt
+
+    db = SessionDB(db_path=hermes_home / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+
+    def acquire(live_id):
+        lease, refusal = try_acquire_active_session(
+            session_id="main", surface="desktop", config={}, registry_home=hermes_home,
+            metadata={"live_session_id": live_id, "bot_live_delivery_consumer": True},
+        )
+        assert refusal is None
+        return lease
+
+    first_lease = acquire("first-runtime")
+    try:
+        receipt = admit_jarvis_event(hermes_home, source="calendar", event_id="one", text="Synthetic check")
+        assert claim_pending_delivery(hermes_home, find_jarvis_live_owner(hermes_home))["id"] == receipt["id"]
+        assert _call(server, "jarvis.events.interrupted", profile="default")["result"]["events"] == []
+    finally:
+        first_lease.release()
+
+    second_lease = acquire("second-runtime")
+    try:
+        observed = _call(server, "jarvis.events.interrupted", profile="default")["result"]["events"]
+        assert observed == [{
+            "delivery_id": receipt["id"],
+            "claimed_at": owner_event_receipt(hermes_home, source="calendar", event_id="one")["claimed_at"],
+            "status": "outcome_unknown",
+        }]
+        assert owner_event_receipt(hermes_home, source="calendar", event_id="one")["status"] == "claimed"
+    finally:
+        second_lease.release()
+        db.close()

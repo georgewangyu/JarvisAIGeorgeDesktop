@@ -241,6 +241,20 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 5031, "could not read persisted goals")
 
 
+@method("jarvis.events.interrupted")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    """Expose only ambiguous-claim metadata to the selected consumer profile."""
+    from hermes_constants import get_hermes_home
+    from tui_gateway.owner_event_inbox import interrupted_jarvis_event_receipts
+
+    try:
+        return _ok(rid, {"events": interrupted_jarvis_event_receipts(get_hermes_home())})
+    except Exception as exc:
+        logger.debug("jarvis.events.interrupted failed: %s", exc, exc_info=True)
+        return _err(rid, 5031, "could not check interrupted activity")
+
+
 @method("session.goals.create")
 @_profile_scoped
 def _(rid, params: dict) -> dict:

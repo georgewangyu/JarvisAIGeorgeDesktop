@@ -869,6 +869,17 @@ export interface SessionGoalSetCompletedParams {
 export interface SessionGoalSetCompletedResult {
   goal: SessionGoalListRow
 }
+export interface JarvisInterruptedEventsParams {
+  profile?: string | null
+}
+export interface JarvisInterruptedEventsResult {
+  events: JarvisInterruptedEvent[]
+}
+export interface JarvisInterruptedEvent {
+  delivery_id: string
+  claimed_at: number | null
+  status: string
+}
 export interface SessionControlReadParams {
   profile?: string | null
   session_id: string
@@ -4359,6 +4370,8 @@ export interface RpcMethods {
   'input.detect_drop': { params: InputDetectDropParams; result: InputDetectDropResult }
   /** Session/message counts over the last ``days`` for the (optionally scoped) profile store. */
   'insights.get': { params: InsightsGetParams; result: InsightsGetResult }
+  /** List metadata-only outcome-unknown Jarvis events from retired desktop owner leases without replaying them. */
+  'jarvis.events.interrupted': { params: JarvisInterruptedEventsParams; result: JarvisInterruptedEventsResult }
   /** Archive a skill (restorable via curator) or remove a memory chunk. */
   'learning.delete': { params: LearningNodeParams; result: LearningMutationResult }
   /** Node content (SKILL.md or memory chunk) for an edit prefill. */
@@ -4734,6 +4747,7 @@ export const RPC_METHODS = [
   'image.generate',
   'input.detect_drop',
   'insights.get',
+  'jarvis.events.interrupted',
   'learning.delete',
   'learning.detail',
   'learning.edit',
