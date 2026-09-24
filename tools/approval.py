@@ -1144,7 +1144,9 @@ def request_tool_approval(tool_name: str, reason: str, *, rule_key: str = "", ap
     return _run_approval_gate(
         # Namespaced so plugin-rule approvals share the allowlist machinery without ever colliding with a real
         # command pattern key; the display target is a synthetic label for the display/allowlist layer.
-        pattern_key=f"plugin_rule:{tool_name}:{rule_key}", description=description,
+        # Length-prefix the tool identity: a tool named "a:b" with rule "c"
+        # must not share a grant with tool "a" and rule "b:c".
+        pattern_key=f"plugin_rule:{len(tool_name)}:{tool_name}:{rule_key}", description=description,
         display_target=f"<{tool_name}> (plugin approval rule)", approval_callback=approval_callback,
         subject=subject, advice="Find an alternative approach.",
         autoapprove_log_prefix=f"plugin-escalated tool call '{tool_name}' in non-interactive non-gateway context",
