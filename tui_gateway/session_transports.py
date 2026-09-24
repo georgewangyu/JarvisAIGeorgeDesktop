@@ -43,6 +43,8 @@ def _session_client_answers_requests(sid: str) -> bool:
     transports never count."""
     from tui_gateway import server_requests
     from tui_gateway.ws import WSTransport
+    if (_sessions.get(sid) or {}).get("source") == "jarvis-event":
+        return False
     clients = [peer for peer in _session_live_transports(_sessions.get(sid)) if isinstance(peer, WSTransport)]
     return not clients or any(server_requests.answers_requests(peer) for peer in clients)
 

@@ -67,6 +67,16 @@ def _new_runtime_ids(params: dict) -> tuple[str, str]:
     return uuid.uuid4().hex[:8], _resolve_session_source(_str_param(params, "source") or None)
 
 
+def _reserved_headless_source_error(rid, params: dict) -> dict | None:
+    """Only the one-event runner may create a ``jarvis-event`` runtime."""
+    if _str_param(params, "source") != "jarvis-event":
+        return None
+    from tui_gateway.headless_owner_event_token import resume_creation_token
+    if not resume_creation_token.get():
+        return _err(rid, 4125, "jarvis-event is reserved for the exact headless event runner")
+    return None
+
+
 def _profile_build_scope(profile_home):
     """Bind HERMES_HOME + secret + terminal scope for an agent build: the same composition a turn
     binds (``_session_profile_runtime_scope``). Home alone leaves ``get_secret()`` on the LAUNCH
@@ -325,6 +335,8 @@ def _create_overrides(params: dict) -> tuple:
 
 @method("session.create")
 def _(rid, params: dict) -> dict:
+    if (refusal := _reserved_headless_source_error(rid, params)) is not None:
+        return refusal
     # ``profile`` (app-global remote mode): stored so the build and every turn re-bind HERMES_HOME.
     profile_home = _profile_home(profile := (params.get("profile") or "").strip() or None)
     # Reject an incoherent model×provider pair BEFORE any state exists: minting it only defers the
@@ -886,6 +898,8 @@ def _resume_eager(ctx: _Resume) -> dict:
 
 @method("session.resume")
 def _(rid, params: dict) -> dict:
+    if (refusal := _reserved_headless_source_error(rid, params)) is not None:
+        return refusal
     if not (target := params.get("session_id", "")):
         return _err(rid, 4006, "session_id required")
     ctx = _Resume(rid, params, target)

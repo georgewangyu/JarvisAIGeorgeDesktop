@@ -994,6 +994,10 @@ def _wire_session_agent(sid: str, key: str, agent) -> bool:
 
 def _start_session_services(sid: str, key: str, current: dict) -> None:
     """Start the notification poller and fire the session-reset boundary hook."""
+    # The opt-in event runner owns exactly one claimed envelope.  An idle
+    # poller or reset hook could start unrelated work before that claim.
+    if _session_source(current) == "jarvis-event":
+        return
     with _sessions_lock:
         if (rec := _sessions.get(sid)) is not None:
             rec["_notif_stop"] = _start_notification_poller(sid, rec)
@@ -2445,6 +2449,11 @@ def _init_session(
     sid: str, key: str, agent, history: list, cols: int = 80, cwd: str | None = None,
     session_db=None, source: str | None = None, profile_home: str | None = None,
     explicit_cwd: bool = False):
+    resolved_source = _resolve_session_source(source)
+    if resolved_source == "jarvis-event":
+        from tui_gateway.headless_owner_event_token import resume_creation_token
+        if not resume_creation_token.get():
+            raise ValueError("jarvis-event is reserved for the exact headless event runner")
     now = time.time()
     with _sessions_lock:
         _sessions[sid] = {
@@ -2452,7 +2461,7 @@ def _init_session(
             "history_version": 0, "inflight_turn": None, "created_at": now, "last_active": now,
             "running": False, "attached_images": [], "image_counter": 0, "cwd": cwd or _completion_cwd(),
             "explicit_cwd": bool(explicit_cwd), "cols": cols, "slash_worker": None,
-            "show_reasoning": _load_show_reasoning(), "source": _resolve_session_source(source),
+            "show_reasoning": _load_show_reasoning(), "source": resolved_source,
             "tool_progress_mode": _load_tool_progress_mode(), "edit_snapshots": {}, "tool_started_at": {},
             # Profile-scoped HERMES_HOME (None = launch); SessionBranch copies the parent's (same state.db).
             "profile_home": profile_home,
@@ -2462,6 +2471,9 @@ def _init_session(
             "transport": current_transport() or _stdio_transport,
             "auth_user_id": _transport_auth_user_id(current_transport()),
         }
+        if _sessions[sid]["source"] == "jarvis-event":
+            from tui_gateway.headless_owner_event_token import resume_creation_token
+            _sessions[sid]["_headless_creation_token"] = resume_creation_token.get()
         _session_todo_state(_sessions[sid])
     _hydrate_session_cwd(sid, key, session_db, profile_home)
     _register_session_cwd(_sessions[sid])
