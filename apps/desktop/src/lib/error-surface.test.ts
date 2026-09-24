@@ -155,6 +155,25 @@ describe('error copy never names a hidden Retry', () => {
     expect(body).not.toBe(thread.errorLayerBodies.provider)
     expect(errorRecoveryPlan(surface).retry).toBe(false)
   })
+
+  it('brands app-owned failure copy for Jarvis without changing raw provider messages', () => {
+    expect(errorCardText(thread, null, 'jarvis')).toEqual({
+      title: "Jarvis couldn't finish this reply",
+      body: 'Something went wrong while Jarvis was replying. Retry, or copy the details if it keeps happening.'
+    })
+
+    const freeTier = parseErrorSurface({
+      code: 'free_tier_disabled', layer: 'provider', message: 'Hermes service message', retryable: false
+    })!
+
+    expect(errorCardText(thread, freeTier, 'jarvis').body).toBe('Hermes service message')
+
+    const provider = parseErrorSurface({
+      code: 'server_error', layer: 'provider', provider_label: 'Hermes Cloud', retryable: true
+    })!
+
+    expect(errorCardText(thread, provider, 'jarvis').body).toMatch(/^Hermes Cloud returned a server error/)
+  })
 })
 
 describe('free-tier refusals', () => {

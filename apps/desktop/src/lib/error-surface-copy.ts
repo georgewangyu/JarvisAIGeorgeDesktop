@@ -24,20 +24,32 @@ export function errorProviderName(thread: Translations['assistant']['thread'], s
 
 export function errorCardText(
   thread: Translations['assistant']['thread'],
-  surface: ErrorSurface | null | undefined
+  surface: ErrorSurface | null | undefined,
+  brand?: 'jarvis'
 ): ErrorCardText {
   const provider = errorProviderName(thread, surface)
+  const providerMarker = '\uE000provider\uE001'
+  const providerForCopy = brand === 'jarvis' ? providerMarker : provider
+
+  // Only the app-owned translation mentions the legacy desktop name. Keep
+  // error details and provider-returned sentences untouched.
+  const ownCopy = ({ body, title }: ErrorCardText): ErrorCardText => brand === 'jarvis'
+    ? {
+        body: body.replace(/\bHermes\b/g, 'Jarvis').replaceAll(providerMarker, provider),
+        title: title.replace(/\bHermes\b/g, 'Jarvis').replaceAll(providerMarker, provider)
+      }
+    : { body, title }
 
   // A credential rejection is worded by HOW the provider is credentialed
   // (key vs sign-in), which the code alone (`auth`) cannot tell.
   if (surface?.layer === 'auth' && surface.authKind === 'oauth') {
-    return { body: thread.errorOauthExpired(provider), title: render(thread.errorAuthKinds.oauth.title, provider) }
+    return ownCopy({ body: thread.errorOauthExpired(providerForCopy), title: render(thread.errorAuthKinds.oauth.title, providerForCopy) })
   }
 
   if (surface?.layer === 'auth' && surface.authKind === 'api_key') {
     const copy = thread.errorAuthKinds.api_key
 
-    return { body: render(copy.body, provider), title: render(copy.title, provider) }
+    return ownCopy({ body: render(copy.body, providerForCopy), title: render(copy.title, providerForCopy) })
   }
 
   const key = errorCardKey(surface)
@@ -47,11 +59,12 @@ export function errorCardText(
 
     // A free-tier refusal arrives with the backend's own sentence (the wait, the
     // model, the way forward); the table body is only the fallback for an older backend.
-    return {
-      body: (isFreeTierSurface(surface) && surface?.message) || render(copy.body, provider),
-      title: render(copy.title, provider)
-    }
+    const translated = ownCopy({ body: render(copy.body, providerForCopy), title: render(copy.title, providerForCopy) })
+
+    return isFreeTierSurface(surface) && surface?.message
+      ? { ...translated, body: surface.message }
+      : translated
   }
 
-  return { body: thread.errorLayerBodies[key.layer], title: thread.errorLayers[key.layer] }
+  return ownCopy({ body: thread.errorLayerBodies[key.layer], title: thread.errorLayers[key.layer] })
 }

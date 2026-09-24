@@ -74,6 +74,7 @@ import { $connection, $currentModel, setModelPickerOpen } from '@/store/session'
 import { sessionTileDelegate } from '@/store/session-states'
 import { notifyThreadEditOpen } from '@/store/thread-scroll'
 import { $voicePlayback } from '@/store/voice-playback'
+import { useTheme } from '@/themes'
 
 // Stable empty identity for the settled-parts selector — a fresh [] per render
 // would re-derive the changed-files card on every message re-render.
@@ -533,9 +534,10 @@ const useErrorText = () =>
 
 const ErrorCardHeadline: FC = () => {
   const { t } = useI18n()
+  const { themeName } = useTheme()
   const surface = useErrorSurface()
   const errorText = useErrorText()
-  const { body, title } = errorCardText(t.assistant.thread, surface)
+  const { body, title } = errorCardText(t.assistant.thread, surface, themeName === 'jarvis' ? 'jarvis' : undefined)
 
   return (
     <>
