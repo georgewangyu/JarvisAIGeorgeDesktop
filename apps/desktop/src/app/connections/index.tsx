@@ -93,8 +93,14 @@ export function ConnectionsView() {
   const activeConnectionId = useStore($activeConnectionId)
   const activeProfile = useStore($activeGatewayProfile)
   const calendarScope = JSON.stringify([activeConnectionId, activeProfile])
-  const calendarScopeRef = useRef(calendarScope)
-  calendarScopeRef.current = calendarScope
+  const calendarScopeRef = useRef({ key: calendarScope })
+
+  // Each observed profile/connection switch gets a new identity. Comparing
+  // only the scope string would accept a late A result after A → B → A.
+  if (calendarScopeRef.current.key !== calendarScope) {
+    calendarScopeRef.current = { key: calendarScope }
+  }
+
   const currentModel = useStore($currentModel)
   const currentProvider = useStore($currentProvider)
   const [permissions, setPermissions] = useState<JarvisOnboardingPermissionSnapshot | null>(null)
@@ -293,6 +299,16 @@ export function ConnectionsView() {
       const result = await bridge.create(eventTitle.trim(), start.toISOString(), end.toISOString())
 
       if (owner !== calendarScopeRef.current) {return}
+
+      if (!result.ok && result.code === 'outcome_unknown') {
+        setCalendarError('Could not confirm whether the event was created. Check Calendar before trying again.')
+        setCalendarEvents(null)
+        const next = await bridge.status().catch(() => null)
+
+        if (owner === calendarScopeRef.current) {setCalendar(next)}
+
+        return
+      }
 
       if (!result.ok || !result.event) {throw new Error('create_failed')}
       setEventTitle('')

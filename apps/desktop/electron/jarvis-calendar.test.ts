@@ -228,4 +228,90 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
       .toEqual({ ok: false, code: 'not_connected' })
   })
+
+  it('does not return an old profile read after the native helper finishes', async () => {
+    const userData = testHome()
+    let scope = '[null,"alpha"]'
+    let finishList!: (value: { ok: true; command: string; events: unknown[] }) => void
+
+    const pendingList = new Promise<{ ok: true; command: string; events: unknown[] }>(resolve => {
+      finishList = resolve
+    })
+
+    const spy = vi.fn(async (_executable, input) => input.command === 'list-events'
+      ? pendingList
+      : { ok: true, command: input.command, authorization: 'fullAccess' })
+
+    const run = spy as typeof runCalendarHelper
+
+    const call = bridge(run, userData, () => scope)
+
+    expect(await call('connect')).toMatchObject({ connected: true })
+    const reading = call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z')
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(true))
+    scope = '[null,"beta"]'
+    finishList({ ok: true, command: 'list-events', events: [{ title: 'Alpha private event' }] })
+
+    expect(await reading).toEqual({ ok: false, code: 'scope_changed' })
+  })
+
+  it('reports an unknown create outcome after an owner switch instead of promising failure', async () => {
+    const userData = testHome()
+    let scope = '[null,"alpha"]'
+    let finishCreate!: (value: { ok: true; command: string; event: { id: string } }) => void
+
+    const pendingCreate = new Promise<{ ok: true; command: string; event: { id: string } }>(resolve => {
+      finishCreate = resolve
+    })
+
+    const spy = vi.fn(async (_executable, input) => input.command === 'create-event'
+      ? pendingCreate
+      : { ok: true, command: input.command, authorization: 'fullAccess' })
+
+    const run = spy as typeof runCalendarHelper
+
+    const call = bridge(run, userData, () => scope)
+
+    expect(await call('connect')).toMatchObject({ connected: true })
+    const creating = call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z')
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(true))
+    scope = '[null,"beta"]'
+    finishCreate({ ok: true, command: 'create-event', event: { id: 'alpha-event' } })
+
+    expect(await creating).toEqual({ ok: false, code: 'outcome_unknown' })
+    expect(spy.mock.calls.filter(([, input]) => input.command === 'create-event')).toHaveLength(1)
+  })
+
+  it('rechecks revoked macOS access after a read or create helper finishes', async () => {
+    const userData = testHome()
+    let granted = true
+    let finishRead!: (value: { ok: true; command: string; events: unknown[] }) => void
+    let finishCreate!: (value: { ok: true; command: string; event: { id: string } }) => void
+    const pendingRead = new Promise<{ ok: true; command: string; events: unknown[] }>(resolve => {finishRead = resolve})
+    const pendingCreate = new Promise<{ ok: true; command: string; event: { id: string } }>(resolve => {finishCreate = resolve})
+
+    const spy = vi.fn(async (_executable, input) => {
+      if (input.command === 'list-events') {return pendingRead}
+
+      if (input.command === 'create-event') {return pendingCreate}
+
+      return { ok: true, command: input.command, authorization: granted ? 'fullAccess' : 'denied' }
+    })
+
+    const call = bridge(spy as typeof runCalendarHelper, userData)
+
+    expect(await call('connect')).toMatchObject({ connected: true })
+    const reading = call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z')
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(true))
+    granted = false
+    finishRead({ ok: true, command: 'list-events', events: [{ title: 'Private event' }] })
+    expect(await reading).toEqual({ ok: false, code: 'not_connected' })
+
+    granted = true
+    const creating = call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z')
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(true))
+    granted = false
+    finishCreate({ ok: true, command: 'create-event', event: { id: 'synthetic' } })
+    expect(await creating).toEqual({ ok: false, code: 'outcome_unknown' })
+  })
 })

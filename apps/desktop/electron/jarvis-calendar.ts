@@ -250,23 +250,35 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     const configPath = configForScope(userData, scope)
     saveEnabled(configPath, false)
 
-    return status(configPath)
+    const result = await status(configPath)
+
+    return scopeForSender(event) === scope
+      ? result
+      : { authorization: 'unknown', connected: false, supported: false }
   })
   ipcMain.handle('jarvis:calendar:list', async (event, start: unknown, end: unknown) => {
     const scope = requireTrustedScope(event)
+    const configPath = scope ? configForScope(userData, scope) : ''
 
-    if (!scope || !(await status(configForScope(userData, scope))).connected || scopeForSender(event) !== scope) {
+    if (!scope || !(await status(configPath)).connected || scopeForSender(event) !== scope) {
       return { ok: false, code: 'not_connected' }
     }
 
     if (typeof start !== 'string' || typeof end !== 'string') {return { ok: false, code: 'invalid_input' }}
 
-    return call({ command: 'list-events', start, end, limit: 100 })
+    const result = await call({ command: 'list-events', start, end, limit: 100 })
+
+    if (scopeForSender(event) !== scope) {return { ok: false, code: 'scope_changed' }}
+
+    if (!(await status(configPath)).connected) {return { ok: false, code: 'not_connected' }}
+
+    return scopeForSender(event) === scope ? result : { ok: false, code: 'scope_changed' }
   })
   ipcMain.handle('jarvis:calendar:create', async (event, title: unknown, start: unknown, end: unknown) => {
     const scope = requireTrustedScope(event)
+    const configPath = scope ? configForScope(userData, scope) : ''
 
-    if (!scope || !(await status(configForScope(userData, scope))).connected || scopeForSender(event) !== scope) {
+    if (!scope || !(await status(configPath)).connected || scopeForSender(event) !== scope) {
       return { ok: false, code: 'not_connected' }
     }
 
@@ -274,6 +286,14 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
       return { ok: false, code: 'invalid_input' }
     }
 
-    return call({ command: 'create-event', title, start, end })
+    const result = await call({ command: 'create-event', title, start, end })
+
+    // The helper may already have created the event. Suppress the old owner's
+    // details in this renderer, but never claim it definitely did not happen.
+    if (scopeForSender(event) !== scope) {return { ok: false, code: 'outcome_unknown' }}
+
+    if (!(await status(configPath)).connected) {return { ok: false, code: 'outcome_unknown' }}
+
+    return scopeForSender(event) === scope ? result : { ok: false, code: 'outcome_unknown' }
   })
 }

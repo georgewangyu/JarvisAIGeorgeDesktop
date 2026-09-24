@@ -288,6 +288,29 @@ it('requires an explicit valid create action and reports a denied Calendar conne
   await waitFor(() => expect(create).toHaveBeenCalledOnce())
 })
 
+it('keeps a Calendar draft and warns when a create result is uncertain', async () => {
+  const status = vi.fn().mockResolvedValue({ supported: true, authorization: 'fullAccess', connected: true })
+  const create = vi.fn().mockResolvedValue({ ok: false, code: 'outcome_unknown' })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisCalendar: { status, connect: vi.fn(), disconnect: vi.fn(), list: vi.fn(), create } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'Create event' })).toBeTruthy())
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Event title' }), { target: { value: 'Synthetic draft' } })
+  fireEvent.change(within(section).getByLabelText('Event start'), { target: { value: '2026-09-23T10:00' } })
+  fireEvent.change(within(section).getByLabelText('Event end'), { target: { value: '2026-09-23T11:00' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'Create event' }))
+
+  expect(await within(section).findByText('Could not confirm whether the event was created. Check Calendar before trying again.')).toBeTruthy()
+  expect(within(section).getByRole('textbox', { name: 'Event title' })).toHaveProperty('value', 'Synthetic draft')
+  expect(within(section).queryByText('Event was not created. Check Calendar access and try again.')).toBeNull()
+})
+
 it('does not resurrect previously read events after Calendar access is revoked and reconnected', async () => {
   let granted = true
   const calendarStatus = () => ({ supported: true, authorization: granted ? 'fullAccess' : 'denied', connected: granted })
@@ -333,7 +356,7 @@ it('does not resurrect previously read events after Calendar access is revoked a
   expect(within(section).queryByText('Previously read event')).toBeNull()
 })
 
-it('drops a delayed Calendar read and draft when the active profile changes', async () => {
+it('drops a delayed Calendar read and draft even after the active profile changes away and back', async () => {
   $activeGatewayProfile.set('alpha')
   let finishList!: (value: unknown) => void
   const list = vi.fn(() => new Promise(resolve => {finishList = resolve}))
@@ -354,6 +377,8 @@ it('drops a delayed Calendar read and draft when the active profile changes', as
 
   act(() => $activeGatewayProfile.set('beta'))
   await waitFor(() => expect(within(section).getByRole('textbox', { name: 'Event title' })).toHaveProperty('value', ''))
+  act(() => $activeGatewayProfile.set('alpha'))
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'View upcoming' })).toBeTruthy())
   await act(async () => finishList({
     ok: true,
     command: 'list-events',
