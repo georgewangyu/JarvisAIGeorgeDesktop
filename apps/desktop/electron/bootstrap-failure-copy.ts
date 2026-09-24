@@ -62,13 +62,21 @@ const BOOTSTRAP_FAILURE_REMEDY =
  * explanation; the raw error follows on its own "Details:" line.
  */
 export function describeBootstrapFailure(failedStage: string | null | undefined, rawError: unknown): string {
+  const details = typeof rawError === 'string' && rawError.trim() ? rawError.trim() : 'unknown error'
+
+  if (/Failed to download install\.(?:sh|ps1): GitHub API HTTP 404\b/.test(details)) {
+    return (
+      'Jarvis could not find the installer for this exact app build. This preview may use a revision that is not yet published or no longer available. ' +
+      'Install the latest published build, or ask the person who provided this preview to publish its matching revision before retrying.\n' +
+      `Details: ${details}`
+    )
+  }
+
   const label = bootstrapStageLabel(failedStage)
 
   const lead = label
     ? `Setting up Jarvis stopped during the '${label}' step.`
     : 'Setting up Jarvis stopped before it could finish.'
-
-  const details = typeof rawError === 'string' && rawError.trim() ? rawError.trim() : 'unknown error'
 
   return `${lead} ${BOOTSTRAP_FAILURE_REMEDY}\nDetails: ${details}`
 }

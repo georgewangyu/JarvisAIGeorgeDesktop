@@ -30,6 +30,19 @@ test('missing stage and missing error still produce a complete message', () => {
   assert.match(message, /\nDetails: unknown error$/)
 })
 
+test('an unavailable build-pinned installer gets a specific recovery path', () => {
+  const raw = 'Failed to download install.sh: GitHub API HTTP 404'
+  const message = describeBootstrapFailure(null, raw)
+  const [lead, details] = message.split('\nDetails: ')
+
+  assert.match(lead, /installer for this exact app build/)
+  assert.match(lead, /matching revision before retrying/)
+  assert.doesNotMatch(lead, /antivirus|another copy|no internet/)
+  assert.equal(details, raw)
+  assert.match(describeBootstrapFailure(null, 'Failed to download install.ps1: GitHub API HTTP 404'), /matching revision/)
+  assert.match(describeBootstrapFailure(null, 'Failed to download install.sh: GitHub API HTTP 500'), /Common causes/)
+})
+
 test('missing-install-part copy names Repair Jarvis and keeps the path in Details', () => {
   const message = missingInstallPartMessage('Python environment missing at /home/me/.hermes/venv')
   const [lead, details] = message.split('Details: ')
