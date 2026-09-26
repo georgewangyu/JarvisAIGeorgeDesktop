@@ -19,6 +19,9 @@ class GenerateFeedRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=8000)
     retry_id: Optional[str] = None
     liked_edition_ids: list[str] = Field(default_factory=list, max_length=5)
+    # Values are "editionId:index" (zero-based) from complete, profile-owned stories.
+    # Device-local Love only reaches generation when explicitly included here.
+    liked_story_ids: list[str] = Field(default_factory=list, max_length=5)
 
 
 @contextmanager
@@ -48,6 +51,7 @@ def _generate(profile: Optional[str], body: GenerateFeedRequest):
         return request_edition(
             body.prompt, retry_id=body.retry_id,
             liked_edition_ids=body.liked_edition_ids,
+            liked_story_ids=body.liked_story_ids,
         )
 
 

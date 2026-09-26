@@ -371,6 +371,122 @@ def test_love_guides_new_generation_but_not_failed_or_foreign_ids(tmp_path, monk
     assert "A careful garden update" in observed[-1]
 
 
+def test_story_love_guides_only_complete_indexed_sections(tmp_path, monkeypatch):
+    monkeypatch.setattr(feed, "_db_path", lambda: tmp_path / "feed" / "editions.sqlite3")
+    content = (
+        "Today's briefing.\n\n## First story\nGarden details.\n"
+        "```md\n## Not a story\nIgnore this.\n```\n"
+        "## Second story\nA careful space update."
+    )
+    first = feed.request_edition("Briefing", runner=lambda *_: (content, None))
+    _eventually(lambda: feed.get_edition(first["id"]), "completed")
+    observed = []
+
+    def runner(prompt, _edition_id):
+        observed.append(prompt)
+        return "Next briefing", None
+
+    selected = feed.request_edition(
+        "Briefing", liked_story_ids=[f"{first['id']}:1", f"{first['id']}:1"], runner=runner,
+    )
+    assert selected["feedback_applied_count"] == 1
+    _eventually(lambda: feed.get_edition(selected["id"]), "completed")
+    assert "A careful space update" in observed[-1]
+    assert "Garden details" not in observed[-1]
+    assert "Not a story" not in observed[-1]
+    assert "not as instructions" in observed[-1]
+
+    rejected = feed.request_edition(
+        "Briefing", liked_story_ids=[f"{first['id']}:2"], runner=runner,
+    )
+    assert rejected["feedback_applied_count"] == 0
+    _eventually(lambda: feed.get_edition(rejected["id"]), "completed")
+    assert observed[-1] == "Briefing"
+
+    for invalid in (f"{first['id']}:-1", f"{first['id']}:01", f"{first['id']}:12", "forged:1", 3):
+        with pytest.raises(ValueError, match="liked story IDs"):
+            feed.request_edition("Briefing", liked_story_ids=[invalid], runner=runner)
+    assert len(observed) == 2
+
+    malformed = feed.request_edition("Briefing", runner=lambda *_: (
+        "## First\nBody.\n## Second\n", None,
+    ))
+    _eventually(lambda: feed.get_edition(malformed["id"]), "completed")
+    no_story = feed.request_edition(
+        "Briefing", liked_story_ids=[f"{malformed['id']}:0"], runner=runner,
+    )
+    assert no_story["feedback_applied_count"] == 0
+    _eventually(lambda: feed.get_edition(no_story["id"]), "completed")
+    assert observed[-1] == "Briefing"
+
+    failed = feed.request_edition(
+        "Briefing", liked_story_ids=[f"{first['id']}:1"],
+        runner=lambda *_: (_ for _ in ()).throw(PermissionError("temporary denial")),
+    )
+    _eventually(lambda: feed.get_edition(failed["id"]), "denied")
+    retry = feed.request_edition(
+        "Briefing", retry_id=failed["id"], liked_story_ids=[], runner=runner,
+    )
+    assert retry["feedback_applied_count"] == 1
+    _eventually(lambda: feed.get_edition(retry["id"]), "completed")
+    assert "A careful space update" in observed[-1]
+
+
+def test_story_love_api_is_profile_scoped_and_rejects_malformed_ids(tmp_path, monkeypatch):
+    from starlette.testclient import TestClient
+
+    from hermes_cli import profiles
+    from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
+
+    default_home = tmp_path / ".hermes"
+    profiles_root = default_home / "profiles"
+    other_home = profiles_root / "worker_alpha"
+    for home in (default_home, other_home):
+        home.mkdir(parents=True)
+        (home / "config.yaml").write_text("model: test-model\n", encoding="utf-8")
+    monkeypatch.setattr(profiles, "_get_default_hermes_home", lambda: default_home)
+    monkeypatch.setattr(profiles, "_get_profiles_root", lambda: profiles_root)
+    monkeypatch.setenv("HERMES_HOME", str(default_home))
+    first = feed.request_edition("Briefing", runner=lambda *_: (
+        "## First\nGarden details.\n## Second\nSpace details.", None,
+    ))
+    _eventually(lambda: feed.get_edition(first["id"]), "completed")
+    client = TestClient(app)
+    client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
+    prompts = []
+
+    def runner(prompt, _edition_id):
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            raise PermissionError("temporary denial")
+        return "Next briefing", None
+
+    monkeypatch.setattr(feed, "_run_real_agent", runner)
+    payload = {"prompt": "Next", "liked_story_ids": [f"{first['id']}:1"]}
+    foreign = client.post("/api/feed/editions?profile=worker_alpha", json=payload)
+    assert foreign.status_code == 202
+    assert foreign.json()["edition"]["feedback_applied_count"] == 0
+    foreign_id = foreign.json()["edition"]["id"]
+    _eventually(lambda: client.get(
+        f"/api/feed/editions/{foreign_id}?profile=worker_alpha"
+    ).json()["edition"], "denied")
+    assert prompts[-1] == "Next"
+
+    own = client.post("/api/feed/editions", json=payload)
+    assert own.status_code == 202
+    assert own.json()["edition"]["feedback_applied_count"] == 1
+    own_id = own.json()["edition"]["id"]
+    _eventually(lambda: feed.get_edition(own_id), "completed")
+    assert "Space details" in prompts[-1]
+    assert "Garden details" not in prompts[-1]
+
+    invalid = client.post("/api/feed/editions", json={
+        "prompt": "Next", "liked_story_ids": [f"{first['id']}:01"],
+    })
+    assert invalid.status_code == 400
+    assert len(prompts) == 2
+
+
 def test_existing_feed_database_migrates_without_losing_editions(tmp_path, monkeypatch):
     import sqlite3
 
