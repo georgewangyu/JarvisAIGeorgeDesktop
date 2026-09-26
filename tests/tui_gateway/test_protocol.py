@@ -679,6 +679,32 @@ def test_approval_respond_falls_back_to_request_id_lookup(server, monkeypatch):
     ]
 
 
+def test_approval_respond_rejects_ambiguous_request_owner(server):
+    """A stale UI id cannot choose an arbitrary owner when request ids collide."""
+    from tools import approval
+    from tools.approval_gateway_wait import _ApprovalEntry
+
+    request_id = "same-request"
+    owners = ("agent-one", "agent-two")
+    for index, owner in enumerate(owners):
+        server._sessions[f"ui-{index}"] = {"session_key": owner, "history": []}
+        with approval._lock:
+            approval._gateway_queues[approval._gateway_queue_key(owner)] = [
+                _ApprovalEntry({"request_id": request_id, "command": "synthetic"})
+            ]
+    try:
+        response = server.handle_request({
+            "id": "ambiguous", "method": "approval.respond",
+            "params": {"session_id": "stale-ui", "request_id": request_id, "choice": "once"},
+        })
+        assert response["error"]["code"] == 4001
+        assert all(approval.has_blocking_approval(owner) for owner in owners)
+    finally:
+        with approval._lock:
+            for owner in owners:
+                approval._gateway_queues.pop(approval._gateway_queue_key(owner), None)
+
+
 def test_approval_rpc_keeps_same_stored_id_in_separate_profiles(server, tmp_path, monkeypatch):
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
     from tools import approval

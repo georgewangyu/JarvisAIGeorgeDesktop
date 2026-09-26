@@ -1231,13 +1231,19 @@ def _approval_respond_session_fallback(params: dict):
             from tools.approval import list_gateway_approvals
             with _sessions_lock:
                 live = list(_sessions.items())
-            for sid, session in live:
+            match = None
+            for _sid, session in live:
                 key = str(session.get("session_key") or "")
                 with _session_profile_runtime_scope(session):
                     if key and any(
                         str(pending.get("request_id") or "") == request_id
                         for pending in list_gateway_approvals(key)):
-                        return session
+                        if match is not None:
+                            # A stale UI id grants no authority to pick between owners.
+                            return None
+                        match = session
+            if match is not None:
+                return match
         except Exception:
             logger.debug("approval.respond request_id fallback failed", exc_info=True)
     if target := str(params.get("session_id") or ""):
