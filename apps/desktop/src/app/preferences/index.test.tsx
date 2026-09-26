@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import { I18nProvider } from '@/i18n'
 import { $consumerSetupReview, closeConsumerSetupReview } from '@/store/consumer-setup-review'
 import { $desktopVersion } from '@/store/updates'
 
@@ -70,6 +71,25 @@ it('keeps supported local exports in a distinct Data controls page', () => {
   fireEvent.click(screen.getByRole('button', { name: 'General' }))
   expect(screen.getByRole('heading', { name: 'Language' })).toBeTruthy()
   expect(screen.queryByRole('button', { name: 'Download chat history' })).toBeNull()
+})
+
+it.each([
+  ['en', 'Data controls', 'not a complete backup or a way to delete your data'],
+  ['ja', 'データ管理', '完全なバックアップではなく、データを削除する機能でもありません'],
+  ['zh', '数据管理', '不是完整备份，也不能用来删除你的数据'],
+  ['zh-hant', '資料管理', '不是完整備份，也無法用來刪除你的資料']
+] as const)('keeps the Data controls limits visible in %s', (locale, title, limit) => {
+  render(
+    <I18nProvider configClient={null} initialLocale={locale}>
+      <MemoryRouter initialEntries={['/preferences?section=data-controls']}>
+        <Routes><Route element={<PreferencesView />} path="/preferences" /></Routes>
+      </MemoryRouter>
+    </I18nProvider>
+  )
+
+  expect(screen.getByRole('heading', { name: title })).toBeTruthy()
+  expect(screen.getByRole('button', { name: title }).getAttribute('aria-current')).toBe('page')
+  expect(screen.getByText(new RegExp(limit))).toBeTruthy()
 })
 
 it('reopens setup for review without resetting app state', () => {

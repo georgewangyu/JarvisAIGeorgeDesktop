@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
 
 import { type FeedEdition, generateFeedEdition, getFeedEditions } from '@/api/feed'
+import { I18nProvider } from '@/i18n'
 import { clearSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $activeGatewayProfile, $freshSessionRequest } from '@/store/profile'
 import { $connection } from '@/store/session'
@@ -49,7 +50,7 @@ it('sends only an explicit Generate request and saves a real returned edition', 
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
   expect(await screen.findByText('A saved briefing with a real answer.')).toBeTruthy()
-  expect(generateFeedEdition).toHaveBeenCalledWith('default', 'What matters today?', undefined, [])
+  expect(generateFeedEdition).toHaveBeenCalledWith('default', 'What matters today?', undefined, [], [])
 })
 
 it('saves Feed instructions per profile and never generates while editing', async () => {
@@ -84,7 +85,7 @@ it('cancels an unsaved Feed edit without changing the next Generate request', as
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(readFeedPrompt('default', null)).toBe(DEFAULT_FEED_PROMPT)
   fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
-  await waitFor(() => expect(generateFeedEdition).toHaveBeenCalledWith('default', DEFAULT_FEED_PROMPT, undefined, []))
+  await waitFor(() => expect(generateFeedEdition).toHaveBeenCalledWith('default', DEFAULT_FEED_PROMPT, undefined, [], []))
 })
 
 it('keeps the editor open when this Mac cannot save Feed instructions', async () => {
@@ -122,7 +123,7 @@ it('ignores a late generation result after switching to another profile', async 
   await act(async () => { resolveFirst({ ...edition, content: 'The first profile briefing.' }) })
   expect(screen.getByText('The second profile briefing.')).toBeTruthy()
   expect(screen.queryByText('The first profile briefing.')).toBeNull()
-  expect(generateFeedEdition).toHaveBeenNthCalledWith(2, 'other', DEFAULT_FEED_PROMPT, undefined, [])
+  expect(generateFeedEdition).toHaveBeenNthCalledWith(2, 'other', DEFAULT_FEED_PROMPT, undefined, [], [])
 })
 
 it('shows safe load failure copy and recovers on explicit Retry load', async () => {
@@ -155,7 +156,7 @@ it('retries a failed start rather than reloading editions, using the original pr
 
   expect(await screen.findByText('A saved briefing with a real answer.')).toBeTruthy()
   expect(generateFeedEdition).toHaveBeenCalledTimes(2)
-  expect(generateFeedEdition).toHaveBeenNthCalledWith(2, 'default', DEFAULT_FEED_PROMPT, undefined, [])
+  expect(generateFeedEdition).toHaveBeenNthCalledWith(2, 'default', DEFAULT_FEED_PROMPT, undefined, [], [])
   expect(getFeedEditions).toHaveBeenCalledTimes(1)
 })
 
@@ -239,7 +240,7 @@ it('shows durable failed editions and retries only by explicit choice with the o
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   expect(await screen.findByText('Jarvis is preparing this briefing…')).toBeTruthy()
   expect(screen.queryByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeNull()
-  expect(generateFeedEdition).toHaveBeenCalledWith('default', 'What matters today?', 'edition-1', [])
+  expect(generateFeedEdition).toHaveBeenCalledWith('default', 'What matters today?', 'edition-1', [], [])
 })
 
 it('hides backend paths and routes providerless generation to Connections', async () => {
@@ -287,8 +288,8 @@ it('sends loved edition IDs only with deliberate new generation and shows applie
   fireEvent.click(await screen.findByRole('button', { name: 'Love' }))
   expect(generateFeedEdition).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
-  expect(await screen.findByText('Guided by 1 loved briefing')).toBeTruthy()
-  expect(generateFeedEdition).toHaveBeenCalledWith('default', DEFAULT_FEED_PROMPT, undefined, ['edition-1'])
+  expect(await screen.findByText('Guided by 1 saved favorite')).toBeTruthy()
+  expect(generateFeedEdition).toHaveBeenCalledWith('default', DEFAULT_FEED_PROMPT, undefined, ['edition-1'], [])
 })
 
 it('does not carry edition Love to another profile', async () => {
@@ -376,6 +377,7 @@ it('renders only explicit complete stories as distinct cards and discusses one w
 it('saves reversible per-story Love without changing edition feedback or triggering generation', async () => {
   const stories = {
     ...edition,
+    id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     content: '## First story\nFirst details.\n\n## Second story\nSecond details.'
   }
 
@@ -384,11 +386,11 @@ it('saves reversible per-story Love without changing edition feedback or trigger
   const view = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
 
   expect(await screen.findByRole('button', { name: 'Love First story' })).toBeTruthy()
-  expect(screen.getByText('Story Love is saved on this Mac only; it does not guide future briefings.')).toBeTruthy()
+  expect(screen.getByText('Story Love stays on this Mac and can guide the next briefing only when you choose Generate.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Love Second story' }))
   expect(screen.getByRole('button', { name: 'Loved Second story' }).getAttribute('aria-pressed')).toBe('true')
   expect(screen.getByRole('button', { name: 'Love First story' }).getAttribute('aria-pressed')).toBe('false')
-  expect(readLovedFeedStories('default', null)).toEqual(['edition-1:1'])
+  expect(readLovedFeedStories('default', null)).toEqual(['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1'])
   expect(readLovedFeedEditions('default', null)).toEqual([])
   expect(generateFeedEdition).not.toHaveBeenCalled()
 
@@ -396,7 +398,7 @@ it('saves reversible per-story Love without changing edition feedback or trigger
   render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
   expect(await screen.findByRole('button', { name: 'Loved Second story' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
-  await waitFor(() => expect(generateFeedEdition).toHaveBeenCalledWith('default', DEFAULT_FEED_PROMPT, undefined, []))
+  await waitFor(() => expect(generateFeedEdition).toHaveBeenCalledWith('default', DEFAULT_FEED_PROMPT, undefined, [], ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:1']))
   fireEvent.click(screen.getByRole('button', { name: 'Loved Second story' }))
   expect(readLovedFeedStories('default', null)).toEqual([])
 })
@@ -417,6 +419,30 @@ it('keeps story Love in its profile and shows failed persistence without a false
   expect(screen.getByRole('alert').textContent).toContain('Could not save that choice')
   expect(screen.getByRole('button', { name: 'Love Second story' }).getAttribute('aria-pressed')).toBe('false')
   expect(readLovedFeedStories('other', null)).toEqual([])
+})
+
+it.each([
+  ['en', 'Love', 'Loved', 'Story Love stays on this Mac and can guide the next briefing only when you choose Generate.', 'Could not save that choice on this Mac.'],
+  ['ja', 'お気に入り', 'お気に入り済み', '「生成」を選んだときだけ次のブリーフィングの参考になります。', 'このMacに選択を保存できませんでした。'],
+  ['zh', '喜欢', '已喜欢', '仅在你选择“生成”时用于参考下一份简报。', '无法将此选择保存到这台 Mac'],
+  ['zh-hant', '喜歡', '已喜歡', '僅在你選擇「產生」時用於參考下一份簡報。', '無法將此選擇儲存到這台 Mac']
+] as const)('localizes per-story Love and its local-only limits in %s', async (locale, love, loved, disclosure, saveError) => {
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...edition, content: '## First story\nFirst details.\n\n## Second story\nSecond details.'
+  }])
+  render(<I18nProvider configClient={null} initialLocale={locale}>
+    <MemoryRouter><ConsumerFeedEditions /></MemoryRouter>
+  </I18nProvider>)
+
+  expect(await screen.findByRole('button', { name: `${love} First story` })).toBeTruthy()
+  expect(screen.getByText(new RegExp(disclosure))).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: `${love} First story` }))
+  expect(screen.getByRole('button', { name: `${loved} First story` }).getAttribute('aria-pressed')).toBe('true')
+  vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new Error('storage blocked') })
+  fireEvent.click(screen.getByRole('button', { name: `${love} Second story` }))
+  expect(screen.getByRole('alert').textContent).toContain(saveError)
+  expect(screen.getByRole('button', { name: `${love} Second story` }).getAttribute('aria-pressed')).toBe('false')
+  expect(generateFeedEdition).not.toHaveBeenCalled()
 })
 
 it('keeps an unstructured or incomplete generated edition in the legacy view', async () => {

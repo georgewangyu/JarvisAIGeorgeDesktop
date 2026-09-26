@@ -6,6 +6,7 @@ import { type FeedEdition, generateFeedEdition, getFeedEditions } from '@/api/fe
 import { MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { ExternalLink } from '@/lib/external-link'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
@@ -52,6 +53,7 @@ function FeedEditionContent({ content, editionId, lovedStoryIds, onDiscussItem, 
   onDiscussItem: (item: FeedEditionItem) => void
   onLoveItem: (index: number) => void
 }) {
+  const { storyLove } = useJarvisCopy()
   const parsed = parseFeedEditionItems(content)
 
   if (!parsed) {
@@ -61,7 +63,7 @@ function FeedEditionContent({ content, editionId, lovedStoryIds, onDiscussItem, 
   return <div className="mt-4 space-y-4">
     {parsed.introduction ? <div className="text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={parsed.introduction} /></div> : null}
     <p className="text-xs font-medium text-(--ui-text-tertiary)">{parsed.items.length} stories in this briefing</p>
-    <p className="text-xs text-(--ui-text-tertiary)">Story Love is saved on this Mac only; it does not guide future briefings.</p>
+    <p className="text-xs text-(--ui-text-tertiary)">{storyLove.disclosure}</p>
     <ol aria-label="Stories in this briefing" className="space-y-3">
       {parsed.items.map((story, index) => <li className="rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5" key={`${index}-${story.title}`}>
         <section aria-label={story.title}>
@@ -70,12 +72,12 @@ function FeedEditionContent({ content, editionId, lovedStoryIds, onDiscussItem, 
           <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={story.body} /></div>
           <div className="mt-3 flex items-center gap-3">
             <Button
-              aria-label={`${lovedStoryIds.includes(feedStoryId(editionId, index)) ? 'Loved' : 'Love'} ${story.title}`}
+              aria-label={`${lovedStoryIds.includes(feedStoryId(editionId, index)) ? storyLove.loved : storyLove.love} ${story.title}`}
               aria-pressed={lovedStoryIds.includes(feedStoryId(editionId, index))}
               onClick={() => onLoveItem(index)}
               size="sm"
               variant="text"
-            >{lovedStoryIds.includes(feedStoryId(editionId, index)) ? 'Loved' : 'Love'}</Button>
+            >{lovedStoryIds.includes(feedStoryId(editionId, index)) ? storyLove.loved : storyLove.love}</Button>
             <Button aria-label={`Discuss ${story.title}`} onClick={() => onDiscussItem(story)} size="sm" variant="textStrong">Discuss</Button>
           </div>
         </section>
@@ -85,6 +87,7 @@ function FeedEditionContent({ content, editionId, lovedStoryIds, onDiscussItem, 
 }
 
 export function ConsumerFeedEditions() {
+  const { storyLove } = useJarvisCopy()
   const navigate = useNavigate()
   const profile = useStore($activeGatewayProfile)
   const connection = useStore($connection)
@@ -163,7 +166,8 @@ export function ConsumerFeedEditions() {
     setError(null)
 
     try {
-      const edition = await generateFeedEdition(profile, text, retry?.id, retry ? [] : lovedEditions)
+      const validStoryIds = retry ? [] : lovedStories.filter(id => /^[0-9a-f]{32}:(0|[1-9]|1[01])$/.test(id)).slice(-5)
+      const edition = await generateFeedEdition(profile, text, retry?.id, retry ? [] : lovedEditions, validStoryIds)
 
       if (activeScope.current !== scope) {return}
 
@@ -220,7 +224,7 @@ export function ConsumerFeedEditions() {
     const loved = !lovedStories.includes(feedStoryId(editionId, index))
 
     if (!setFeedStoryLoved(profile, connectionId, editionId, index, loved)) {
-      setFeedbackError('Could not save that choice on this Mac. Please try again.')
+      setFeedbackError(storyLove.saveError)
 
       return
     }
@@ -303,7 +307,7 @@ export function ConsumerFeedEditions() {
                   <span>{item.status === 'generating' ? 'Working' : item.status === 'completed' ? 'Ready' : item.status === 'interrupted' ? 'Interrupted' : item.status === 'denied' ? 'Needs access' : 'Failed'}</span>
                 </div>
                 <h3 className="mt-3 line-clamp-2 text-xl font-semibold leading-snug tracking-tight text-(--ui-text-primary)">{item.prompt}</h3>
-                {(item.feedback_applied_count ?? 0) > 0 ? <p className="mt-2 text-xs text-(--ui-text-tertiary)">Guided by {item.feedback_applied_count} loved {item.feedback_applied_count === 1 ? 'briefing' : 'briefings'}</p> : null}
+                {(item.feedback_applied_count ?? 0) > 0 ? <p className="mt-2 text-xs text-(--ui-text-tertiary)">Guided by {item.feedback_applied_count} saved {item.feedback_applied_count === 1 ? 'favorite' : 'favorites'}</p> : null}
                 {item.status === 'completed' && item.content ? <>
                   <p className="mt-4 text-xs text-(--ui-text-tertiary)">Sources have not been verified. Links in this generated briefing may be inaccurate.</p>
                   {item.source_urls.length > 0 ? <div className="mt-2 text-xs text-(--ui-text-tertiary)">

@@ -31,11 +31,17 @@ export async function getFeedEditions(profile: string): Promise<FeedEdition[]> {
   return result.editions ?? []
 }
 
-export async function generateFeedEdition(profile: string, prompt: string, retryId?: string, likedEditionIds: string[] = []): Promise<FeedEdition> {
+export async function generateFeedEdition(
+  profile: string, prompt: string, retryId?: string, likedEditionIds: string[] = [], likedStoryIds: string[] = []
+): Promise<FeedEdition> {
   const result = await hermesApi<{ edition: FeedEdition }>({
     ...profileScoped(),
     ...connectionScoped(),
-    body: { prompt, ...(retryId ? { retry_id: retryId } : {}), liked_edition_ids: likedEditionIds.slice(0, 5) },
+    body: {
+      prompt, ...(retryId ? { retry_id: retryId } : {}),
+      liked_edition_ids: likedEditionIds.slice(0, 5),
+      liked_story_ids: likedStoryIds.slice(0, 5)
+    },
     method: 'POST',
     path: `/api/feed/editions?profile=${encodeURIComponent(profile)}`
   })

@@ -46,7 +46,7 @@ export function ConsumerSettingsLayout({ section, children }: ConsumerSettingsLa
           onClick={() => navigate(`${PREFERENCES_ROUTE}?section=data-controls`)}
           variant={section === 'data-controls' ? 'secondary' : 'ghost'}
         >
-          <Codicon name="archive" /> Data controls
+          <Codicon name="archive" /> {s.dataControls.title}
         </Button>
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto">

@@ -18,6 +18,16 @@ const copy = {
     quickChat: 'Quick chat',
     quickChatDetail: 'Open Jarvis from anywhere on your Mac.',
     connectionsNav: 'Connections',
+    dataControls: {
+      title: 'Data controls',
+      detail: 'Save copies of the local data Jarvis can currently export. These are not a complete backup or a way to delete your data.'
+    },
+    storyLove: {
+      love: 'Love',
+      loved: 'Loved',
+      disclosure: 'Story Love stays on this Mac and can guide the next briefing only when you choose Generate.',
+      saveError: 'Could not save that choice on this Mac. Please try again.'
+    },
     runResult: 'Automation result',
     runEmpty: 'No new update from this run.',
     runError: 'Could not load this result. Try again.',
@@ -90,6 +100,16 @@ const copy = {
     quickChat: 'クイックチャット',
     quickChatDetail: 'MacのどこからでもJarvisを開けます。',
     connectionsNav: '接続',
+    dataControls: {
+      title: 'データ管理',
+      detail: 'Jarvisが現在書き出せるローカルデータのコピーを保存できます。完全なバックアップではなく、データを削除する機能でもありません。'
+    },
+    storyLove: {
+      love: 'お気に入り',
+      loved: 'お気に入り済み',
+      disclosure: 'ストーリーのお気に入りはこのMacに保存され、「生成」を選んだときだけ次のブリーフィングの参考になります。',
+      saveError: 'このMacに選択を保存できませんでした。もう一度お試しください。'
+    },
     runResult: '自動化の結果',
     runEmpty: '今回の実行に新しい報告はありません。',
     runError: '結果を読み込めませんでした。もう一度お試しください。',
@@ -160,6 +180,16 @@ const copy = {
     quickChat: '快捷聊天',
     quickChatDetail: '在 Mac 上随时打开 Jarvis。',
     connectionsNav: '连接',
+    dataControls: {
+      title: '数据管理',
+      detail: '保存 Jarvis 目前可导出的本地数据副本。这不是完整备份，也不能用来删除你的数据。'
+    },
+    storyLove: {
+      love: '喜欢',
+      loved: '已喜欢',
+      disclosure: '对单篇故事的喜欢保存在这台 Mac 上，仅在你选择“生成”时用于参考下一份简报。',
+      saveError: '无法将此选择保存到这台 Mac，请重试。'
+    },
     runResult: '自动化结果',
     runEmpty: '此次运行没有新消息。',
     runError: '无法加载结果，请重试。',
@@ -230,6 +260,16 @@ const copy = {
     quickChat: '快速聊天',
     quickChatDetail: '在 Mac 上隨時開啟 Jarvis。',
     connectionsNav: '連線',
+    dataControls: {
+      title: '資料管理',
+      detail: '儲存 Jarvis 目前可匯出的本機資料副本。這不是完整備份，也無法用來刪除你的資料。'
+    },
+    storyLove: {
+      love: '喜歡',
+      loved: '已喜歡',
+      disclosure: '對單篇故事的喜歡儲存在這台 Mac 上，僅在你選擇「產生」時用於參考下一份簡報。',
+      saveError: '無法將此選擇儲存到這台 Mac，請再試一次。'
+    },
     runResult: '自動化結果',
     runEmpty: '此次執行沒有新消息。',
     runError: '無法載入結果，請重試。',

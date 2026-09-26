@@ -41,9 +41,9 @@ export function PreferencesView() {
     return (
       <ConsumerSettingsLayout section="data-controls">
         <header className="border-b border-(--ui-stroke-tertiary) pb-8">
-          <h1 className="text-3xl font-semibold tracking-tight">Data controls</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">{s.dataControls.title}</h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-            Save copies of the local data Jarvis can currently export. These are not a complete backup or a way to delete your data.
+            {s.dataControls.detail}
           </p>
         </header>
         <ConsumerChatExportSettings key={`chat-export-${profile}`} profile={profile} />
