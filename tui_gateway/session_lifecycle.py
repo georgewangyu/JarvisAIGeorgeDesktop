@@ -510,6 +510,7 @@ def _teardown_popped_session(session: dict | None, *, end_reason: str = "tui_clo
     """Finish a close after the caller has atomically detached the session."""
     if session is None:
         return False
+    lease = session.get("active_session_lease")
     run_thread = session.get("_run_thread")
     if end_reason != "tui_shutdown" and run_thread is not None and run_thread is not threading.current_thread():
         try:
@@ -523,6 +524,12 @@ def _teardown_popped_session(session: dict | None, *, end_reason: str = "tui_clo
     if end_reason != "tui_shutdown":
         _settle_isolated_turn_before_close(session)
     _teardown_session(session, end_reason=end_reason)
+    try:
+        turn_settled = run_thread is None or not run_thread.is_alive()
+    except Exception:
+        turn_settled = False
+    if turn_settled:
+        _requeue_jarvis_wakes_after_desktop_lease_exit(session, lease)
     return True
 
 
@@ -561,6 +568,57 @@ def _release_deferred_active_session_lease(session: dict) -> None:
     _deferred_active_session_leases.pop(str(lease.lease_id), None)
     if (err := _lease_retry(3, lease.release)) is not None:
         logger.warning("Failed to release deferred active session slot", exc_info=err)
+        return
+    _requeue_jarvis_wakes_after_desktop_lease_exit(session, lease)
+
+
+def _requeue_jarvis_wakes_after_desktop_lease_exit(session: dict, lease) -> None:
+    """Return exact deferred OS wakes to launchd after this chat no longer owns its lease.
+
+    Run outside the active-session registry guard: the handback API checks that
+    registry under its own lock. A new owner or a claimed receipt makes it refuse
+    the ticket, which remains quarantined for review.
+    """
+    if (lease is None or not getattr(lease, "enabled", False)
+            or not getattr(lease, "released", False)
+            or getattr(lease, "surface", None) != "desktop"
+            or _session_source(session).strip().lower() != "desktop"
+            or not session.get("profile_home")):
+        return
+    try:
+        import os
+        import re
+        import stat
+        from pathlib import Path
+
+        from tools.bot_live_delivery import find_jarvis_main_session_id
+        from tui_gateway.owner_event_inbox import (
+            jarvis_headless_activation_enabled, requeue_quarantined_jarvis_wake_ticket,
+        )
+
+        home = Path(session["profile_home"]).resolve()
+        if (not jarvis_headless_activation_enabled(home)
+                or find_jarvis_main_session_id(home) != lease.session_id):
+            return
+        quarantine = home / "runtime" / "jarvis_event_wake_quarantine"
+        try:
+            info = quarantine.lstat()
+        except FileNotFoundError:
+            return
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o077):
+            logger.warning("Jarvis wake quarantine is not a private owned directory")
+            return
+        for ticket in quarantine.iterdir():
+            match = re.fullmatch(r"[0-9a-f]{32}-([0-9a-f]{64})", ticket.name)
+            if match is None:
+                continue
+            try:
+                requeue_quarantined_jarvis_wake_ticket(home, match.group(1))
+            except Exception as exc:
+                logger.debug("Jarvis wake handback skipped %s: %s", ticket.name, exc)
+    except Exception:
+        logger.warning("Jarvis wake handback failed after desktop lease exit", exc_info=True)
 
 
 def _close_session_by_id(
