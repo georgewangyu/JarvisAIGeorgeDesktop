@@ -7,7 +7,6 @@ import { Codicon } from '@/components/ui/codicon'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useJarvisCopy } from '@/i18n/jarvis'
-import { sessionTitle } from '@/lib/chat-runtime'
 import { Activity, iconSize } from '@/lib/icons'
 import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
@@ -38,6 +37,12 @@ export interface UnavailableApprovalRow {
   connectionId: string
   profile: string
   session: SessionInfo
+}
+
+// A session preview can be model-authored text. Activity is navigation chrome,
+// so it must not turn that text into a durable title after a restart.
+function activityTitle(session: SessionInfo, kind: ConsumerActivityRow['kind']): string {
+  return session.title?.trim() || (kind === 'automation' ? 'Scheduled update' : 'Jarvis chat')
 }
 
 /** A lost approval has no executable control. Surface it only beside a
@@ -76,7 +81,7 @@ export function buildUnavailableApprovalRows(
     if (!previous || previous.seenAt < receipt.seenAt) {
       latestBySession.set(ownerKey, {
         row: {
-          id: session.id, title: sessionTitle(session),
+          id: session.id, title: activityTitle(session, 'chat'),
           connectionId: receipt.connectionId, profile: receipt.profile, session
         },
         seenAt: receipt.seenAt
@@ -125,18 +130,19 @@ export function buildConsumerActivityRows(
   automationSessions: readonly SessionInfo[] = []
 ): ConsumerActivityRow[] {
   const sessions = [...chatSessions, ...automationSessions]
-  const automationIds = new Set(automationSessions.map(session => session.id))
   const lastActiveById = new Map(sessions.map(session => [session.id, session.last_active]))
 
   return sessions
     .flatMap(session => {
       const source = normalizeSessionSource(session.source)
+      const isAutomation = automationSessions.includes(session)
 
       // An optimistic/backend row can briefly enter the recents store even
       // when its normal fetch excludes worker and channel sources. Activity
       // must never turn those private execution titles into consumer rows.
-      if (!automationIds.has(session.id) && (isMessagingSource(source) ||
-        ['cron', 'kanban', 'oneshot', 'subagent', 'tool'].includes(source ?? ''))) {
+      if (['subagent', 'tool'].includes(source ?? '') ||
+        (!isAutomation && (isMessagingSource(source) ||
+          ['cron', 'kanban', 'oneshot'].includes(source ?? '')))) {
         return []
       }
 
@@ -149,9 +155,9 @@ export function buildConsumerActivityRows(
       return [
         {
           id: session.id,
-          kind: automationIds.has(session.id) ? ('automation' as const) : ('chat' as const),
+          kind: isAutomation ? ('automation' as const) : ('chat' as const),
           status,
-          title: sessionTitle(session)
+          title: activityTitle(session, isAutomation ? 'automation' : 'chat')
         }
       ]
     })

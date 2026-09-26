@@ -173,6 +173,29 @@ describe('consumer activity rows', () => {
     ])
   })
 
+  it('does not promote model-authored previews into durable Activity labels', () => {
+    const preview = 'I delegated this to worker alpha'
+    const chat = { ...session('untitled-chat', '', 10), preview }
+    const automation = { ...session('untitled-run', '', 9), preview, source: 'cron' }
+    const worker = { ...session('untitled-run', 'Worker alpha', 8), source: 'subagent' }
+
+    const states: Record<string, SessionDotState> = {
+      'untitled-chat': 'unread', 'untitled-run': 'unread'
+    }
+
+    expect(buildConsumerActivityRows([chat, worker], states, [automation])).toEqual([
+      { id: 'untitled-chat', kind: 'chat', status: 'unread', title: 'Jarvis chat' },
+      { id: 'untitled-run', kind: 'automation', status: 'unread', title: 'Scheduled update' }
+    ])
+
+    const local = { connectionId: 'local', profile: 'default' }
+    setSessionOwnerHint(chat.id, local)
+    expect(buildUnavailableApprovalRows([chat], [{
+      ...local, storedSessionId: chat.id, runtimeSessionId: chat.id,
+      requestId: 'pending', state: 'interrupted', seenAt: 1
+    }])[0]?.title).toBe('Jarvis chat')
+  })
+
   it('never exposes worker or messaging rows if they enter recents optimistically', () => {
     const hidden = [
       { ...session('child', 'Private worker task', 10), source: 'subagent' },
