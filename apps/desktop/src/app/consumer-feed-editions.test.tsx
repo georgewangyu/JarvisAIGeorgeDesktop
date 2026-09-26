@@ -445,6 +445,51 @@ it.each([
   expect(generateFeedEdition).not.toHaveBeenCalled()
 })
 
+it.each([
+  ['ja', 'Feedの指示', '生成', 'このブリーフィングのストーリー：2件', '出典は検証されていません。', 'ページ内容を取得できたことは確認されていません', 'Original storyについて相談する', 'Feedで何を取り上げますか？'],
+  ['zh', '你的 Feed 指令', '生成', '这份简报有 2 条报道', '来源尚未核实。', '未确认已获取页面内容', '讨论 Original story', '你的 Feed 应关注什么？'],
+  ['zh-hant', '你的 Feed 指示', '產生', '這份簡報有 2 則報導', '來源尚未核實。', '未確認已擷取頁面內容', '討論 Original story', '你的 Feed 應涵蓋什麼？']
+] as const)('localizes Feed chrome and source honesty in %s while preserving generated content', async (
+  locale, instructions, generate, count, caveat, retrieval, discuss, promptLabel
+) => {
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...edition,
+    content: '## Original story\nUntranslated source content.\n\n## Another story\nOriginal details.',
+    source_urls: ['https://example.test/source']
+  }])
+  render(<I18nProvider configClient={null} initialLocale={locale}>
+    <MemoryRouter><ConsumerFeedEditions /></MemoryRouter>
+  </I18nProvider>)
+
+  expect(await screen.findByText(instructions)).toBeTruthy()
+  expect(screen.getByRole('button', { name: generate })).toBeTruthy()
+  expect(screen.getByText(count)).toBeTruthy()
+  expect(screen.getByText(new RegExp(caveat))).toBeTruthy()
+  expect(screen.getByRole('list', { name: locale === 'ja' ? '生成されたブリーフィングのリンクと取得状況' : locale === 'zh' ? '生成简报的链接及获取状态' : '產生的簡報連結及擷取狀態' }).textContent).toContain(retrieval)
+  expect(screen.getByRole('button', { name: discuss })).toBeTruthy()
+  expect(screen.getByText('Untranslated source content.')).toBeTruthy()
+
+  fireEvent.click(screen.getByRole('button', { name: locale === 'ja' ? '編集' : locale === 'zh' ? '编辑' : '編輯' }))
+  expect(screen.getByRole('textbox', { name: promptLabel })).toBeTruthy()
+  expect((screen.getByRole('textbox', { name: promptLabel }) as HTMLTextAreaElement).value).toBe(DEFAULT_FEED_PROMPT)
+})
+
+it.each([
+  ['ja', 'Feedのブリーフィングを読み込めませんでした。', '読み込みを再試行'],
+  ['zh', '无法加载 Feed 简报。', '重新加载'],
+  ['zh-hant', '無法載入 Feed 簡報。', '重新載入']
+] as const)('localizes the %s load failure and keeps retry actionable', async (locale, failure, retry) => {
+  vi.mocked(getFeedEditions).mockRejectedValueOnce(new Error('secret backend path')).mockResolvedValueOnce([])
+  render(<I18nProvider configClient={null} initialLocale={locale}>
+    <MemoryRouter><ConsumerFeedEditions /></MemoryRouter>
+  </I18nProvider>)
+
+  expect((await screen.findByRole('alert')).textContent).toContain(failure)
+  expect(screen.getByRole('alert').textContent).not.toContain('secret backend path')
+  fireEvent.click(screen.getByRole('button', { name: retry }))
+  await waitFor(() => expect(getFeedEditions).toHaveBeenCalledTimes(2))
+})
+
 it('keeps an unstructured or incomplete generated edition in the legacy view', async () => {
   vi.mocked(getFeedEditions).mockResolvedValue([{
     ...edition,
