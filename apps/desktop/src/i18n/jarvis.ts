@@ -82,6 +82,20 @@ const copy = {
       storiesLabel: 'Stories in this briefing', storyNumber: (index: number) => `Story ${index}`,
       discussStory: (title: string) => `Discuss ${title}`, dateUnavailable: 'Date unavailable'
     },
+    feedPage: {
+      title: 'Feed', description: 'Briefings you ask Jarvis to make, plus saved automation updates and recent activity.',
+      empty: 'Automation updates and recent chats will appear here when available.', recentChats: 'Recent chats',
+      untitledChat: 'Untitled chat', openConversation: 'Open this conversation', recently: 'Recently', justNow: 'Just now',
+      minutesAgo: (count: number) => `${count}m ago`, hoursAgo: (count: number) => `${count}h ago`, daysAgo: (count: number) => `${count}d ago`
+    },
+    feedUpdates: {
+      title: 'Automation updates', viewAutomations: 'View automations',
+      loveNotice: 'Love is saved on this Mac only; it does not change future updates.',
+      loading: 'Loading saved updates…', loadError: "Couldn't load automation updates.", partialError: 'Some updates couldn’t load.',
+      retry: 'Retry', empty: 'Completed automations will appear here after they produce an answer.',
+      scheduledTask: 'Scheduled task', love: 'Love', loved: 'Loved', discuss: 'Discuss', openAutomation: 'Open automation',
+      saveError: 'Could not save that choice on this Mac. Please try again.'
+    },
     runResult: 'Automation result',
     runEmpty: 'No new update from this run.',
     runError: 'Could not load this result. Try again.',
@@ -216,6 +230,20 @@ const copy = {
       storiesLabel: 'このブリーフィングのストーリー', storyNumber: (index: number) => `ストーリー${index}`,
       discussStory: (title: string) => `${title}について相談する`, dateUnavailable: '日付を確認できません'
     },
+    feedPage: {
+      title: 'Feed', description: 'Jarvisに依頼したブリーフィング、保存済みの自動化の更新、最近のアクティビティを表示します。',
+      empty: '自動化の更新や最近のチャットは、利用できるようになるとここに表示されます。', recentChats: '最近のチャット',
+      untitledChat: '無題のチャット', openConversation: 'この会話を開く', recently: '最近', justNow: 'たった今',
+      minutesAgo: (count: number) => `${count}分前`, hoursAgo: (count: number) => `${count}時間前`, daysAgo: (count: number) => `${count}日前`
+    },
+    feedUpdates: {
+      title: '自動化の更新', viewAutomations: '自動化を表示',
+      loveNotice: 'お気に入りはこのMacにのみ保存され、今後の更新内容には影響しません。',
+      loading: '保存済みの更新を読み込み中…', loadError: '自動化の更新を読み込めませんでした。', partialError: '一部の更新を読み込めませんでした。',
+      retry: '再試行', empty: '完了した自動化が回答を生成すると、ここに表示されます。',
+      scheduledTask: 'スケジュールされたタスク', love: 'お気に入り', loved: 'お気に入り済み', discuss: '相談する', openAutomation: '自動化を開く',
+      saveError: 'このMacに選択を保存できませんでした。もう一度お試しください。'
+    },
     runResult: '自動化の結果',
     runEmpty: '今回の実行に新しい報告はありません。',
     runError: '結果を読み込めませんでした。もう一度お試しください。',
@@ -348,6 +376,20 @@ const copy = {
       storiesLabel: '这份简报的报道', storyNumber: (index: number) => `报道 ${index}`,
       discussStory: (title: string) => `讨论 ${title}`, dateUnavailable: '日期不可用'
     },
+    feedPage: {
+      title: 'Feed', description: '查看你让 Jarvis 制作的简报、已保存的自动化更新和近期活动。',
+      empty: '有自动化更新或近期聊天时，它们会显示在这里。', recentChats: '近期聊天',
+      untitledChat: '未命名聊天', openConversation: '打开此对话', recently: '最近', justNow: '刚刚',
+      minutesAgo: (count: number) => `${count} 分钟前`, hoursAgo: (count: number) => `${count} 小时前`, daysAgo: (count: number) => `${count} 天前`
+    },
+    feedUpdates: {
+      title: '自动化更新', viewAutomations: '查看自动化',
+      loveNotice: '喜欢记录仅保存在这台 Mac 上，不会改变今后的更新。',
+      loading: '正在加载已保存的更新…', loadError: '无法加载自动化更新。', partialError: '部分更新无法加载。',
+      retry: '重试', empty: '已完成的自动化产生回答后会显示在这里。',
+      scheduledTask: '定时任务', love: '喜欢', loved: '已喜欢', discuss: '讨论', openAutomation: '打开自动化',
+      saveError: '无法在这台 Mac 上保存你的选择。请重试。'
+    },
     runResult: '自动化结果',
     runEmpty: '此次运行没有新消息。',
     runError: '无法加载结果，请重试。',
@@ -479,6 +521,20 @@ const copy = {
       storyCount: (count: number) => `這份簡報有 ${count} 則報導`,
       storiesLabel: '這份簡報的報導', storyNumber: (index: number) => `報導 ${index}`,
       discussStory: (title: string) => `討論 ${title}`, dateUnavailable: '無法取得日期'
+    },
+    feedPage: {
+      title: 'Feed', description: '查看你請 Jarvis 製作的簡報、已儲存的自動化更新和近期活動。',
+      empty: '有自動化更新或近期聊天時，它們會顯示在這裡。', recentChats: '近期聊天',
+      untitledChat: '未命名聊天', openConversation: '開啟此對話', recently: '最近', justNow: '剛剛',
+      minutesAgo: (count: number) => `${count} 分鐘前`, hoursAgo: (count: number) => `${count} 小時前`, daysAgo: (count: number) => `${count} 天前`
+    },
+    feedUpdates: {
+      title: '自動化更新', viewAutomations: '檢視自動化',
+      loveNotice: '喜歡紀錄僅儲存在這台 Mac 上，不會改變往後的更新。',
+      loading: '正在載入已儲存的更新…', loadError: '無法載入自動化更新。', partialError: '部分更新無法載入。',
+      retry: '重試', empty: '已完成的自動化產生回答後會顯示在這裡。',
+      scheduledTask: '排程任務', love: '喜歡', loved: '已喜歡', discuss: '討論', openAutomation: '開啟自動化',
+      saveError: '無法在這台 Mac 上儲存你的選擇。請重試。'
     },
     runResult: '自動化結果',
     runEmpty: '此次執行沒有新消息。',

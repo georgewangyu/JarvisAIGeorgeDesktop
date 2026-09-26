@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 import { getCronJobRuns } from '@/api/cron'
 import { getSessionMessages } from '@/api/sessions'
+import { I18nProvider } from '@/i18n'
 import { clearSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronFocusJobId, $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $activeGatewayProfile, $freshSessionRequest } from '@/store/profile'
@@ -85,6 +86,46 @@ it('does not invent a Feed update when an automation has no completed answer', a
 
   expect(await screen.findByText('Completed automations will appear here after they produce an answer.')).toBeTruthy()
   expect(getSessionMessages).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['ja', '自動化の更新', 'お気に入りはこのMacにのみ保存され', '完了した自動化が回答を生成すると'],
+  ['zh', '自动化更新', '喜欢记录仅保存在这台 Mac 上', '已完成的自动化产生回答后'],
+  ['zh-hant', '自動化更新', '喜歡紀錄僅儲存在這台 Mac 上', '已完成的自動化產生回答後']
+] as const)('localizes automation update controls and empty state in %s', async (locale, title, notice, empty) => {
+  $cronJobs.set([{ id: 'quiet', name: 'Quiet task', enabled: true }])
+  vi.mocked(getCronJobRuns).mockResolvedValue([])
+
+  render(<I18nProvider configClient={null} initialLocale={locale}>
+    <MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>
+  </I18nProvider>)
+
+  expect(screen.getByRole('region', { name: title })).toBeTruthy()
+  expect(screen.getByRole('button', { name: locale === 'ja' ? '自動化を表示' : locale === 'zh' ? '查看自动化' : '檢視自動化' })).toBeTruthy()
+  expect(screen.getByText(new RegExp(notice))).toBeTruthy()
+  expect(await screen.findByText(new RegExp(empty))).toBeTruthy()
+})
+
+it.each([
+  ['ja', '自動化の更新を読み込めませんでした。', '再試行', 'お気に入り'],
+  ['zh', '无法加载自动化更新。', '重试', '喜欢'],
+  ['zh-hant', '無法載入自動化更新。', '重試', '喜歡']
+] as const)('localizes update failure and recovery in %s while preserving the answer', async (locale, failure, retry, love) => {
+  $cronJobs.set([{ id: 'briefing', name: 'Morning briefing', enabled: true }])
+  vi.mocked(getCronJobRuns).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce([
+    makeSessionInfo({ id: 'saved-edition', is_active: false, last_active: 100 })
+  ])
+  vi.mocked(getSessionMessages).mockResolvedValue({ messages: [{ role: 'assistant', content: 'Original saved answer.' }] } as never)
+
+  render(<I18nProvider configClient={null} initialLocale={locale}>
+    <MemoryRouter><ConsumerFeedUpdates /></MemoryRouter>
+  </I18nProvider>)
+
+  expect((await screen.findByRole('alert')).textContent).toContain(failure)
+  fireEvent.click(screen.getByRole('button', { name: retry }))
+  expect(await screen.findByText('Original saved answer.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: love })).toBeTruthy()
+  expect(screen.queryByRole('alert')).toBeNull()
 })
 
 it('does not show a prior profile update while the next profile loads', async () => {

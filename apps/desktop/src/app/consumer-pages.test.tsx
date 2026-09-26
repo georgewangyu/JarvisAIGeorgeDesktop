@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 vi.mock('@/api/feed', () => ({ getFeedEditions: vi.fn(async () => []), generateFeedEdition: vi.fn() }))
 
+import { I18nProvider } from '@/i18n'
 import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs } from '@/store/cron'
 import { $gateway } from '@/store/gateway'
@@ -55,6 +56,22 @@ it('shows a neutral time when a fresh chat has no valid activity timestamp yet',
 
   expect(screen.getByRole('button', { name: /Jarvis.*Recently/ })).toBeTruthy()
   expect(screen.queryByText(/NaN/)).toBeNull()
+})
+
+it.each([
+  ['ja', '最近のチャット', '無題のチャット', '最近'],
+  ['zh', '近期聊天', '未命名聊天', '最近'],
+  ['zh-hant', '近期聊天', '未命名聊天', '最近']
+] as const)('localizes Feed page and recent chat fallback in %s', (locale, recentChats, untitledChat, recently) => {
+  $sessions.set([makeSessionInfo({ id: 'fresh-chat', last_active: Number.NaN, title: '', preview: '' })])
+
+  render(<I18nProvider configClient={null} initialLocale={locale}>
+    <MemoryRouter><ConsumerFeedView /></MemoryRouter>
+  </I18nProvider>)
+
+  expect(screen.getByRole('heading', { name: 'Feed' })).toBeTruthy()
+  expect(screen.getByRole('heading', { name: recentChats })).toBeTruthy()
+  expect(screen.getByRole('button', { name: new RegExp(`${untitledChat}.*${recently}`) })).toBeTruthy()
 })
 
 it('never exposes background or messaging sessions as recent chats', () => {

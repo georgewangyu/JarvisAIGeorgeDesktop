@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { isMessagingSource, normalizeSessionSource } from '@/lib/session-source'
 import { cn } from '@/lib/utils'
 import { type ComposerAttachment, stashSessionDraft, takeSessionDraft } from '@/store/composer'
@@ -57,34 +58,35 @@ function EmptyState({ children, icon, title }: { children: ReactNode; icon: stri
   )
 }
 
-function formatRelativeTime(seconds: number): string {
+function formatRelativeTime(seconds: number, copy: ReturnType<typeof useJarvisCopy>['feedPage']): string {
   if (!Number.isFinite(seconds) || seconds <= 0) {
-    return 'Recently'
+    return copy.recently
   }
 
   const elapsed = Math.max(0, Date.now() - seconds * 1000)
   const minutes = Math.floor(elapsed / 60_000)
 
   if (minutes < 1) {
-    return 'Just now'
+    return copy.justNow
   }
 
   if (minutes < 60) {
-    return `${minutes}m ago`
+    return copy.minutesAgo(minutes)
   }
 
   const hours = Math.floor(minutes / 60)
 
   if (hours < 24) {
-    return `${hours}h ago`
+    return copy.hoursAgo(hours)
   }
 
   const days = Math.floor(hours / 24)
 
-  return `${days}d ago`
+  return copy.daysAgo(days)
 }
 
 export function ConsumerFeedView() {
+  const { feedPage } = useJarvisCopy()
   const navigate = useNavigate()
   const sessions = useStore($sessions)
   const jobs = useStore($cronJobs)
@@ -102,17 +104,17 @@ export function ConsumerFeedView() {
     .slice(0, 8)
 
   return (
-    <ConsumerPage description="Briefings you ask Jarvis to make, plus saved automation updates and recent activity." title="Feed">
+    <ConsumerPage description={feedPage.description} title={feedPage.title}>
       <div className="mb-10"><ConsumerFeedEditions /></div>
       {recentSessions.length === 0 && jobs.length === 0 ? (
-        <p className="text-sm text-(--ui-text-tertiary)">Automation updates and recent chats will appear here when available.</p>
+        <p className="text-sm text-(--ui-text-tertiary)">{feedPage.empty}</p>
       ) : (
         <div className="space-y-8">
           <ConsumerFeedUpdates />
           {recentSessions.length > 0 ? (
             <section>
               <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
-                Recent chats
+                {feedPage.recentChats}
               </h2>
               <div className="mt-3 overflow-hidden rounded-3xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
                 {recentSessions.map(session => (
@@ -126,13 +128,13 @@ export function ConsumerFeedView() {
                       <Codicon name="comment-discussion" size="1rem" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{session.title || 'Untitled chat'}</span>
+                      <span className="block truncate font-medium">{session.title || feedPage.untitledChat}</span>
                       <span className="mt-1 block truncate text-sm text-(--ui-text-tertiary)">
-                        {session.preview || 'Open this conversation'}
+                        {session.preview || feedPage.openConversation}
                       </span>
                     </span>
                     <span className="shrink-0 text-xs text-(--ui-text-tertiary)">
-                      {formatRelativeTime(session.last_active)}
+                      {formatRelativeTime(session.last_active, feedPage)}
                     </span>
                   </button>
                 ))}

@@ -6,6 +6,8 @@ import { getCronJobRuns } from '@/api/cron'
 import { getSessionMessages } from '@/api/sessions'
 import { MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { Button } from '@/components/ui/button'
+import { useI18n } from '@/i18n'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $cronJobs, setCronFocusJobId } from '@/store/cron'
 import { $cronChangeTick } from '@/store/live-sync'
@@ -46,6 +48,8 @@ function recentFeedJobs(jobs: CronJob[]): CronJob[] {
 }
 
 export function ConsumerFeedUpdates() {
+  const { feedUpdates } = useJarvisCopy()
+  const { locale } = useI18n()
   const navigate = useNavigate()
   const jobs = useStore($cronJobs)
   const profile = useStore($activeGatewayProfile)
@@ -75,7 +79,7 @@ export function ConsumerFeedUpdates() {
     const loved = !lovedRuns.includes(runId)
 
     if (!setFeedRunLoved(profile, connectionId, runId, loved)) {
-      notify({ id: 'feed-feedback-save-failed', kind: 'error', message: 'Could not save that choice on this Mac. Please try again.' })
+      notify({ id: 'feed-feedback-save-failed', kind: 'error', message: feedUpdates.saveError })
 
       return
     }
@@ -150,47 +154,47 @@ export function ConsumerFeedUpdates() {
   }
 
   return (
-    <section aria-label="Automation updates">
+    <section aria-label={feedUpdates.title}>
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-(--ui-text-tertiary)">
-          Automation updates
+          {feedUpdates.title}
         </h2>
         <Button onClick={() => navigate(CRON_ROUTE)} size="sm" variant="text">
-          View automations
+          {feedUpdates.viewAutomations}
         </Button>
       </div>
-      <p className="mt-1 text-xs text-(--ui-text-tertiary)">Love is saved on this Mac only; it does not change future updates.</p>
+      <p className="mt-1 text-xs text-(--ui-text-tertiary)">{feedUpdates.loveNotice}</p>
       {state.kind === 'loading' ? (
-        <p className="mt-4 text-sm text-(--ui-text-tertiary)" role="status">Loading saved updates…</p>
+        <p className="mt-4 text-sm text-(--ui-text-tertiary)" role="status">{feedUpdates.loading}</p>
       ) : state.kind === 'error' ? (
         <div className="mt-4 flex items-center gap-4 text-sm text-(--ui-text-secondary)" role="alert">
-          <span>Couldn't load automation updates.</span>
-          <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">Retry</Button>
+          <span>{feedUpdates.loadError}</span>
+          <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">{feedUpdates.retry}</Button>
         </div>
       ) : state.items.length === 0 ? (
         <div className="mt-4 text-sm text-(--ui-text-tertiary)">
           {state.partialFailure ? (
             <div className="flex items-center gap-4" role="alert">
-              <span>Some updates couldn’t load.</span>
-              <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">Retry</Button>
+              <span>{feedUpdates.partialError}</span>
+              <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">{feedUpdates.retry}</Button>
             </div>
-          ) : <p>Completed automations will appear here after they produce an answer.</p>}
+          ) : <p>{feedUpdates.empty}</p>}
         </div>
       ) : (
         <div className="mt-3">
           {state.partialFailure ? (
             <div className="flex items-center gap-4 text-sm text-(--ui-text-secondary)" role="alert">
-              <span>Some updates couldn’t load.</span>
-              <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">Retry</Button>
+              <span>{feedUpdates.partialError}</span>
+              <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="text">{feedUpdates.retry}</Button>
             </div>
           ) : null}
           <div className="divide-y divide-(--ui-stroke-tertiary)">
             {state.items.map(item => (
               <article className="py-6 first:pt-2" key={item.runId}>
               <div className="flex items-baseline justify-between gap-4">
-                <h3 className="font-semibold">{item.job.name || 'Scheduled task'}</h3>
+                <h3 className="font-semibold">{item.job.name || feedUpdates.scheduledTask}</h3>
                 <time className="shrink-0 text-xs text-(--ui-text-tertiary)" dateTime={new Date(item.time * 1000).toISOString()}>
-                  {new Date(item.time * 1000).toLocaleDateString()}
+                  {new Date(item.time * 1000).toLocaleDateString(locale)}
                 </time>
               </div>
               <div className="mt-3 max-h-52 overflow-hidden text-sm leading-6">
@@ -198,9 +202,9 @@ export function ConsumerFeedUpdates() {
               </div>
               <div className="mt-3 flex items-center gap-5">
                 <Button aria-pressed={lovedRuns.includes(item.runId)} onClick={() => toggleLove(item.runId)} size="sm" variant="text">
-                  {lovedRuns.includes(item.runId) ? 'Loved' : 'Love'}
+                  {lovedRuns.includes(item.runId) ? feedUpdates.loved : feedUpdates.love}
                 </Button>
-                <Button onClick={() => discuss(item)} size="sm" variant="textStrong">Discuss</Button>
+                <Button onClick={() => discuss(item)} size="sm" variant="textStrong">{feedUpdates.discuss}</Button>
                 <Button
                   onClick={() => {
                     setCronFocusJobId(item.job.id)
@@ -209,7 +213,7 @@ export function ConsumerFeedUpdates() {
                   size="sm"
                   variant="text"
                 >
-                  Open automation
+                  {feedUpdates.openAutomation}
                 </Button>
               </div>
               </article>
