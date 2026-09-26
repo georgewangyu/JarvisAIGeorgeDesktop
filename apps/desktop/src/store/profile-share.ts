@@ -192,17 +192,21 @@ export async function runExportProfileFlow(profile?: string, options?: { consume
 
     if (options?.shouldContinue?.() === false) {return null}
 
-    notify({ kind: 'success', title: translateNow('profiles.exported'), message: archive })
+    if (!options?.consumer) {
+      notify({ kind: 'success', title: translateNow('profiles.exported'), message: archive })
+    }
 
     return archive
   } catch (error) {
     if (options?.shouldContinue?.() === false) {return null}
 
-    notifyError(error, translateNow('profiles.failedExport'))
-
     if (options?.consumer) {
+      // The Settings surface owns safe retry copy. Backend errors and local
+      // paths must not escape through the global notification layer.
       throw error
     }
+
+    notifyError(error, translateNow('profiles.failedExport'))
 
     return null
   }

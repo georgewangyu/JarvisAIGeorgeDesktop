@@ -29,6 +29,7 @@ const { modePref, skinPref } = await import('@/themes/context')
 const { $userThemes } = await import('@/themes/user-themes')
 const { $layoutTree } = await import('@/components/pane-shell/tree/store')
 const { exportConsumerSetupArchive, exportProfileArchive } = await import('@/hermes')
+const { $notifications } = await import('./notifications')
 
 // isValidTheme only requires background/foreground/primary at runtime; the
 // static type wants the full palette, hence the cast.
@@ -41,6 +42,7 @@ const roseTheme = {
 
 beforeEach(() => {
   window.localStorage.clear()
+  $notifications.set([])
   $userThemes.set({})
   $profileColors.set({})
 })
@@ -141,9 +143,25 @@ describe('exportProfileBundle', () => {
 
     try {
       await runExportProfileFlow('glam', { consumer: true })
+      expect($notifications.get()).toEqual([])
       await runExportProfileFlow('glam')
       expect(exportConsumerSetupArchive).toHaveBeenCalledTimes(1)
       expect(exportProfileArchive).toHaveBeenCalledTimes(1)
+      expect($notifications.get().some(notification => notification.message === '/tmp/out.tar.gz')).toBe(true)
+    } finally {
+      window.hermesDesktop = original
+    }
+  })
+
+  it('keeps consumer export failure diagnostics out of global notifications', async () => {
+    const original = window.hermesDesktop
+
+    window.hermesDesktop = { ...original, selectSavePath: vi.fn(async () => '/synthetic/setup.tar.gz') } as typeof original
+    vi.mocked(exportConsumerSetupArchive).mockRejectedValueOnce(new Error('private path /synthetic/runtime/auth.json'))
+
+    try {
+      await expect(runExportProfileFlow('glam', { consumer: true })).rejects.toThrow()
+      expect($notifications.get()).toEqual([])
     } finally {
       window.hermesDesktop = original
     }

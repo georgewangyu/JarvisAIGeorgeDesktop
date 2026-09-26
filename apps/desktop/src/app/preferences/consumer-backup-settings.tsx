@@ -9,6 +9,7 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
   const connection = useStore($connection)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [result, setResult] = useState('')
   const local = connection?.mode === 'local'
   const request = useRef(0)
 
@@ -19,6 +20,7 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
 
     setSaving(false)
     setError('')
+    setResult('')
 
     return () => { request.current = current + 1 }
   }, [local, profile])
@@ -38,9 +40,14 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
 
     setSaving(true)
     setError('')
+    setResult('')
 
     try {
-      await runExportProfileFlow(profile, { consumer: true, shouldContinue: () => request.current === current })
+      const archive = await runExportProfileFlow(profile, { consumer: true, shouldContinue: () => request.current === current })
+
+      if (archive && request.current === current) {
+        setResult('Assistant setup saved to the location you chose.')
+      }
     } catch {
       if (request.current === current) {setError('Couldn’t save assistant setup. Choose another location and try again.')}
     } finally {
@@ -59,6 +66,7 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
       </Button>
       {!local && <p className="mt-2 text-xs text-muted-foreground">Available when Jarvis is running on this Mac.</p>}
       {error && <p className="mt-2 text-sm text-destructive" role="alert">{error}</p>}
+      {result && <p className="mt-2 text-sm" role="status">{result}</p>}
     </section>
   )
 }

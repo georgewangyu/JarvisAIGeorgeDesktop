@@ -28,6 +28,8 @@ it('exports the selected local profile only after an explicit click', async () =
   expect(screen.getByText(/chat history, routines, sign-in files, and internal worker data aren’t included/i)).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
   await waitFor(() => expect(exportFlow).toHaveBeenCalledWith('writer', expect.objectContaining({ consumer: true })))
+  expect((await screen.findByRole('status')).textContent).toBe('Assistant setup saved to the location you chose.')
+  expect(screen.queryByText('/synthetic/backup.tar.gz')).toBeNull()
 })
 
 it('does not offer a local save path for a remote backend', () => {
@@ -48,6 +50,7 @@ it('shows a retryable picker error without exporting', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
   await waitFor(() => expect(exportFlow).toHaveBeenCalledTimes(2))
   await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  expect(screen.queryByRole('status')).toBeNull()
 })
 
 it('reports an unavailable save dialog and recovers when it becomes available', async () => {
@@ -82,5 +85,6 @@ it('retires an old profile save and lets the new profile start another', async (
   expect(screen.getByRole('button', { name: 'Save setup backup' }).hasAttribute('disabled')).toBe(false)
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
   await waitFor(() => expect(exportFlow).toHaveBeenCalledWith('reader', expect.objectContaining({ consumer: true })))
+  expect((await screen.findByRole('status')).textContent).toBe('Assistant setup saved to the location you chose.')
   finishOld()
 })
