@@ -17,15 +17,18 @@ it('persists reversible choices per profile and connection across a fresh read',
 
 it('persists feedback for a saved-goal suggestion without accepting arbitrary ids', () => {
   expect(setIdeaFeedback('default', null, 'goal:synthetic-goal_1', 'saved')).toBe(true)
-  expect(readIdeaFeedback('default', null)).toEqual({ 'goal:synthetic-goal_1': 'saved' })
+  expect(setIdeaFeedback('default', null, 'goal-review:synthetic-goal_1', 'saved')).toBe(true)
+  expect(readIdeaFeedback('default', null)).toEqual({ 'goal:synthetic-goal_1': 'saved', 'goal-review:synthetic-goal_1': 'saved' })
   expect(readIdeaFeedback('other', null)).toEqual({})
   expect(setIdeaFeedback('default', null, 'goal:../../other', 'done')).toBe(false)
+  expect(setIdeaFeedback('default', null, 'goal-review:../../other', 'done')).toBe(false)
   expect(setIdeaFeedback('default', null, `goal:${'x'.repeat(129)}`, 'done')).toBe(false)
 
   migrateIdeaFeedbackForProfile('default', 'renamed')
-  expect(readIdeaFeedback('renamed', null)).toEqual({ 'goal:synthetic-goal_1': 'saved' })
+  expect(readIdeaFeedback('renamed', null)).toEqual({ 'goal:synthetic-goal_1': 'saved', 'goal-review:synthetic-goal_1': 'saved' })
   expect(readIdeaFeedback('default', null)).toEqual({})
   expect(setIdeaFeedback('renamed', null, 'goal:synthetic-goal_1', null)).toBe(true)
+  expect(setIdeaFeedback('renamed', null, 'goal-review:synthetic-goal_1', null)).toBe(true)
   expect(readIdeaFeedback('renamed', null)).toEqual({})
 })
 

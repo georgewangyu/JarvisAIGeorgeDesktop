@@ -285,15 +285,28 @@ export function ConsumerIdeasView() {
       prompt: `Help me make progress on my saved goal: ${row.goal.title}. Ask what has changed and suggest one manageable next step. Do not take action without checking with me.`
     }))
 
-  const allIdeas = [...goalIdeas, ...IDEA_GROUPS.reduce<IdeaRow[]>((items, group) => [...items, ...group.ideas], [])]
+  const completedGoalIdeas: IdeaRow[] = scopedGoals
+    .filter(row => row.goal.status === 'done' && row.goal.title.trim())
+    .sort((a, b) => (b.goal.updated_at ?? 0) - (a.goal.updated_at ?? 0))
+    .slice(0, 3)
+    .map(row => ({
+      id: `goal-review:${row.session_id}`,
+      title: `Reflect on ${row.goal.title}`,
+      description: 'Review a goal you marked done in Jarvis.',
+      prompt: `I marked this goal done in Jarvis: ${row.goal.title}. Help me reflect on what actually happened and what I learned. Do not assume I achieved it.`
+    }))
+
+  const allIdeas = [...goalIdeas, ...completedGoalIdeas, ...IDEA_GROUPS.reduce<IdeaRow[]>((items, group) => [...items, ...group.ideas], [])]
   const savedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'saved')
   const completedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'done')
   const notInterestedIdeas = allIdeas.filter(idea => feedback[idea.id] === 'not-interested')
   const freshGoalIdeas = goalIdeas.filter(idea => !feedback[idea.id])
+  const freshCompletedGoalIdeas = completedGoalIdeas.filter(idea => !feedback[idea.id])
 
   const sections: { ideas: IdeaRow[]; title: string }[] = [
     ...(savedIdeas.length ? [{ title: 'Saved for later', ideas: savedIdeas }] : []),
     ...(freshGoalIdeas.length ? [{ title: 'For your goals', ideas: freshGoalIdeas }] : []),
+    ...(freshCompletedGoalIdeas.length ? [{ title: 'Looking back', ideas: freshCompletedGoalIdeas }] : []),
     ...IDEA_GROUPS.map(group => ({
       title: group.title,
       ideas: group.ideas.filter(idea => !feedback[idea.id])
@@ -319,7 +332,7 @@ export function ConsumerIdeasView() {
               {group.ideas.map(idea => (
                 <div className="flex items-start gap-4 rounded-2xl transition-colors hover:bg-(--ui-control-hover-background)" key={idea.id}>
                   <span aria-hidden="true" className="ml-3 mt-4 grid size-11 shrink-0 place-items-center rounded-2xl bg-[#f1eefe] text-xl text-[#6f55b5] dark:bg-[#2a2440]">
-                    {idea.id.startsWith('goal:') ? '✦' : IDEA_ICONS[idea.id] || '✦'}
+                    {idea.id.startsWith('goal:') || idea.id.startsWith('goal-review:') ? '✦' : IDEA_ICONS[idea.id] || '✦'}
                   </span>
                   <button className="min-w-0 flex-1 px-1 py-4 text-left" onClick={() => startIdea(idea.prompt)} type="button">
                     <span className="block text-base font-medium leading-6">{idea.title}</span>

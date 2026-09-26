@@ -7,7 +7,7 @@ export type IdeaFeedbackById = Record<string, IdeaFeedback>
 
 const STORAGE_PREFIX = 'jarvis.desktop.ideaFeedback.v1'
 const FEEDBACK = new Set<IdeaFeedback>(['saved', 'done', 'not-interested'])
-const GOAL_ID = /^goal:[A-Za-z0-9_-]{1,128}$/
+const GOAL_ID = /^goal(?:-review)?:[A-Za-z0-9_-]{1,128}$/
 
 function validIdeaId(id: string): boolean {
   return IDEA_IDS.has(id) || GOAL_ID.test(id)

@@ -119,6 +119,56 @@ it('offers selected-profile saved goals as editable Ideas without sending a prom
   expect(request).toHaveBeenCalledTimes(1)
 })
 
+it('offers a reflection only for a goal the backend marks done, without assuming achievement', async () => {
+  const request = vi.fn(async () => ({ goals: [
+    { session_id: 'walk-goal', session_title: 'Walk weekly', goal: { title: 'Walk weekly', status: 'done', updated_at: 20 } }
+  ] }))
+
+  $gateway.set({ request } as never)
+  render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+
+  expect(await screen.findByRole('heading', { name: 'Looking back' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /^Make progress on Walk weekly/ })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /^Reflect on Walk weekly/ }))
+  const draft = takeSessionDraft(null).text
+  expect(draft).toContain('I marked this goal done in Jarvis: Walk weekly')
+  expect(draft).toContain('Do not assume I achieved it')
+  expect($freshSessionRequest.get()).toBe(1)
+  expect(request).toHaveBeenCalledWith('session.goals.list', { profile: 'default' })
+})
+
+it('recovers completed-goal reflections after a read failure and keeps choices in their profile', async () => {
+  const request = vi.fn(async (_method: string, params: { profile: string }) => {
+    if (params.profile === 'default' && request.mock.calls.length === 1) {
+      throw new Error('offline')
+    }
+
+    return { goals: [{
+      session_id: params.profile === 'default' ? 'walk-goal' : 'read-goal',
+      session_title: params.profile === 'default' ? 'Walk weekly' : 'Read weekly',
+      goal: { title: params.profile === 'default' ? 'Walk weekly' : 'Read weekly', status: 'done' }
+    }] }
+  })
+
+  $gateway.set({ request } as never)
+  const view = render(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+  expect(await screen.findByText('Your saved goals are unavailable. Other ideas still work.')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /^Reflect on Walk weekly/ })).toBeNull()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+  fireEvent.pointerDown(await screen.findByRole('button', { name: 'Feedback for Reflect on Walk weekly' }), {
+    button: 0, ctrlKey: false, pointerType: 'mouse'
+  })
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Save for later' }))
+  expect(readIdeaFeedback('default', null)['goal-review:walk-goal']).toBe('saved')
+
+  act(() => $activeGatewayProfile.set('other'))
+  view.rerender(<MemoryRouter><ConsumerIdeasView /></MemoryRouter>)
+  expect(await screen.findByRole('button', { name: /^Reflect on Read weekly/ })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /^Reflect on Walk weekly/ })).toBeNull()
+  expect(readIdeaFeedback('other', null)).toEqual({})
+})
+
 it('saves a goal-derived Idea choice without starting a chat', async () => {
   $gateway.set({ request: async () => ({ goals: [
     { session_id: 'test-goal', session_title: 'Walk weekly', goal: { title: 'Walk weekly', status: 'active' } }
