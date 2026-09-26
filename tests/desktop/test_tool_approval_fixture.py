@@ -14,6 +14,9 @@ Manual rehearsal, from the repo root with its Python environment::
     # child's tool-free response so its running state can be inspected.
     # "Run the synthetic failing delegate check." requests an isolated child
     # whose loopback provider fails, without performing any external action.
+    # "Run the synthetic delegated approval check." starts a child that asks
+    # twice to change only a dummy fixture file. Deny both approval cards to
+    # inspect the wait, retry, and final no-action outcome.
     python tests/desktop/test_tool_approval_fixture.py status --root /tmp/hermes-approval-UNIQUE
     # After stopping/crashing only this fixture process, reuse its exact
     # test-owned root and token to inspect gateway-restart behavior:
@@ -62,6 +65,11 @@ MODEL_DELEGATE_CHILD_RESULT = "The synthetic child check finished."
 MODEL_DELEGATE_RESULT = "The synthetic delegate check finished."
 MODEL_DELEGATE_FAILURE_PROMPT = "Run the synthetic failing delegate check."
 MODEL_DELEGATE_FAILURE_CHILD_GOAL = "Attempt the synthetic unavailable child check. Do not use tools."
+MODEL_DELEGATE_APPROVAL_PROMPT = "Run the synthetic delegated approval check."
+MODEL_DELEGATE_APPROVAL_CHILD_GOAL = "Request the synthetic child action and report whether it was denied."
+MODEL_DELEGATE_APPROVAL_DENIED = "The background action was denied twice and did not run."
+MODEL_DELEGATE_APPROVAL_ALLOWED = "The background action was allowed and finished."
+MODEL_DELEGATE_APPROVAL_RESULT = "The background action could not run without permission."
 
 
 def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
@@ -80,12 +88,39 @@ def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
     user_content = messages[user_index].get("content")
     if user_content == MODEL_DELEGATE_CHILD_GOAL:
         return {"role": "assistant", "content": MODEL_DELEGATE_CHILD_RESULT}, "stop"
-    if user_content in {MODEL_DELEGATE_PROMPT, MODEL_DELEGATE_FAILURE_PROMPT}:
+    if user_content == MODEL_DELEGATE_APPROVAL_CHILD_GOAL:
+        after_user = messages[user_index + 1:]
+        tool_results = [item for item in after_user
+                        if isinstance(item, dict) and item.get("role") == "tool"]
+        if tool_results:
+            raw_result = tool_results[-1].get("content")
+            try:
+                result = json.loads(raw_result) if isinstance(raw_result, str) else raw_result
+            except json.JSONDecodeError:
+                result = {}
+            if isinstance(result, dict) and result.get("exit_code") == 0:
+                return {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_ALLOWED}, "stop"
+            if not isinstance(result, dict) or result.get("status") != "blocked":
+                return {"role": "assistant", "content": "The background action could not finish."}, "stop"
+        if len(tool_results) >= 2:
+            return {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_DENIED}, "stop"
+        command = f"chmod 666 {root / 'sandbox-target' / 'delegate-approval-marker'}"
+        return {
+            "role": "assistant", "content": None,
+            "tool_calls": [{"index": 0, "id": f"call_synthetic_child_approval_{len(tool_results) + 1}",
+                            "type": "function", "function": {"name": "terminal",
+                            "arguments": json.dumps({"command": command})}}],
+        }, "tool_calls"
+    if user_content in {MODEL_DELEGATE_PROMPT, MODEL_DELEGATE_FAILURE_PROMPT,
+                        MODEL_DELEGATE_APPROVAL_PROMPT}:
         after_user = messages[user_index + 1:]
         if any(isinstance(item, dict) and item.get("role") == "tool" for item in after_user):
             return {"role": "assistant", "content": "The background check is running."}, "stop"
-        child_goal = (MODEL_DELEGATE_CHILD_GOAL if user_content == MODEL_DELEGATE_PROMPT
-                      else MODEL_DELEGATE_FAILURE_CHILD_GOAL)
+        child_goal = {
+            MODEL_DELEGATE_PROMPT: MODEL_DELEGATE_CHILD_GOAL,
+            MODEL_DELEGATE_FAILURE_PROMPT: MODEL_DELEGATE_FAILURE_CHILD_GOAL,
+            MODEL_DELEGATE_APPROVAL_PROMPT: MODEL_DELEGATE_APPROVAL_CHILD_GOAL,
+        }[user_content]
         return {
             "role": "assistant", "content": None,
             "tool_calls": [{"index": 0, "id": "call_synthetic_delegate", "type": "function",
@@ -103,6 +138,16 @@ def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
             and MODEL_DELEGATE_FAILURE_CHILD_GOAL in user_content
             and "status=failed" in user_content):
         return {"role": "assistant", "content": "The background check could not finish."}, "stop"
+    if (isinstance(user_content, str)
+            and user_content.startswith("[ASYNC DELEGATION BATCH COMPLETE — ")
+            and MODEL_DELEGATE_APPROVAL_CHILD_GOAL in user_content
+            and MODEL_DELEGATE_APPROVAL_DENIED in user_content):
+        return {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_RESULT}, "stop"
+    if (isinstance(user_content, str)
+            and user_content.startswith("[ASYNC DELEGATION BATCH COMPLETE — ")
+            and MODEL_DELEGATE_APPROVAL_CHILD_GOAL in user_content
+            and MODEL_DELEGATE_APPROVAL_ALLOWED in user_content):
+        return {"role": "assistant", "content": "The background action finished."}, "stop"
     if user_content != MODEL_APPROVAL_PROMPT:
         if user_content == MODEL_BACKGROUND_SUCCESS_PROMPT:
             return {"role": "assistant", "content": "The synthetic background check finished."}, "stop"
@@ -174,6 +219,9 @@ def create_fixture(root: Path) -> dict:
     marker_file = root / "sandbox-target" / "approval-marker"
     marker_file.write_text("synthetic fixture\n", encoding="utf-8")
     marker_file.chmod(0o600)
+    child_marker_file = root / "sandbox-target" / "delegate-approval-marker"
+    child_marker_file.write_text("synthetic delegated fixture\n", encoding="utf-8")
+    child_marker_file.chmod(0o600)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = int(probe.getsockname()[1])
@@ -494,6 +542,128 @@ def test_model_delegate_failure_rehearsal_preserves_attention_outcome(tmp_path: 
     assert (final, reason) == (
         {"role": "assistant", "content": "The background check could not finish."}, "stop",
     )
+
+
+def test_model_delegate_approval_retries_only_a_denied_fixture_action(tmp_path: Path) -> None:
+    root = tmp_path / "approval-fixture"
+    create_fixture(root)
+    messages = [{"role": "user", "content": MODEL_DELEGATE_APPROVAL_PROMPT}]
+    spawned, reason = fixture_completion({"messages": messages}, root)
+    assert reason == "tool_calls"
+    assert json.loads(spawned["tool_calls"][0]["function"]["arguments"]) == {
+        "tasks": [{"goal": MODEL_DELEGATE_APPROVAL_CHILD_GOAL}],
+    }
+
+    child_messages = [{"role": "user", "content": MODEL_DELEGATE_APPROVAL_CHILD_GOAL}]
+    first, reason = fixture_completion({"messages": child_messages}, root)
+    assert reason == "tool_calls"
+    assert first["tool_calls"][0]["function"]["name"] == "terminal"
+    command = json.loads(first["tool_calls"][0]["function"]["arguments"])["command"]
+    assert command == f"chmod 666 {root / 'sandbox-target' / 'delegate-approval-marker'}"
+
+    child_messages.extend([first, {"role": "tool", "content": '{"status":"blocked"}'}])
+    retried, reason = fixture_completion({"messages": child_messages}, root)
+    assert reason == "tool_calls"
+    assert retried["tool_calls"][0]["id"] != first["tool_calls"][0]["id"]
+    assert json.loads(retried["tool_calls"][0]["function"]["arguments"])["command"] == command
+    child_messages.extend([retried, {"role": "tool", "content": '{"status":"blocked"}'}])
+    child_final, reason = fixture_completion({"messages": child_messages}, root)
+    assert (child_final, reason) == (
+        {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_DENIED}, "stop",
+    )
+    assert ((root / "sandbox-target" / "delegate-approval-marker").stat().st_mode & 0o777) == 0o600
+
+    completion = ("[ASYNC DELEGATION BATCH COMPLETE — synthetic-id]\n"
+                  f"--- TASK 1/1: {MODEL_DELEGATE_APPROVAL_CHILD_GOAL} (status=completed) ---\n"
+                  f"{MODEL_DELEGATE_APPROVAL_DENIED}")
+    parent_final, reason = fixture_completion({"messages": messages + [
+        {"role": "user", "content": completion},
+    ]}, root)
+    assert (parent_final, reason) == (
+        {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_RESULT}, "stop",
+    )
+
+
+def test_loopback_delegated_child_waits_for_two_real_gateway_denials(tmp_path: Path) -> None:
+    """A delegated child uses the owner's live approval queue, and denial never runs its command."""
+    from urllib.error import URLError
+    from websockets.sync.client import connect
+
+    root = tmp_path / "approval-server"
+    child = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), "start", "--root", str(root)],
+        cwd=ROOT, env=isolated_environment(root), stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, text=True, bufsize=1,
+    )
+    try:
+        readable, _, _ = select.select([child.stdout], [], [], 15)
+        assert readable, "fixture did not print its connection details"
+        details = json.loads(child.stdout.readline())
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                assert request(root, "status")["state"] == "ready"
+                break
+            except (URLError, ConnectionError):
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.05)
+
+        with connect(f"ws://127.0.0.1:{read_fixture(root)['port']}/api/ws?token={details['session_token']}",
+                     open_timeout=5) as ws:
+            assert json.loads(ws.recv(timeout=10))["params"]["type"] == "gateway.ready"
+            seen: list[dict] = []
+
+            def call(method: str, params: dict, rid: int) -> dict:
+                ws.send(json.dumps({"jsonrpc": "2.0", "id": rid, "method": method, "params": params}))
+                while True:
+                    frame = json.loads(ws.recv(timeout=30))
+                    if frame.get("id") == rid:
+                        return frame
+                    seen.append(frame)
+
+            assert "result" in call("client.capabilities", {"server_requests": True}, 1)
+            resumed = call("session.resume", {"session_id": details["session_id"]}, 2)
+            assert "result" in resumed, resumed
+            started = call("prompt.submit", {
+                "session_id": resumed["result"]["session_id"],
+                "text": MODEL_DELEGATE_APPROVAL_PROMPT,
+            }, 3)
+            assert started.get("result", {}).get("status") == "streaming", started
+
+            def next_approval() -> dict:
+                deadline = time.monotonic() + 35
+                while True:
+                    for index, frame in enumerate(seen):
+                        if frame.get("method") == "approval":
+                            return seen.pop(index)
+                    assert time.monotonic() < deadline, "delegated child never requested approval"
+                    seen.append(json.loads(ws.recv(timeout=10)))
+
+            requests = []
+            for rid in (4, 5):
+                approval_frame = next_approval()
+                params = approval_frame["params"]
+                assert "delegate-approval-marker" in params["command"]
+                requests.append(params["request_id"])
+                denied = call("approval.respond", {
+                    "session_id": params["session_id"],
+                    "request_id": params["request_id"], "choice": "deny",
+                }, rid)
+                assert denied.get("result") == {"resolved": 1}, denied
+            assert requests[0] != requests[1]
+            assert ((root / "sandbox-target" / "delegate-approval-marker").stat().st_mode & 0o777) == 0o600
+
+        assert request(root, "stop") == {"stopping": True}
+        assert child.wait(timeout=10) == 0
+    finally:
+        if child.poll() is None:
+            child.send_signal(signal.SIGINT)
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=5)
 
 
 def test_loopback_gateway_denial_round_trip(tmp_path: Path) -> None:
