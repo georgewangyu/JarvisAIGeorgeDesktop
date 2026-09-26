@@ -42,7 +42,8 @@ def _server():
         _methods=methods,
         _sessions=sessions,
         _sessions_lock=threading.Lock(),
-        _pending_approval_request_payload=lambda _session_key: None,
+        _profile_home=lambda _profile: None,
+        _pending_approval_request_payload=lambda _session_key, profile_home=None: None,
     )
     return server, calls
 
@@ -113,7 +114,7 @@ def test_info_and_interrupt_are_exact_task_scoped():
 
 def test_local_approval_snapshot_and_response_use_exact_request():
     server, calls = _server()
-    server._pending_approval_request_payload = lambda session_key: {
+    server._pending_approval_request_payload = lambda session_key, profile_home=None: {
         "request_id": "approval-1",
         "command": "pytest -q tests/focused",
         "choices": ["once", "deny"],
@@ -140,6 +141,42 @@ def test_local_approval_snapshot_and_response_use_exact_request():
         "request_id": "approval-1",
         "choice": "once",
         "all": False,
+    }
+
+
+def test_info_keeps_same_stored_session_id_and_approval_in_owning_profile(tmp_path):
+    server, _calls = _server()
+    home_a = tmp_path / "profile-a"
+    home_b = tmp_path / "profile-b"
+    home_a.mkdir()
+    home_b.mkdir()
+    server._profile_home = lambda profile: {"a": home_a, "b": home_b}[profile]
+    server._sessions["runtime-a"] = {
+        "history_lock": threading.Lock(), "running": True,
+        "profile_home": str(home_a), "session_key": "shared-stored-id",
+        "_hosted_room_task": {"task_id": "task-a"},
+    }
+    server._sessions["runtime-b"] = {
+        "history_lock": threading.Lock(), "running": True,
+        "profile_home": str(home_b), "session_key": "shared-stored-id",
+        "_hosted_room_task": {"task_id": "task-b"},
+    }
+    server._pending_approval_request_payload = lambda key, profile_home=None: {
+        "request_id": "approval-a" if profile_home == str(home_a) else "approval-b",
+    } if key == "shared-stored-id" else None
+    rpc = HostedRoomServerRPC(server)
+
+    for profile, task_id, approval_id in (
+        ("a", "task-a", "approval-a"),
+        ("b", "task-b", "approval-b"),
+        ("a", "task-a", "approval-a"),
+    ):
+        info = rpc.info(profile=profile, session_id="shared-stored-id", source="bot_room")
+        assert info["task_id"] == task_id
+        assert info["pending_approval"]["request_id"] == approval_id
+
+    assert rpc.info(profile="a", session_id="runtime-b", source="bot_room") == {
+        "active": False, "task_id": None,
     }
 
 

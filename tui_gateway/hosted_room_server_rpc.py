@@ -89,17 +89,20 @@ class HostedRoomServerRPC:
         rows = result.get("messages")
         return tuple(row for row in rows if isinstance(row, dict)) if isinstance(rows, list) else ()
 
-    def _session_record(self, session_id: str) -> dict[str, Any] | None:
+    def _session_record(self, session_id: str, profile_home: str | None) -> dict[str, Any] | None:
         with self.server._sessions_lock:
             record = self.server._sessions.get(session_id)
-            if record is not None:
+            if record is not None and (record.get("profile_home") or None) == profile_home:
                 return record
             return next((c for c in self.server._sessions.values()
-                         if str(c.get("session_key") or "") == session_id), None)
+                         if (c.get("profile_home") or None) == profile_home
+                         and str(c.get("session_key") or "") == session_id), None)
 
     def info(self, *, profile: str, session_id: str, source: str) -> Mapping[str, Any]:
-        del profile, source
-        record = self._session_record(session_id)
+        del source
+        home = self.server._profile_home(profile)
+        profile_home = str(home) if home is not None else None
+        record = self._session_record(session_id, profile_home)
         if record is None:
             return {"active": False, "task_id": None}
         lock = record.get("history_lock")
@@ -110,7 +113,8 @@ class HostedRoomServerRPC:
             result = {"active": bool(record.get("running")),
                       "task_id": task.get("task_id") if isinstance(task, dict) else None}
             pending_reader = getattr(self.server, "_pending_approval_request_payload", None)
-            if callable(pending_reader) and (pending := pending_reader(str(record.get("session_key") or ""))):
+            if callable(pending_reader) and (pending := pending_reader(
+                    str(record.get("session_key") or ""), profile_home=profile_home)):
                 result["status"] = "waiting_for_approval"
                 result["pending_approval"] = pending
             return result
