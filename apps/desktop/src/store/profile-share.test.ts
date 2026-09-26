@@ -148,4 +148,23 @@ describe('exportProfileBundle', () => {
       window.hermesDesktop = original
     }
   })
+
+  it('does not export after a consumer save dialog loses its owning profile', async () => {
+    const original = window.hermesDesktop
+    let finishPick!: (path: string) => void
+
+    window.hermesDesktop = { ...original, selectSavePath: vi.fn(() => new Promise<string>(resolve => { finishPick = resolve })) } as typeof original
+    let current = true
+
+    try {
+      const pending = runExportProfileFlow('glam', { consumer: true, shouldContinue: () => current })
+
+      current = false
+      finishPick('/synthetic/stale-setup.tar.gz')
+      expect(await pending).toBeNull()
+      expect(exportConsumerSetupArchive).not.toHaveBeenCalled()
+    } finally {
+      window.hermesDesktop = original
+    }
+  })
 })

@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { runExportProfileFlow } from '@/store/profile-share'
@@ -10,21 +10,35 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(false)
   const local = connection?.mode === 'local'
+  const request = useRef(0)
+
+  // Retire a pending native save dialog when its owning profile changes.
+  // eslint-disable-next-line no-restricted-syntax
+  useEffect(() => {
+    const current = ++request.current
+
+    setSaving(false)
+    setError(false)
+
+    return () => { request.current = current + 1 }
+  }, [local, profile])
 
   const save = async () => {
     if (saving || !local) {
       return
     }
 
+    const current = request.current
+
     setSaving(true)
     setError(false)
 
     try {
-      await runExportProfileFlow(profile, { consumer: true })
+      await runExportProfileFlow(profile, { consumer: true, shouldContinue: () => request.current === current })
     } catch {
-      setError(true)
+      if (request.current === current) {setError(true)}
     } finally {
-      setSaving(false)
+      if (request.current === current) {setSaving(false)}
     }
   }
 

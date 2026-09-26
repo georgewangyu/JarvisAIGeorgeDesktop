@@ -169,7 +169,7 @@ const ARCHIVE_FILTERS = [{ extensions: ['tar.gz', 'tgz'], name: 'Hermes profile'
 
 /** Pick a save location and export `profile` (default: the active one).
  *  Returns the archive path, or null when the user cancelled. */
-export async function runExportProfileFlow(profile?: string, options?: { consumer?: boolean }): Promise<null | string> {
+export async function runExportProfileFlow(profile?: string, options?: { consumer?: boolean; shouldContinue?: () => boolean }): Promise<null | string> {
   const target = normalizeProfileKey(profile ?? activeProfileKey())
   const pick = window.hermesDesktop?.selectSavePath
 
@@ -183,16 +183,21 @@ export async function runExportProfileFlow(profile?: string, options?: { consume
     filters: ARCHIVE_FILTERS
   })
 
-  if (!output) {
+  if (!output || options?.shouldContinue?.() === false) {
     return null
   }
 
   try {
     const archive = await exportProfileBundle(target, output, { consumerSetup: options?.consumer })
+
+    if (options?.shouldContinue?.() === false) {return null}
+
     notify({ kind: 'success', title: translateNow('profiles.exported'), message: archive })
 
     return archive
   } catch (error) {
+    if (options?.shouldContinue?.() === false) {return null}
+
     notifyError(error, translateNow('profiles.failedExport'))
 
     if (options?.consumer) {

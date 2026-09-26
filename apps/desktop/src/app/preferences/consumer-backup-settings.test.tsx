@@ -22,7 +22,7 @@ it('exports the selected local profile only after an explicit click', async () =
   expect(exportFlow).not.toHaveBeenCalled()
   expect(screen.getByText(/chat history, routines, sign-in files, and internal worker data aren’t included/i)).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
-  await waitFor(() => expect(exportFlow).toHaveBeenCalledWith('writer', { consumer: true }))
+  await waitFor(() => expect(exportFlow).toHaveBeenCalledWith('writer', expect.objectContaining({ consumer: true })))
 })
 
 it('does not offer a local save path for a remote backend', () => {
@@ -43,4 +43,23 @@ it('shows a retryable picker error without exporting', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
   await waitFor(() => expect(exportFlow).toHaveBeenCalledTimes(2))
   await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+})
+
+it('retires an old profile save and lets the new profile start another', async () => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  let finishOld!: () => void
+  exportFlow.mockImplementationOnce(() => new Promise<null>(resolve => { finishOld = () => resolve(null) }))
+    .mockResolvedValueOnce('/synthetic/reader-setup.tar.gz')
+  const view = render(<ConsumerBackupSettings profile="writer" />)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
+  await waitFor(() => expect(exportFlow).toHaveBeenCalledTimes(1))
+  const oldScope = exportFlow.mock.calls[0]?.[1]?.shouldContinue as () => boolean
+
+  view.rerender(<ConsumerBackupSettings profile="reader" />)
+  expect(oldScope()).toBe(false)
+  expect(screen.getByRole('button', { name: 'Save setup backup' }).hasAttribute('disabled')).toBe(false)
+  fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
+  await waitFor(() => expect(exportFlow).toHaveBeenCalledWith('reader', expect.objectContaining({ consumer: true })))
+  finishOld()
 })
