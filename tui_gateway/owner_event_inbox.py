@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -160,6 +161,74 @@ def read_jarvis_wake_ticket(profile_home: Path | str, delivery_id: str) -> dict[
                 or receipt.get("target_session_id") != find_jarvis_main_session_id(home)):
             raise ValueError("wake ticket has no exact opted-in deferred Jarvis owner")
         return receipt
+
+
+def requeue_quarantined_jarvis_wake_ticket(
+    profile_home: Path | str, delivery_id: str,
+) -> bool:
+    """Restore one valid deferred wake after the permanent chat's lease exits.
+
+    Return False when the exact ticket is already queued. Quarantine entries
+    with an unknown or claimed outcome are never restored. This is an explicit
+    handback API; the lease lifecycle does not call it automatically.
+    """
+    from hermes_cli.active_sessions import active_session_registry_snapshot
+    from tools.bot_live_delivery import _delivery_id, _locked, _read
+
+    home = Path(profile_home).resolve()
+    key = _delivery_id(delivery_id)
+    if not jarvis_headless_activation_enabled(home):
+        raise ValueError("headless activation is not enabled for the exact profile")
+    with _locked(home) as root:
+        session_id = find_jarvis_main_session_id(home)
+        receipt = _read(root / f"{key}.json")
+        if (session_id is None or receipt is None
+                or receipt.get("status") != "deferred"
+                or receipt.get("profile_home") != str(home)
+                or receipt.get("delivery_id") != key
+                or receipt.get("id") != key
+                or receipt.get("os_wake_requested") is not True
+                or receipt.get("target_session_id") != session_id):
+            raise ValueError("no exact opted-in deferred Jarvis wake receipt")
+        if any(entry.get("session_id") == session_id for entry in
+               active_session_registry_snapshot(registry_home=home, strict=True)):
+            raise ValueError("the Jarvis main chat still has a live lease")
+
+        try:
+            queue = _checked_wake_queue(home)
+        except FileNotFoundError:
+            queue = None
+        if queue is not None:
+            try:
+                _checked_wake_ticket(queue, key)
+            except FileNotFoundError:
+                pass
+            else:
+                return False
+
+        quarantine = home / "runtime" / "jarvis_event_wake_quarantine"
+        info = quarantine.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o077):
+            raise ValueError("Jarvis wake quarantine is not a private owned directory")
+        names = [entry for entry in quarantine.iterdir()
+                 if re.fullmatch(rf"[0-9a-f]{{32}}-{key}", entry.name)]
+        if len(names) != 1:
+            raise ValueError("expected one exact quarantined Jarvis wake ticket")
+        ticket = names[0]
+        info = ticket.lstat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size != 0):
+            raise ValueError("quarantined Jarvis wake ticket is not an opaque private file")
+
+        # The quarantine and watched queue live on the same profile volume.
+        # Moving the opaque ticket is atomic: a crash cannot leave both a new
+        # queue ticket and the old quarantine entry behind.
+        queue = _checked_wake_queue(home, create=True)
+        ticket.rename(queue / key)
+        fsync_directory(queue)
+        fsync_directory(quarantine)
+        return True
 
 
 def _defer_jarvis_event(
