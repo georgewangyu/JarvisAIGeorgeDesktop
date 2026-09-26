@@ -317,7 +317,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   },
   jarvisCalendar: {
     status: () => ipcRenderer.invoke('jarvis:calendar:status'),
-    connect: () => ipcRenderer.invoke('jarvis:calendar:connect'),
+    connect: mode => ipcRenderer.invoke('jarvis:calendar:connect', mode),
     disconnect: () => ipcRenderer.invoke('jarvis:calendar:disconnect'),
     list: (start, end) => ipcRenderer.invoke('jarvis:calendar:list', start, end),
     create: (title, start, end) => ipcRenderer.invoke('jarvis:calendar:create', title, start, end)

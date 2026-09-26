@@ -9,10 +9,12 @@ import { DESKTOP_PROFILE_NAME_RE } from './desktop-profile'
 import type { WindowConnectionRoute } from './window-connection-route'
 
 export type CalendarAuthorization = 'notDetermined' | 'restricted' | 'denied' | 'writeOnly' | 'fullAccess' | 'unknown'
+export type CalendarMode = 'off' | 'read' | 'interact'
 
 interface CalendarStatus {
   authorization: CalendarAuthorization
   connected: boolean
+  mode: CalendarMode
   supported: boolean
 }
 
@@ -71,13 +73,22 @@ export function calendarRendererMatches(event: IpcMainInvokeEvent, rendererUrl: 
   }
 }
 
-function enabled(configPath: string): boolean {
+function connectionMode(configPath: string): CalendarMode {
   try {
     const data = fs.readFileSync(configPath)
 
-    return data.length <= 1024 && JSON.parse(data.toString('utf8'))?.enabled === true
+    if (data.length > 1024) {return 'off'}
+
+    const config = JSON.parse(data.toString('utf8'))
+
+    if (config?.mode === 'off' || config?.mode === 'read' || config?.mode === 'interact') {
+      return config.mode
+    }
+
+    // The old boolean grant included writes. Migrate it to the narrower grant.
+    return config?.mode === undefined && config?.enabled === true ? 'read' : 'off'
   } catch {
-    return false
+    return 'off'
   }
 }
 
@@ -87,12 +98,12 @@ function configForScope(userData: string, scope: string): string {
   return path.join(userData, `${CONFIG_PREFIX}${hash}.json`)
 }
 
-function saveEnabled(configPath: string, value: boolean): void {
+function saveMode(configPath: string, mode: CalendarMode): void {
   fs.mkdirSync(path.dirname(configPath), { recursive: true })
   const staging = `${configPath}.${process.pid}.tmp`
 
   try {
-    fs.writeFileSync(staging, JSON.stringify({ enabled: value }), { mode: 0o600 })
+    fs.writeFileSync(staging, JSON.stringify({ mode }), { mode: 0o600 })
     fs.renameSync(staging, configPath)
   } finally {
     fs.rmSync(staging, { force: true })
@@ -194,16 +205,19 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
 
     // An observed OS revocation ends the app grant too. A later macOS regrant
     // must still require the user's explicit Connect action.
-    if (enabled(configPath) && authorization !== 'fullAccess' && authorization !== 'unknown') {
-      saveEnabled(configPath, false)
+    if (connectionMode(configPath) !== 'off' && authorization !== 'fullAccess' && authorization !== 'unknown') {
+      saveMode(configPath, 'off')
     }
 
     // A helper response without a recognized macOS authorization is not proof
     // that Calendar access can be requested or used. Preserve the app opt-in so
     // a transient unknown result does not silently revoke the user's choice.
+    const mode = connectionMode(configPath)
+
     return {
       authorization,
-      connected: enabled(configPath) && authorization === 'fullAccess',
+      connected: mode !== 'off' && authorization === 'fullAccess',
+      mode,
       supported: platform === 'darwin' && response.ok && authorization !== 'unknown'
     }
   }
@@ -225,28 +239,38 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     const scope = requireTrustedScope(event)
     const version = ownerVersionForSender(event)
 
-    if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
+    if (!scope) {return { authorization: 'unknown', connected: false, mode: 'off', supported: false }}
 
     const result = await status(configForScope(userData, scope))
 
-    return sameOwner(event, scope, version) ? result : { authorization: 'unknown', connected: false, supported: false }
+    return sameOwner(event, scope, version) ? result : { authorization: 'unknown', connected: false, mode: 'off', supported: false }
   })
-  ipcMain.handle('jarvis:calendar:connect', async (event): Promise<CalendarStatus> => {
+  ipcMain.handle('jarvis:calendar:connect', async (event, requestedMode: unknown = 'read'): Promise<CalendarStatus> => {
     const scope = requireTrustedScope(event)
     const version = ownerVersionForSender(event)
 
-    if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
+    if (!scope || requestedMode !== 'read' && requestedMode !== 'interact') {
+      return { authorization: 'unknown', connected: false, mode: 'off', supported: false }
+    }
 
     const configPath = configForScope(userData, scope)
     const attempt = { cancelled: false }
     const pending = pendingConnects.get(configPath) ?? new Set<{ cancelled: boolean }>()
+
+    for (const earlier of pending) {earlier.cancelled = true}
     pending.add(attempt)
     pendingConnects.set(configPath, pending)
 
     try {
+      // Apply a downgrade before awaiting OS status. A slow/unknown permission
+      // check must not leave the previous write grant usable in the meantime.
+      if (requestedMode === 'read' && connectionMode(configPath) === 'interact') {
+        saveMode(configPath, 'read')
+      }
+
       const before = await status(configPath)
 
-      if (attempt.cancelled || !sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, supported: false }}
+      if (attempt.cancelled || !sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, mode: 'off', supported: false }}
 
       if (!before.supported) {return before}
 
@@ -256,19 +280,19 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
         if (!request.ok || request.authorization !== 'fullAccess') {
           return !attempt.cancelled && sameOwner(event, scope, version)
             ? status(configPath)
-            : { authorization: 'unknown', connected: false, supported: false }
+            : { authorization: 'unknown', connected: false, mode: 'off', supported: false }
         }
       }
 
-      if (attempt.cancelled || !sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, supported: false }}
+      if (attempt.cancelled || !sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, mode: 'off', supported: false }}
 
-      saveEnabled(configPath, true)
+      saveMode(configPath, requestedMode)
 
       const result = await status(configPath)
 
       return !attempt.cancelled && sameOwner(event, scope, version)
         ? result
-        : { authorization: 'unknown', connected: false, supported: false }
+        : { authorization: 'unknown', connected: false, mode: 'off', supported: false }
     } finally {
       pending.delete(attempt)
 
@@ -279,18 +303,18 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     const scope = requireTrustedScope(event)
     const version = ownerVersionForSender(event)
 
-    if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
+    if (!scope) {return { authorization: 'unknown', connected: false, mode: 'off', supported: false }}
 
     const configPath = configForScope(userData, scope)
 
     for (const attempt of pendingConnects.get(configPath) ?? []) {attempt.cancelled = true}
-    saveEnabled(configPath, false)
+    saveMode(configPath, 'off')
 
     const result = await status(configPath)
 
     return sameOwner(event, scope, version)
       ? result
-      : { authorization: 'unknown', connected: false, supported: false }
+      : { authorization: 'unknown', connected: false, mode: 'off', supported: false }
   })
   ipcMain.handle('jarvis:calendar:list', async (event, start: unknown, end: unknown) => {
     const scope = requireTrustedScope(event)
@@ -316,9 +340,12 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     const version = ownerVersionForSender(event)
     const configPath = scope ? configForScope(userData, scope) : ''
 
-    if (!scope || !(await status(configPath)).connected || !sameOwner(event, scope, version)) {
-      return { ok: false, code: 'not_connected' }
-    }
+    if (!scope) {return { ok: false, code: 'not_connected' }}
+    const before = await status(configPath)
+
+    if (!before.connected || !sameOwner(event, scope, version)) {return { ok: false, code: 'not_connected' }}
+
+    if (before.mode !== 'interact') {return { ok: false, code: 'not_allowed' }}
 
     if (typeof title !== 'string' || typeof start !== 'string' || typeof end !== 'string') {
       return { ok: false, code: 'invalid_input' }
@@ -330,7 +357,9 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     // details in this renderer, but never claim it definitely did not happen.
     if (!sameOwner(event, scope, version)) {return { ok: false, code: 'outcome_unknown' }}
 
-    if (!(await status(configPath)).connected) {return { ok: false, code: 'outcome_unknown' }}
+    const after = await status(configPath)
+
+    if (!after.connected || after.mode !== 'interact') {return { ok: false, code: 'outcome_unknown' }}
 
     return sameOwner(event, scope, version) ? result : { ok: false, code: 'outcome_unknown' }
   })

@@ -86,7 +86,7 @@ describe('Jarvis Calendar connection boundary', () => {
     const run = vi.fn().mockResolvedValue({ ok: true, command: 'status', authorization: 'notDetermined' })
     const call = bridge(run, testHome())
 
-    expect(await call('status')).toEqual({ authorization: 'notDetermined', connected: false, supported: true })
+    expect(await call('status')).toEqual({ authorization: 'notDetermined', connected: false, mode: 'off', supported: true })
     expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z')).toEqual({ ok: false, code: 'not_connected' })
     expect(await call('create', 'Test', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z'))
       .toEqual({ ok: false, code: 'not_connected' })
@@ -107,8 +107,8 @@ describe('Jarvis Calendar connection boundary', () => {
 
     expect(await call('connect')).toMatchObject({ connected: true, supported: true })
     authorization = 'unexpected-status'
-    expect(await call('status')).toEqual({ authorization: 'unknown', connected: false, supported: false })
-    expect(await call('connect')).toEqual({ authorization: 'unknown', connected: false, supported: false })
+    expect(await call('status')).toEqual({ authorization: 'unknown', connected: false, mode: 'read', supported: false })
+    expect(await call('connect')).toEqual({ authorization: 'unknown', connected: false, mode: 'read', supported: false })
     expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
       .toEqual({ ok: false, code: 'not_connected' })
     expect(spy.mock.calls.some(([, input]) => input.command === 'request-full-access' || input.command === 'list-events'))
@@ -138,7 +138,7 @@ describe('Jarvis Calendar connection boundary', () => {
 
     const first = bridge(run, userData)
 
-    expect((await first('connect'))).toMatchObject({ connected: true, authorization: 'fullAccess' })
+    expect((await first('connect', 'interact'))).toMatchObject({ connected: true, mode: 'interact', authorization: 'fullAccess' })
     expect(await first('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
       .toMatchObject({ ok: true, command: 'list-events' })
     expect(await first('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z'))
@@ -149,6 +149,123 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(await restarted('status')).toMatchObject({ connected: false, authorization: 'fullAccess' })
     expect(await restarted('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
       .toEqual({ ok: false, code: 'not_connected' })
+  })
+
+  it('enforces off, read and interact modes at the IPC boundary', async () => {
+    const userData = testHome()
+    const spy = vi.fn(async (_executable, input) => ({
+      ok: true,
+      command: input.command,
+      authorization: 'fullAccess',
+      events: [],
+      event: { id: 'synthetic' }
+    }))
+    const call = bridge(spy as typeof runCalendarHelper, userData)
+
+    expect(await call('status')).toMatchObject({ connected: false, mode: 'off' })
+    expect(await call('connect')).toMatchObject({ connected: true, mode: 'read' })
+    expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
+      .toMatchObject({ ok: true, command: 'list-events' })
+    expect(await call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z'))
+      .toEqual({ ok: false, code: 'not_allowed' })
+    expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(false)
+
+    expect(await call('connect', 'interact')).toMatchObject({ connected: true, mode: 'interact' })
+    expect(await call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z'))
+      .toMatchObject({ ok: true, command: 'create-event' })
+    expect(await call('connect', 'read')).toMatchObject({ connected: true, mode: 'read' })
+    expect(await call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z'))
+      .toEqual({ ok: false, code: 'not_allowed' })
+    expect(spy.mock.calls.filter(([, input]) => input.command === 'create-event')).toHaveLength(1)
+    expect(await call('disconnect')).toMatchObject({ connected: false, mode: 'off' })
+    expect(await bridge(spy as typeof runCalendarHelper, userData)('status'))
+      .toMatchObject({ connected: false, mode: 'off' })
+  })
+
+  it('treats a legacy boolean grant as read only after restart', async () => {
+    const userData = testHome()
+    const spy = vi.fn(async (_executable, input) => ({
+      ok: true, command: input.command, authorization: 'fullAccess', events: []
+    }))
+    const call = bridge(spy as typeof runCalendarHelper, userData)
+    expect(await call('connect', 'interact')).toMatchObject({ mode: 'interact' })
+    const [configName] = fs.readdirSync(userData)
+    fs.writeFileSync(path.join(userData, configName), '{"enabled":true}')
+
+    const restarted = bridge(spy as typeof runCalendarHelper, userData)
+    expect(await restarted('status')).toMatchObject({ connected: true, mode: 'read' })
+    expect(await restarted('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z'))
+      .toEqual({ ok: false, code: 'not_allowed' })
+    expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(false)
+  })
+
+  it('keeps modes separate across profiles and rejects a stale write after downgrade', async () => {
+    const userData = testHome()
+    let scope = '[null,"alpha"]'
+    let finishCreate!: (value: { ok: true; command: string; event: { id: string } }) => void
+    const pendingCreate = new Promise<{ ok: true; command: string; event: { id: string } }>(resolve => {finishCreate = resolve})
+    const spy = vi.fn(async (_executable, input) => input.command === 'create-event'
+      ? pendingCreate
+      : { ok: true, command: input.command, authorization: 'fullAccess', events: [] })
+    const call = bridge(spy as typeof runCalendarHelper, userData, () => scope)
+
+    expect(await call('connect', 'interact')).toMatchObject({ mode: 'interact' })
+    const creating = call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z')
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(true))
+    expect(await call('connect', 'read')).toMatchObject({ mode: 'read' })
+    finishCreate({ ok: true, command: 'create-event', event: { id: 'synthetic' } })
+    expect(await creating).toEqual({ ok: false, code: 'outcome_unknown' })
+    scope = '[null,"beta"]'
+    expect(await call('status')).toMatchObject({ connected: false, mode: 'off' })
+    expect(await call('connect', 'read')).toMatchObject({ mode: 'read' })
+    scope = '[null,"alpha"]'
+    expect(await call('status')).toMatchObject({ connected: true, mode: 'read' })
+    expect(spy.mock.calls.filter(([, input]) => input.command === 'create-event')).toHaveLength(1)
+  })
+
+  it('does not let an older permission request replace a newer read mode', async () => {
+    const userData = testHome()
+    let grant = false
+    let finishPermission!: (value: { ok: true; command: string; authorization: string }) => void
+    const pendingPermission = new Promise<{ ok: true; command: string; authorization: string }>(resolve => {
+      finishPermission = resolve
+    })
+    const spy = vi.fn(async (_executable, input) => input.command === 'request-full-access'
+      ? pendingPermission
+      : { ok: true, command: input.command, authorization: grant ? 'fullAccess' : 'notDetermined' })
+    const call = bridge(spy as typeof runCalendarHelper, userData)
+
+    const older = call('connect', 'interact')
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'request-full-access')).toBe(true))
+    grant = true
+    expect(await call('connect', 'read')).toMatchObject({ connected: true, mode: 'read' })
+    finishPermission({ ok: true, command: 'request-full-access', authorization: 'fullAccess' })
+    expect(await older).toMatchObject({ connected: false, mode: 'off' })
+    expect(await call('status')).toMatchObject({ connected: true, mode: 'read' })
+  })
+
+  it('blocks writes as soon as a read-only downgrade starts, even with delayed OS status', async () => {
+    const userData = testHome()
+    let statusCalls = 0
+    let finishStatus!: (value: { ok: true; command: string; authorization: string }) => void
+    const pendingStatus = new Promise<{ ok: true; command: string; authorization: string }>(resolve => {
+      finishStatus = resolve
+    })
+    const spy = vi.fn(async (_executable, input) => {
+      if (input.command === 'status' && ++statusCalls === 3) {return pendingStatus}
+
+      return { ok: true, command: input.command, authorization: 'fullAccess' }
+    })
+    const call = bridge(spy as typeof runCalendarHelper, userData)
+
+    expect(await call('connect', 'interact')).toMatchObject({ mode: 'interact' })
+    const downgrading = call('connect', 'read')
+    await vi.waitFor(() => expect(statusCalls).toBe(3))
+    expect(await call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z'))
+      .toEqual({ ok: false, code: 'not_allowed' })
+    expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(false)
+    finishStatus({ ok: true, command: 'status', authorization: 'fullAccess' })
+    expect(await downgrading).toMatchObject({ connected: true, mode: 'read' })
   })
 
   it('refuses reads immediately after macOS authorization is revoked', async () => {
@@ -164,7 +281,7 @@ describe('Jarvis Calendar connection boundary', () => {
     const run = spy as typeof runCalendarHelper
     const call = bridge(run, userData)
 
-    expect(await call('connect')).toMatchObject({ connected: true })
+    expect(await call('connect', 'interact')).toMatchObject({ connected: true })
     osGrant = false
     expect(await call('status')).toMatchObject({ connected: false, authorization: 'denied' })
     expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
@@ -194,12 +311,12 @@ describe('Jarvis Calendar connection boundary', () => {
     const call = bridge(run, userData, () => scope)
 
     expect(await call('status')).toMatchObject({ connected: false })
-    expect(await call('connect')).toMatchObject({ connected: true })
+    expect(await call('connect', 'interact')).toMatchObject({ connected: true })
     scope = '[null,"beta"]'
     expect(await call('status')).toMatchObject({ connected: false })
     expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
       .toEqual({ ok: false, code: 'not_connected' })
-    expect(await call('connect')).toMatchObject({ connected: true })
+    expect(await call('connect', 'interact')).toMatchObject({ connected: true })
     expect(await call('disconnect')).toMatchObject({ connected: false })
     scope = '[null,"alpha"]'
     expect(await bridge(run, userData, () => scope)('status')).toMatchObject({ connected: true })
@@ -335,7 +452,7 @@ describe('Jarvis Calendar connection boundary', () => {
 
     const call = bridge(run, userData, () => scope)
 
-    expect(await call('connect')).toMatchObject({ connected: true })
+    expect(await call('connect', 'interact')).toMatchObject({ connected: true })
     const creating = call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z')
     await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(true))
     scope = '[null,"beta"]'
@@ -364,7 +481,7 @@ describe('Jarvis Calendar connection boundary', () => {
 
     const call = bridge(spy as typeof runCalendarHelper, userData, () => scope, () => version)
 
-    expect(await call('connect')).toMatchObject({ connected: true })
+    expect(await call('connect', 'interact')).toMatchObject({ connected: true })
     const reading = call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z')
     await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(true))
     scope = '[null,"beta"]'
@@ -402,7 +519,7 @@ describe('Jarvis Calendar connection boundary', () => {
 
     const call = bridge(spy as typeof runCalendarHelper, userData)
 
-    expect(await call('connect')).toMatchObject({ connected: true })
+    expect(await call('connect', 'interact')).toMatchObject({ connected: true })
     const reading = call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z')
     await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(true))
     granted = false
@@ -410,7 +527,7 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(await reading).toEqual({ ok: false, code: 'not_connected' })
 
     granted = true
-    expect(await call('connect')).toMatchObject({ connected: true })
+    expect(await call('connect', 'interact')).toMatchObject({ connected: true })
     const creating = call('create', 'Synthetic', '2026-09-23T00:00:00Z', '2026-09-23T01:00:00Z')
     await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'create-event')).toBe(true))
     granted = false

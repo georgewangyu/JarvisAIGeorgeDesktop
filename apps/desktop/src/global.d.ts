@@ -288,7 +288,7 @@ declare global {
       }
       jarvisCalendar?: {
         status: () => Promise<JarvisCalendarStatus>
-        connect: () => Promise<JarvisCalendarStatus>
+        connect: (mode?: 'read' | 'interact') => Promise<JarvisCalendarStatus>
         disconnect: () => Promise<JarvisCalendarStatus>
         list: (start: string, end: string) => Promise<JarvisCalendarResponse>
         create: (title: string, start: string, end: string) => Promise<JarvisCalendarResponse>
@@ -636,6 +636,7 @@ export interface JarvisOnboardingPermissionSnapshot {
 export interface JarvisCalendarStatus {
   authorization: 'notDetermined' | 'restricted' | 'denied' | 'writeOnly' | 'fullAccess' | 'unknown'
   connected: boolean
+  mode?: 'off' | 'read' | 'interact'
   supported: boolean
 }
 
