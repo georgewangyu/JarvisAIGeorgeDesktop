@@ -133,7 +133,8 @@ def test_accepted_init_failure_survives_store_reopen(monkeypatch, tmp_path, fail
     assert [message["role"] for message in messages] == ["user", "assistant"]
     assert messages[0]["text"] == "synthetic prompt"
     assert messages[1]["display_metadata"]["turn_failure"] == frames[0]["error_surface"]
-    assert messages[1]["text"] == frames[0]["text"]
+    assert messages[1]["text"] == "The assistant could not start this turn."
+    assert "gw-session-key" not in messages[1]["text"]
 
 
 @pytest.mark.parametrize("later_role", ["assistant", "user"])
@@ -153,4 +154,24 @@ def test_init_failure_does_not_append_after_saved_reply_or_later_turn(monkeypatc
     assert len([kind for kind, _, _ in emitted if kind == "message.complete"]) == 1
     assert [(row["role"], row["content"]) for row in db.get_messages("gw-session-key")] == [
         ("user", "synthetic prompt"), (later_role, "already saved")]
+    db.close()
+
+
+def test_provider_init_failure_persists_safe_classification_not_raw_path(monkeypatch, tmp_path):
+    _turn_env(monkeypatch, tmp_path)
+    db = SessionDB(tmp_path / "state.db")
+    db.create_session("gw-session-key", source="desktop")
+    monkeypatch.setattr(server, "_get_db", lambda: db)
+    monkeypatch.setattr(server, "_ensure_session_db_row", lambda session: True)
+    session = _session(None, agent_error=(
+        "Hermes is not connected to any AI provider yet. "
+        "Check SYNTHETIC_PRIVATE_PATH before retrying."))
+    server._persist_submit_user_row(session, "synthetic prompt", None)
+    server._start_inflight_turn(session, "synthetic prompt")
+
+    assert server._run_prompt_submit("rid", "ui-sid", session, "synthetic prompt") is False
+    saved = db.get_messages("gw-session-key")
+    assert saved[-1]["role"] == "assistant"
+    assert saved[-1]["content"] == "No inference provider is configured."
+    assert "SYNTHETIC_PRIVATE_PATH" not in saved[-1]["content"]
     db.close()

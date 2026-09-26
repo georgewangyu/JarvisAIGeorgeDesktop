@@ -544,6 +544,13 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
       ...(extractedAttachmentRefs ? { attachmentRefs: extractedAttachmentRefs } : {})
     })
 
+    // The classified initialization failure is presented by ErrorCardHeadline.
+    // Its saved content is a safe classification key, not another assistant
+    // answer above the card (and never a place for raw setup diagnostics).
+    if (failureSurface?.code === 'agent_init_failed') {
+      result[result.length - 1].parts = []
+    }
+
     activeAssistantIndex = message.role === 'assistant' ? result.length - 1 : null
   })
   flushPendingTools(messages.length)
@@ -556,7 +563,7 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
 
   return withUniqueToolCallIds(
     withoutGeneratedImageEchoes.filter(
-      m => chatMessageText(m).trim() || m.parts.some(part => part.type !== 'text') || m.attachmentRefs?.length
+      m => chatMessageText(m).trim() || m.error || m.parts.some(part => part.type !== 'text') || m.attachmentRefs?.length
     )
   )
 }

@@ -390,9 +390,15 @@ def _emit_terminal_turn_error(
     with session["history_lock"]:
         if error_surface and error_surface.get("code") == "agent_init_failed":
             # No agent exists to flush a reply. Persist the same card while the submit-time
-            # user row still identifies this turn; storage trouble cannot suppress the frame.
+            # user row still identifies this turn. Do not put raw construction diagnostics
+            # (which can include local paths or credentials) in the durable consumer row.
+            # Storage trouble cannot suppress the live terminal frame.
+            reason = str(error or "").lower()
+            safe_error = ("No inference provider is configured."
+                          if "no inference provider" in reason or "not connected to any ai provider" in reason
+                          else "The assistant could not start this turn.")
             try:
-                _persist_agent_init_failure(session, turn_error_text(error, error_surface), error_surface)
+                _persist_agent_init_failure(session, safe_error, error_surface)
             except Exception:
                 logger.warning("failed to persist agent initialization failure", exc_info=True)
         _fail_inflight_turn(session, error, error_surface=error_surface)

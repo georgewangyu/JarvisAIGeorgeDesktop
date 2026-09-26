@@ -30,4 +30,18 @@ describe('durable turn failure hydration', () => {
 
     expect(messages.every(message => !message.error)).toBe(true)
   })
+
+  it('shows a classified initialization failure without a second raw text bubble', () => {
+    const messages = toChatMessages([
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'No inference provider is configured.', display_metadata: {
+        turn_failure: { layer: 'runtime', code: 'agent_init_failed', retryable: true }
+      } }
+    ])
+
+    expect(messages).toHaveLength(2)
+    expect(messages[1].parts).toEqual([])
+    expect(messages[1].error).toBe('No inference provider is configured.')
+    expect(messages[1].errorSurface?.code).toBe('agent_init_failed')
+  })
 })
