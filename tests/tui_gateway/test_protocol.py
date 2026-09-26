@@ -679,6 +679,116 @@ def test_approval_respond_falls_back_to_request_id_lookup(server, monkeypatch):
     ]
 
 
+def test_approval_rpc_keeps_same_stored_id_in_separate_profiles(server, tmp_path, monkeypatch):
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from tools import approval
+    from tools.approval_gateway_wait import _ApprovalEntry
+
+    launch, secondary = tmp_path / "launch", tmp_path / "secondary"
+    launch.mkdir()
+    secondary.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(launch))
+    # This module's shared fixture imports server with a mocked constants module;
+    # restore the real home context functions for this profile-routing integration.
+    monkeypatch.setattr(server, "set_hermes_home_override", set_hermes_home_override)
+    monkeypatch.setattr(server, "reset_hermes_home_override", reset_hermes_home_override)
+    monkeypatch.setattr(server, "_hermes_home", launch)
+    key = "same-stored-id"
+    server._sessions["ui-a"] = {"session_key": key, "profile_home": str(launch), "history": []}
+    server._sessions["ui-b"] = {"session_key": key, "profile_home": str(secondary), "history": []}
+
+    def stage(home, request_id):
+        token = set_hermes_home_override(home)
+        try:
+            with approval._lock:
+                approval._gateway_queues[approval._gateway_queue_key(key)] = [
+                    _ApprovalEntry({"request_id": request_id, "command": "synthetic"})]
+        finally:
+            reset_hermes_home_override(token)
+
+    stage(launch, "request-a")
+    stage(secondary, "request-b")
+    try:
+        pending_b = server.handle_request({"id": "p", "method": "approval.pending",
+                                           "params": {"session_id": "ui-b"}})
+        assert [item["request_id"] for item in pending_b["result"]["approvals"]] == ["request-b"]
+        refused = server.handle_request({"id": "x", "method": "approval.respond",
+                                         "params": {"session_id": "ui-b", "request_id": "request-a",
+                                                    "choice": "once"}})
+        assert refused["result"]["resolved"] == 0
+        accepted = server.handle_request({"id": "y", "method": "approval.respond",
+                                          "params": {"session_id": "ui-b", "request_id": "request-b",
+                                                     "choice": "deny"}})
+        assert accepted["result"]["resolved"] == 1
+        pending_a = server.handle_request({"id": "q", "method": "approval.pending",
+                                           "params": {"session_id": "ui-a"}})
+        assert [item["request_id"] for item in pending_a["result"]["approvals"]] == ["request-a"]
+        assert server.handle_request({"id": "z", "method": "approval.respond",
+                                      "params": {"session_id": "ui-a", "request_id": "request-a",
+                                                 "choice": "once"}})["result"]["resolved"] == 1
+    finally:
+        for home, request_id in ((launch, "request-a"), (secondary, "request-b")):
+            token = set_hermes_home_override(home)
+            try:
+                owner = approval._gateway_queue_key(key)
+                with approval._lock:
+                    approval._gateway_queues.pop(owner, None)
+                    approval._gateway_settlements.pop((owner, request_id), None)
+            finally:
+                reset_hermes_home_override(token)
+
+
+def test_approval_notify_registration_and_rekey_follow_session_profile(server, tmp_path, monkeypatch):
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from tools import approval
+
+    launch, secondary = tmp_path / "launch", tmp_path / "secondary"
+    launch.mkdir()
+    secondary.mkdir()
+    monkeypatch.setenv("HERMES_HOME", str(launch))
+    monkeypatch.setattr(server, "set_hermes_home_override", set_hermes_home_override)
+    monkeypatch.setattr(server, "reset_hermes_home_override", reset_hermes_home_override)
+    monkeypatch.setattr(server, "_hermes_home", launch)
+    monkeypatch.setattr(server, "_wire_callbacks", lambda _sid: None)
+    monkeypatch.setattr(server, "_transfer_active_session_slot", lambda *_a, **_kw: True)
+    key = "same-stored-id"
+    first = {"session_key": key, "profile_home": str(launch), "agent": types.SimpleNamespace(session_id="new-a")}
+    second = {"session_key": key, "profile_home": str(secondary)}
+    server._sessions["ui-a"] = first
+    server._sessions["ui-b"] = second
+
+    def has_notify(home, stored_key):
+        token = set_hermes_home_override(home)
+        try:
+            return approval._gateway_notify_cb(stored_key) is not None
+        finally:
+            reset_hermes_home_override(token)
+
+    try:
+        assert server._wire_session_agent("ui-a", key, first["agent"])
+        assert server._wire_session_agent("ui-b", key, types.SimpleNamespace())
+        assert has_notify(launch, key) and has_notify(secondary, key)
+
+        server._sync_session_key_after_compress(
+            "ui-a", first, clear_pending_title=False, restart_slash_worker=False)
+        assert not has_notify(launch, key) and has_notify(launch, "new-a")
+        assert has_notify(secondary, key)
+
+        # A build whose UI record was replaced has already released its build
+        # scope; late unregister must still remove only the old profile's hook.
+        server._sessions.pop("ui-b")
+        server._finish_agent_build(
+            "ui-b", key, second, notify_registered=True, scopes=None, session_db=None)
+        assert not has_notify(secondary, key)
+        assert has_notify(launch, "new-a")
+    finally:
+        with server._session_profile_runtime_scope(first):
+            approval.unregister_gateway_notify("new-a")
+            approval.unregister_gateway_notify(key)
+        with server._session_profile_runtime_scope(second):
+            approval.unregister_gateway_notify(key)
+
+
 def test_approval_respond_falls_back_to_stored_session_id(server, monkeypatch):
     """session_id holding a STORED id maps to the live runtime record."""
     from tools import approval

@@ -1194,6 +1194,7 @@ def _approval_reply(rid, result_key, call):
 
 
 @method("approval.pending")
+@_profile_scoped
 def _(rid, params: dict) -> dict:
     session, err = _sess(params, rid)
     if err:
@@ -1206,6 +1207,7 @@ def _(rid, params: dict) -> dict:
 
 
 @method("approval.received")
+@_profile_scoped
 def _(rid, params: dict) -> dict:
     session, err = _sess(params, rid)
     if err:
@@ -1231,10 +1233,11 @@ def _approval_respond_session_fallback(params: dict):
                 live = list(_sessions.items())
             for sid, session in live:
                 key = str(session.get("session_key") or "")
-                if key and any(
-                    str(pending.get("request_id") or "") == request_id
-                    for pending in list_gateway_approvals(key)):
-                    return session
+                with _session_profile_runtime_scope(session):
+                    if key and any(
+                        str(pending.get("request_id") or "") == request_id
+                        for pending in list_gateway_approvals(key)):
+                        return session
         except Exception:
             logger.debug("approval.respond request_id fallback failed", exc_info=True)
     if target := str(params.get("session_id") or ""):
@@ -1247,6 +1250,7 @@ def _approval_respond_session_fallback(params: dict):
 
 
 @method("approval.respond")
+@_profile_scoped
 def _(rid, params: dict) -> dict:
     session, err = _sess(params, rid)
     if err:
@@ -1256,11 +1260,12 @@ def _(rid, params: dict) -> dict:
         session = _approval_respond_session_fallback(params)
         if session is None:
             return err
-    return _approval_reply(
-        rid, "resolved",
-        lambda a: a.resolve_gateway_approval(
-            session["session_key"], params.get("choice", "deny"),
-            resolve_all=params.get("all", False), request_id=params.get("request_id")))
+    with _session_profile_runtime_scope(session):
+        return _approval_reply(
+            rid, "resolved",
+            lambda a: a.resolve_gateway_approval(
+                session["session_key"], params.get("choice", "deny"),
+                resolve_all=params.get("all", False), request_id=params.get("request_id")))
 
 
 def register(server) -> None:

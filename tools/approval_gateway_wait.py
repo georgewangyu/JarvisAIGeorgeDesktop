@@ -153,7 +153,8 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
     }
     keys = list(approval_data.get("pattern_keys") or [])
     with _approval._lock:
-        leader = next((e for e in _approval._gateway_queues.get(session_key, [])
+        owner = _approval._gateway_queue_key(session_key)
+        leader = next((e for e in _approval._gateway_queues.get(owner, [])
                        if e.data.get("command") == approval_data.get("command")
                        and list(e.data.get("pattern_keys") or []) == keys), None)
     if leader is not None and not preparing_terminal_approval():
@@ -164,7 +165,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
     entry = _ApprovalEntry(approval_data)
     with _approval._lock:
         register_prepared_approval(session_key, entry)
-        _approval._gateway_queues.setdefault(session_key, []).append(entry)
+        _approval._gateway_queues.setdefault(owner, []).append(entry)
 
     def _drop_entry(state: str) -> str | None:
         """Leave the queue and return the choice committed so far. Reading ``entry.result`` and
@@ -174,11 +175,11 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         nothing was pending instead of being acked "ok" while the agent denies)."""
         with _approval._lock:
             choice = entry.result
-            queue = _approval._gateway_queues.get(session_key, [])
+            queue = _approval._gateway_queues.get(owner, [])
             if entry in queue:
                 queue.remove(entry)
             if not queue:
-                _approval._gateway_queues.pop(session_key, None)
+                _approval._gateway_queues.pop(owner, None)
             settle, entry.settle = entry.settle, None
         if settle is not None:
             # ``request.cancel`` carries a RequestCancelReason: a choice committed from another surface is

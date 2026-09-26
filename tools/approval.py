@@ -118,13 +118,24 @@ def _denial_breaker_addendum(session_key: str) -> str:
 
 # Optional free-text reason supplied with an explicit deny (``/deny <reason>``) so the agent can adapt
 # instead of only hearing "denied". Ported from qwibitai/nanoclaw#2832.
-_gateway_queues: dict[str, list] = {}        # session_key → [_ApprovalEntry, …]
-_gateway_notify_cbs: dict[str, object] = {}  # session_key → callable(approval_data)
+_gateway_queues: dict[str | tuple[str, str], list] = {}
+_gateway_notify_cbs: dict[str | tuple[str, str], object] = {}
 # Process-local evidence that a decision was accepted. A gateway restart loses this
 # evidence, so an absent approval after restart must remain outcome-unknown.
-_gateway_settlements: dict[tuple[str, str], float] = {}
+_gateway_settlements: dict[tuple[str | tuple[str, str], str], float] = {}
 _GATEWAY_SETTLEMENT_TTL = 3600
 _GATEWAY_SETTLEMENT_LIMIT = 512
+
+
+def _gateway_queue_key(session_key: str) -> str | tuple[str, str]:
+    """Keep launch-profile keys compatible while isolating hosted profile queues.
+
+    The process home is the launch profile even when its runtime scope becomes
+    explicitly bound after a second profile joins the same server.
+    """
+    from hermes_constants import get_process_hermes_home, hermes_home_key
+    home = hermes_home_key()
+    return session_key if home == hermes_home_key(get_process_hermes_home()) else (home, session_key)
 
 
 def _prune_gateway_settlements(now: float) -> None:
@@ -139,15 +150,16 @@ def register_gateway_notify(session_key: str, cb) -> None:
     """Register ``cb(approval_data: dict) -> None`` for sending approval requests. The callback
     bridges sync→async: it runs in the agent thread and must schedule the send on the loop."""
     with _lock:
-        _gateway_notify_cbs[session_key] = cb
+        _gateway_notify_cbs[_gateway_queue_key(session_key)] = cb
 
 
 def unregister_gateway_notify(session_key: str) -> None:
     """Unregister the callback and wake ALL blocked threads for this session so
     they don't hang forever (agent run finished or interrupted)."""
     with _lock:
-        _gateway_notify_cbs.pop(session_key, None)
-        for entry in _gateway_queues.pop(session_key, []):
+        owner = _gateway_queue_key(session_key)
+        _gateway_notify_cbs.pop(owner, None)
+        for entry in _gateway_queues.pop(owner, []):
             entry.event.set()
 
 
@@ -162,7 +174,8 @@ def resolve_gateway_approval(session_key: str, choice: str,
     relayed to the agent in the BLOCKED message. Returns the number resolved.
     """
     with _lock:
-        queue = _gateway_queues.get(session_key)
+        owner = _gateway_queue_key(session_key)
+        queue = _gateway_queues.get(owner)
         if not queue:
             return 0
         if request_id:
@@ -176,7 +189,7 @@ def resolve_gateway_approval(session_key: str, choice: str,
         else:
             targets = [queue.pop(0)]
         if not queue:
-            _gateway_queues.pop(session_key, None)
+            _gateway_queues.pop(owner, None)
         # Popping the entry and committing its outcome are ONE critical section: the waiter's
         # ``_drop_entry`` reads ``entry.result`` under this same lock after its deadline check, so a
         # choice acked to the client here can never be popped-and-lost as a timeout (#112548).
@@ -186,7 +199,7 @@ def resolve_gateway_approval(session_key: str, choice: str,
                 entry.reason = reason
             request_id_value = entry.data.get("request_id")
             if isinstance(request_id_value, str) and request_id_value:
-                key = (session_key, request_id_value)
+                key = (owner, request_id_value)
                 _gateway_settlements.pop(key, None)
                 _gateway_settlements[key] = time.monotonic()
             entry.event.set()
@@ -199,13 +212,14 @@ def withdraw_gateway_approval(session_key: str, request_id: str, cause: str) -> 
     The waiter wakes at once with ``cancelled=cause`` — a withdrawal, never a user deny — instead of
     idling for the whole approvals.timeout (#112548). False when it is no longer pending."""
     with _lock:
-        queue = _gateway_queues.get(session_key, [])
+        owner = _gateway_queue_key(session_key)
+        queue = _gateway_queues.get(owner, [])
         entry = next((e for e in queue if e.data.get("request_id") == request_id), None)
         if entry is None:
             return False
         queue.remove(entry)
         if not queue:
-            _gateway_queues.pop(session_key, None)
+            _gateway_queues.pop(owner, None)
         entry.cancelled = cause
         entry.event.set()
     return True
@@ -214,7 +228,7 @@ def withdraw_gateway_approval(session_key: str, request_id: str, cause: str) -> 
 def list_gateway_approvals(session_key: str) -> list[dict]:
     """Return replay-safe snapshots of unresolved approvals for one session."""
     with _lock:
-        return [dict(entry.data) for entry in _gateway_queues.get(session_key, [])]
+        return [dict(entry.data) for entry in _gateway_queues.get(_gateway_queue_key(session_key), [])]
 
 
 def gateway_approval_snapshot(session_key: str) -> dict:
@@ -224,10 +238,11 @@ def gateway_approval_snapshot(session_key: str) -> dict:
     the corresponding tool completed. No command, choice, or reason is retained.
     """
     with _lock:
+        owner = _gateway_queue_key(session_key)
         _prune_gateway_settlements(time.monotonic())
         return {
-            "approvals": [dict(entry.data) for entry in _gateway_queues.get(session_key, [])],
-            "settled_request_ids": [request_id for (owner, request_id) in _gateway_settlements if owner == session_key],
+            "approvals": [dict(entry.data) for entry in _gateway_queues.get(owner, [])],
+            "settled_request_ids": [request_id for (key, request_id) in _gateway_settlements if key == owner],
         }
 
 
@@ -235,7 +250,7 @@ def register_gateway_settle(session_key: str, request_id: str, settle) -> bool:
     """Attach ``settle(reason)`` to one pending approval; it runs once when that wait ends by any path.
     False when the request is no longer pending (the surface should withdraw its prompt itself)."""
     with _lock:
-        for entry in _gateway_queues.get(session_key, []):
+        for entry in _gateway_queues.get(_gateway_queue_key(session_key), []):
             if entry.data.get("request_id") == request_id:
                 entry.settle = settle
                 return True
@@ -245,7 +260,7 @@ def register_gateway_settle(session_key: str, request_id: str, settle) -> bool:
 def ack_gateway_approval(session_key: str, request_id: str) -> bool:
     """Record that a client received a particular pending approval request."""
     with _lock:
-        for entry in _gateway_queues.get(session_key, []):
+        for entry in _gateway_queues.get(_gateway_queue_key(session_key), []):
             if entry.data.get("request_id") == request_id:
                 entry.acknowledged = True
                 return True
@@ -255,7 +270,7 @@ def ack_gateway_approval(session_key: str, request_id: str) -> bool:
 def has_blocking_approval(session_key: str) -> bool:
     """Check if a session has one or more blocking gateway approvals waiting."""
     with _lock:
-        return bool(_gateway_queues.get(session_key))
+        return bool(_gateway_queues.get(_gateway_queue_key(session_key)))
 
 
 def pending_gateway_approval_count() -> int:
@@ -270,7 +285,7 @@ def get_pending_gateway_approval(session_key: str) -> dict | None:
     if not session_key:
         return None
     with _lock:
-        queue = _gateway_queues.get(session_key)
+        queue = _gateway_queues.get(_gateway_queue_key(session_key))
         if not queue:
             return None
         return dict(queue[0].data)
@@ -335,7 +350,7 @@ def clear_session(session_key: str) -> None:
         _session_approved.pop(grant_key, None)
         _session_yolo.discard(grant_key)
         _pending.pop(session_key, None)
-        for entry in _gateway_queues.pop(session_key, []):
+        for entry in _gateway_queues.pop(_gateway_queue_key(session_key), []):
             # Cancel blocked waits now so the old run unwinds instead of idling until timeout;
             # the prompt was withdrawn, nobody denied it.
             entry.cancelled = "the session ended before the prompt was answered"
@@ -585,7 +600,7 @@ def _user_approved(session_key: str, description: str) -> dict:
 
 def _gateway_notify_cb(session_key: str):
     with _lock:
-        return _gateway_notify_cbs.get(session_key)
+        return _gateway_notify_cbs.get(_gateway_queue_key(session_key))
 
 
 def _pending_result(spec, session_key: str, *, command: str, description: str,

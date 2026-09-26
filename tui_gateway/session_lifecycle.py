@@ -465,7 +465,7 @@ def _teardown_session(session: dict | None, *, end_reason: str = "tui_close") ->
         return
     _finalize_session(session, end_reason=end_reason)
     _announce_session_reclaimed(session, end_reason)
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(Exception), _session_profile_runtime_scope(session):
         from tools.approval import unregister_gateway_notify
         # One approval callback per key: after a takeover it is the new runtime's registration.
         if (key := session.get("session_key")) and not session.get("_lease_taken_over"):
@@ -635,7 +635,7 @@ def _interrupt_session_turn(sid: str, session: dict, *, request_id: str | None =
                     session["running"] = False
                     _clear_inflight_turn(session)
     _clear_pending(sid)
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(Exception), _session_profile_runtime_scope(session):
         from tools.approval import resolve_gateway_approval
         resolve_gateway_approval(session["session_key"], "deny", resolve_all=True)
     return use_compute_host

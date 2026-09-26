@@ -736,11 +736,12 @@ def _pending_connection_request_payload(sid: str) -> dict | None:
     return operation.request_payload() if operation is not None else None
 
 
-def _pending_approval_request_payload(session_key: str) -> dict | None:
+def _pending_approval_request_payload(session_key: str, profile_home: str | None = None) -> dict | None:
     """Read the oldest unresolved approval in a session, if there is one."""
     try:
         from tools.approval import get_pending_gateway_approval
-        approval = get_pending_gateway_approval(session_key)
+        with _session_profile_runtime_scope({"profile_home": profile_home}):
+            approval = get_pending_gateway_approval(session_key)
     except Exception:
         logger.debug("failed to read pending approval for %s", session_key, exc_info=True)
         return None
@@ -759,26 +760,27 @@ def _emit_approval_request(sid: str, data: dict | None) -> None:
     from tools import approval as _approval
     payload = _approval_request_payload(data)
     request_id = str(payload.get("request_id") or "")
-    session_key = str((_sessions.get(sid) or {}).get("session_key") or "")
+    session = _sessions.get(sid) or {}
+    session_key = str(session.get("session_key") or "")
+    profile_home = session.get("profile_home")
 
     def on_result(result: dict | None) -> None:
-        if result is None:
-            # No client can answer this prompt: the request was never sent (the only attached client predates
-            # server→client requests) or the client answered -32601 (no handler). Without withdrawing the
-            # queue entry the agent would idle for the whole approvals.timeout with no prompt anywhere
-            # (#112548). A withdrawal, not a deny: nobody refused the command.
-            if request_id:
-                _approval.withdraw_gateway_approval(session_key, request_id,
-                                                    "the attached client cannot answer approval requests "
-                                                    "(update the Hermes app)")
-            return
-        choice = str(result.get("choice") or "deny")
-        _approval.resolve_gateway_approval(session_key, choice, resolve_all=bool(result.get("all")),
-                                           request_id=request_id or None)
+        with _session_profile_runtime_scope({"profile_home": profile_home}):
+            if result is None:
+                # A missing client handler withdraws the unanswered prompt at once.
+                if request_id:
+                    _approval.withdraw_gateway_approval(session_key, request_id,
+                                                        "the attached client cannot answer approval requests "
+                                                        "(update the Hermes app)")
+                return
+            choice = str(result.get("choice") or "deny")
+            _approval.resolve_gateway_approval(session_key, choice, resolve_all=bool(result.get("all")),
+                                               request_id=request_id or None)
 
     settle = server_requests.send_async("approval", sid, payload, on_result)
     if request_id:
-        _approval.register_gateway_settle(session_key, request_id, settle)
+        with _session_profile_runtime_scope({"profile_home": profile_home}):
+            _approval.register_gateway_settle(session_key, request_id, settle)
 
 
 def _status_update(sid: str, kind: str, text: str | None = None):
@@ -980,7 +982,9 @@ def _wire_session_agent(sid: str, key: str, agent) -> bool:
     client; the self-improvement "💾 …" summary is emitted as review.summary (no print surface), honoring
     display.memory_notifications."""
     notify_registered = False
-    with contextlib.suppress(Exception):
+    # The eager _init_session path can arrive without a build scope; the queue
+    # notifier and the allowlist both belong to this session's profile.
+    with contextlib.suppress(Exception), _session_profile_runtime_scope(_sessions.get(sid) or {}):
         from tools.approval import load_permanent_allowlist, register_gateway_notify
         register_gateway_notify(key, lambda data: _emit_approval_request(sid, data))
         notify_registered = True
@@ -1054,7 +1058,7 @@ def _finish_agent_build(sid: str, key: str, current: dict, *, notify_registered:
     with _sessions_lock:
         replaced = _sessions.get(sid) is not current
     if replaced and notify_registered:
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(Exception), _session_profile_runtime_scope(current):
             from tools.approval import unregister_gateway_notify
             unregister_gateway_notify(key)
     # Dedicated profile handle: hand it to the agent that will be torn down, else close it (build
@@ -2846,7 +2850,8 @@ def _live_session_payload(
         "status": _session_live_status(sid, session),
     }
     for key, value in (("inflight", inflight), ("queued", queued),
-                       ("pending_approval", _pending_approval_request_payload(str(session.get("session_key") or ""))),
+                       ("pending_approval", _pending_approval_request_payload(
+                           str(session.get("session_key") or ""), session.get("profile_home"))),
                        ("open_requests", _open_requests(sid)),
                        ("pending_connection", _pending_connection_request_payload(sid))):
         if value:
