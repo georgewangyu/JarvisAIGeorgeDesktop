@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
+import { $notifications } from '@/store/notifications'
+
 import { ArtifactsView } from './index'
 
 const listSessions = vi.hoisted(() => vi.fn())
@@ -15,6 +17,7 @@ vi.mock('@/hermes', async () => ({
 }))
 
 beforeEach(() => {
+  $notifications.set([])
   listSessions.mockReset()
   listSessions.mockResolvedValue({ sessions: [{ id: 'synthetic-session', title: 'Fixture', profile: 'default' }] })
 })
@@ -24,7 +27,7 @@ afterEach(() => {
 })
 
 it('distinguishes an indexing failure from an empty Library and recovers on retry', async () => {
-  listSessions.mockRejectedValueOnce(new Error('synthetic index failure'))
+  listSessions.mockRejectedValueOnce(new Error('Could not read /Users/private/notes.db?token=secret-value'))
 
   render(
     <MemoryRouter>
@@ -34,6 +37,9 @@ it('distinguishes an indexing failure from an empty Library and recovers on retr
 
   expect(await screen.findByRole('heading', { name: 'Artifacts failed to load' })).toBeTruthy()
   expect(screen.queryByText('No artifacts found')).toBeNull()
+  expect($notifications.get()[0]?.message).toBe('Artifacts failed to load')
+  expect(JSON.stringify($notifications.get())).not.toContain('secret-value')
+  expect(JSON.stringify($notifications.get())).not.toContain('/Users/private')
 
   fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
   expect(await screen.findByRole('button', { name: 'library-test.pdf' })).toBeTruthy()
@@ -86,7 +92,7 @@ it('keeps the older-page action available for retry after a read failure', async
     sessions: [{ id: 'synthetic-session', title: 'Recent', profile: 'default' }],
     total: 31
   })
-  listSessions.mockRejectedValueOnce(new Error('synthetic older-page failure'))
+  listSessions.mockRejectedValueOnce(new Error('Could not read /Users/private/archive?token=secret-value'))
   listSessions.mockResolvedValueOnce({ sessions: [{ id: 'older', title: 'Older', profile: 'default' }], total: 31 })
 
   render(
@@ -98,6 +104,9 @@ it('keeps the older-page action available for retry after a read failure', async
   expect(await screen.findByRole('button', { name: 'library-test.pdf' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Load older chats' }))
   expect(await screen.findByText('Older chats could not be loaded.')).toBeTruthy()
+  expect($notifications.get()[0]?.message).toBe('Older chats could not be loaded.')
+  expect(JSON.stringify($notifications.get())).not.toContain('secret-value')
+  expect(JSON.stringify($notifications.get())).not.toContain('/Users/private')
   expect(screen.getByRole('button', { name: 'library-test.pdf' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Load older chats' }))
   expect(await screen.findByRole('button', { name: 'older.pdf' })).toBeTruthy()

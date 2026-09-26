@@ -39,7 +39,7 @@ import { normalize } from '@/lib/text'
 import { fmtDayTime } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
-import { notify, notifyError } from '@/store/notifications'
+import { notify } from '@/store/notifications'
 import { $activeGatewayProfile } from '@/store/profile'
 
 import { ConsumerPage, startConsumerDraft } from '../consumer-pages'
@@ -244,8 +244,8 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       setOlderOffset(page.total > SESSION_INDEX_PAGE_SIZE ? SESSION_INDEX_PAGE_SIZE : null)
       setOlderLoadError(false)
       setLoadError(false)
-    } catch (err) {
-      notifyError(err, a.failedLoad)
+    } catch {
+      notify({ id: 'artifacts-load-error', kind: 'error', message: a.failedLoad, durationMs: 10_000 })
       setLoadError(true)
     } finally {
       refreshInFlightRef.current = false
@@ -298,8 +298,8 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
 
       const nextOffset = olderOffset + SESSION_INDEX_PAGE_SIZE
       setOlderOffset(page.sessions.length > 0 && page.total > nextOffset ? nextOffset : null)
-    } catch (err) {
-      notifyError(err, a.failedLoad)
+    } catch {
+      notify({ id: 'artifacts-older-load-error', kind: 'error', message: a.olderLoadFailed, durationMs: 10_000 })
       setOlderLoadError(true)
     } finally {
       refreshInFlightRef.current = false
