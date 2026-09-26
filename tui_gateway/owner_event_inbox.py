@@ -12,6 +12,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import stat
 import subprocess
 import sys
 import threading
@@ -19,12 +21,15 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from utils import fsync_directory
+
 from tools.bot_live_delivery import (
     deliver_to_live_owner, find_jarvis_live_owner, find_jarvis_main_session_id,
     read_delivery_result,
 )
 
 log = logging.getLogger(__name__)
+_WAKE_QUEUE_DIR = "jarvis_event_wake"
 
 
 def _event_delivery_id(source: str, event_id: str) -> str:
@@ -54,6 +59,7 @@ def admit_owner_event(
 
 def admit_jarvis_event(
     profile_home: Path | str, *, source: str, event_id: str, text: str,
+    queue_os_wake: bool = False,
 ) -> dict[str, Any]:
     """Admit an event to the permanent desktop chat, without waking a closed app.
 
@@ -63,20 +69,102 @@ def admit_jarvis_event(
     """
     if not isinstance(text, str) or not text.strip():
         raise ValueError("event text is required")
+    if type(queue_os_wake) is not bool:
+        raise ValueError("OS wake request must be a boolean")
+    if queue_os_wake and not jarvis_headless_activation_enabled(profile_home):
+        raise ValueError("headless activation is not enabled for the exact profile")
     existing = owner_event_receipt(profile_home, source=source, event_id=event_id)
     if existing is not None:
         expected = f"[Event from {source}; id {event_id}]\n{text}"
         if existing.get("message") != expected:
             raise ValueError("event id already belongs to a different payload")
+        if queue_os_wake and existing.get("os_wake_requested") is not True:
+            raise ValueError("existing event was not opted in to OS wake")
         return existing
     owner = find_jarvis_live_owner(profile_home)
     if owner is not None:
         return admit_owner_event(profile_home, owner, source=source, event_id=event_id, text=text)
-    return _defer_jarvis_event(profile_home, source=source, event_id=event_id, text=text)
+    return _defer_jarvis_event(
+        profile_home, source=source, event_id=event_id, text=text,
+        queue_os_wake=queue_os_wake)
+
+
+def _wake_queue_root(home: Path) -> Path:
+    # Separate from the permanent receipt directory: a launchd queue must
+    # become empty after processing or it will repeatedly launch its job.
+    return home / "runtime" / _WAKE_QUEUE_DIR
+
+
+def _checked_wake_queue(home: Path, *, create: bool = False) -> Path:
+    queue = _wake_queue_root(home)
+    if create:
+        queue.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = queue.lstat()  # Do not follow a replaced queue-directory symlink.
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) & 0o077):
+        raise ValueError("Jarvis wake queue is not a private owned directory")
+    if create:
+        fsync_directory(queue.parent)
+    return queue
+
+
+def _checked_wake_ticket(queue: Path, delivery_id: str) -> Path:
+    from tools.bot_live_delivery import _delivery_id
+
+    path = queue / _delivery_id(delivery_id)
+    info = path.lstat()  # Only an empty, owner-private regular file is a ticket.
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size != 0):
+        raise ValueError("Jarvis wake ticket is not an opaque private file")
+    return path
+
+
+def _queue_wake_ticket_locked(home: Path, delivery_id: str) -> None:
+    queue = _checked_wake_queue(home, create=True)
+    path = queue / delivery_id
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except FileExistsError:
+        _checked_wake_ticket(queue, delivery_id)
+        return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    fsync_directory(queue)
+
+
+def read_jarvis_wake_ticket(profile_home: Path | str, delivery_id: str) -> dict[str, Any]:
+    """Validate an exact, opt-in wake ticket; never claim it or start a turn.
+
+    A future one-shot OS launcher may enumerate opaque names in the separate
+    queue, but must recheck each name and receipt under the mailbox lock. A
+    ticket alone is never authority to run a model or replay a claimed turn.
+    """
+    from tools.bot_live_delivery import _delivery_id, _locked, _read
+
+    home = Path(profile_home).resolve()
+    key = _delivery_id(delivery_id)
+    if not jarvis_headless_activation_enabled(home):
+        raise ValueError("headless activation is not enabled for the exact profile")
+    with _locked(home) as root:
+        queue = _checked_wake_queue(home)
+        _checked_wake_ticket(queue, key)
+        receipt = _read(root / f"{key}.json")
+        if (receipt is None or receipt.get("status") != "deferred"
+                or receipt.get("profile_home") != str(home)
+                or receipt.get("delivery_id") != key
+                or receipt.get("id") != key
+                or receipt.get("os_wake_requested") is not True
+                or receipt.get("target_session_id") != find_jarvis_main_session_id(home)):
+            raise ValueError("wake ticket has no exact opted-in deferred Jarvis owner")
+        return receipt
 
 
 def _defer_jarvis_event(
     profile_home: Path | str, *, source: str, event_id: str, text: str,
+    queue_os_wake: bool = False,
 ) -> dict[str, Any]:
     import time
     from tools.bot_live_delivery import _locked, _next_sequence, _read, _write
@@ -99,6 +187,12 @@ def _defer_jarvis_event(
         record = dict(delivery_id=key, id=key, profile_home=str(home),
                       target_session_id=session_id, message=message, status="deferred",
                       created_at=time.time_ns(), sequence=_next_sequence(root))
+        if queue_os_wake:
+            # Write the opaque wake first under the same process-shared lock.
+            # If the producer dies before receipt commit, the orphan cannot
+            # validate or run; if it dies after commit, the wake remains.
+            _queue_wake_ticket_locked(home, key)
+            record["os_wake_requested"] = True
         _write(path, record)
         return record
 
