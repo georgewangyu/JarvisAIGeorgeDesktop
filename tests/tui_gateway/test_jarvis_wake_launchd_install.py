@@ -85,6 +85,16 @@ def test_install_and_idempotent_disable(tmp_path):
     assert not manager.path.exists()
 
 
+def test_new_user_without_launchagents_directory_can_opt_in(tmp_path):
+    manager, fake, _ = _manager(tmp_path)
+    manager.directory.rmdir()
+    assert manager.status() == LaunchAgentStatus(False, False, False)
+    assert manager.disable() == LaunchAgentStatus(False, False, False)
+    assert not manager.directory.exists() and fake.calls
+    assert manager.install() == LaunchAgentStatus(True, True, False)
+    assert manager.directory.stat().st_mode & 0o777 == 0o700
+
+
 def test_opt_in_and_nonempty_queue_refuse_without_registration(tmp_path):
     manager, fake, _ = _manager(tmp_path, enabled=False)
     with pytest.raises(ValueError, match="not enabled"):

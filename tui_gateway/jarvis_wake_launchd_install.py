@@ -69,13 +69,21 @@ class JarvisWakeLaunchAgent:
         self.domain = f"gui/{os.getuid()}"
         self.runner = runner
 
-    def _checked_directory(self) -> None:
+    def _checked_directory(self, *, create: bool = False) -> bool:
         if os.getuid() == 0 or os.geteuid() != os.getuid():
             raise ValueError("a non-root, unprivileged user session is required")
         current = Path(self.directory.anchor)
         for part in self.directory.parts[1:]:
             current /= part
-            info = current.lstat()
+            try:
+                info = current.lstat()
+            except FileNotFoundError:
+                if current != self.directory:
+                    raise
+                if not create:
+                    return False
+                current.mkdir(mode=0o700)
+                info = current.lstat()
             sticky_root = info.st_uid == 0 and bool(info.st_mode & stat.S_ISVTX)
             if (not stat.S_ISDIR(info.st_mode) or info.st_uid not in {0, os.getuid()}
                     or (stat.S_IMODE(info.st_mode) & 0o022 and not sticky_root)):
@@ -83,6 +91,7 @@ class JarvisWakeLaunchAgent:
         info = self.directory.lstat()
         if info.st_uid != os.getuid():
             raise ValueError("LaunchAgents directory must belong to this user")
+        return True
 
     def _checked_file(self) -> os.stat_result | None:
         try:
@@ -115,8 +124,8 @@ class JarvisWakeLaunchAgent:
         return True, running
 
     def status(self) -> LaunchAgentStatus:
-        self._checked_directory()
-        installed = self._checked_file() is not None
+        directory_exists = self._checked_directory()
+        installed = directory_exists and self._checked_file() is not None
         loaded, running = self._loaded()
         if loaded and not installed:
             raise ValueError("an unknown job owns the managed launchd label")
@@ -124,11 +133,11 @@ class JarvisWakeLaunchAgent:
 
     def install(self) -> LaunchAgentStatus:
         """Register only from an idle, opted-in, empty-queue snapshot."""
-        self._checked_directory()
         validate_launch_agent_readiness(self.plist, **self.inputs)
         queue = Path(self.inputs["profile_home"]) / "runtime" / "jarvis_event_wake"
         if any(queue.iterdir()):
             raise ValueError("wake queue must be empty before installation")
+        self._checked_directory(create=True)
         existing = self._checked_file()
         loaded, running = self._loaded()
         if loaded:
@@ -176,8 +185,8 @@ class JarvisWakeLaunchAgent:
 
     def disable(self) -> LaunchAgentStatus:
         """Unload an idle owned job and remove only its exact managed plist."""
-        self._checked_directory()
-        existing = self._checked_file()
+        directory_exists = self._checked_directory()
+        existing = self._checked_file() if directory_exists else None
         loaded, running = self._loaded()
         if loaded and existing is None:
             raise ValueError("an unknown job owns the managed launchd label")
