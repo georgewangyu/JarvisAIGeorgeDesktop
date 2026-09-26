@@ -12,7 +12,7 @@ import type { SessionInfo, SessionMessage } from '@/types/hermes'
 // Reuse transcript hydration (including Codex sidecars), but only expose the
 // final assistant answer. Scheduler instructions, tools and reasoning stay
 // in the original session, not in a consumer automation's result card.
-export function automationAnswer(messages: SessionMessage[]): string {
+function automationOutcome(messages: SessionMessage[]): { answer: string; failed: boolean } {
   const answers = toChatMessages(messages)
     .filter(message => message.role === 'assistant')
     .map(chatMessageText)
@@ -20,7 +20,15 @@ export function automationAnswer(messages: SessionMessage[]): string {
 
   const final = answers.at(-1)?.trim() ?? ''
 
-  return final === '[SILENT]' ? '' : final.replace(/^\[CRON_FAILURE\]\s*/, '')
+  if (/^\[CRON_FAILURE\](?:\s|$)/.test(final)) {
+    return { answer: '', failed: true }
+  }
+
+  return { answer: final === '[SILENT]' ? '' : final, failed: false }
+}
+
+export function automationAnswer(messages: SessionMessage[]): string {
+  return automationOutcome(messages).answer
 }
 
 export function AutomationRunResult({ run }: { run: SessionInfo }) {
@@ -28,16 +36,20 @@ export function AutomationRunResult({ run }: { run: SessionInfo }) {
   const s = useJarvisCopy()
   const [answer, setAnswer] = useState<string | null>(null)
   const [error, setError] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     setAnswer(null)
     setError(false)
+    setFailed(false)
     void getSessionMessages(run.id, run.profile, { limit: 100, order: 'latest' }, { passive: true })
       .then(result => {
         if (!cancelled) {
-          setAnswer(automationAnswer(result.messages))
+          const outcome = automationOutcome(result.messages)
+          setAnswer(outcome.answer)
+          setFailed(outcome.failed)
         }
       })
       .catch(() => {
@@ -62,6 +74,8 @@ export function AutomationRunResult({ run }: { run: SessionInfo }) {
         </div>
       ) : answer === null ? (
         <Codicon name="loading" spinning />
+      ) : failed ? (
+        <p className="text-sm text-muted-foreground">{t.cron.lastRunFailed.replace(/:$/, '')}</p>
       ) : answer ? (
         <MarkdownTextContent isRunning={false} previewOnly text={answer} />
       ) : (

@@ -30,12 +30,6 @@ export function initialBlueprintValues(blueprint: AutomationBlueprint): Record<s
   return out
 }
 
-// A slot-level validation error from the backend arrives as "422: <message>"
-// (or "<code>: <message>"); strip the leading numeric code for inline display.
-export function cleanBlueprintFieldError(message: string): string {
-  return message.replace(/^\d+:\s*/, '')
-}
-
 // Help text to show under a slot control. The backend deliver help is
 // origin/dashboard-centric and even contradicts desktop semantics ("local =
 // save only" vs. This desktop), and the DeliverSelect is self-explanatory —

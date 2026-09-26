@@ -24,6 +24,21 @@ it('shows assistant output without leaking prompts, tools or reasoning', () => {
 
   expect(answer).toBe('Ready for your day.')
   expect(automationAnswer([{ role: 'assistant', content: '[SILENT]' }])).toBe('')
+  expect(automationAnswer([{ role: 'assistant', content: '[CRON_FAILURE]\nProvider failed at /tmp/private/token: sk-test-secret' }])).toBe('')
+  expect(automationAnswer([{ role: 'assistant', content: '[CRON_FAILURE] Provider failed at /tmp/private/token: sk-test-secret' }])).toBe('')
+})
+
+it('shows a failed run without exposing the backend diagnostic', async () => {
+  vi.mocked(getSessionMessages).mockResolvedValue({
+    session_id: 'failed-run',
+    messages: [{ role: 'assistant', content: '[CRON_FAILURE]\nProvider failed at /tmp/private/token: sk-test-secret' }]
+  })
+
+  render(<AutomationRunResult run={{ id: 'failed-run', profile: 'owner' } as SessionInfo} />)
+
+  await screen.findByText('Last run failed')
+  expect(screen.queryByText(/sk-test-secret|\/tmp\/private/)).toBeNull()
+  expect(screen.queryByText('No new update from this run.')).toBeNull()
 })
 
 it('retries a failed read against the run owner instead of the active chat', async () => {

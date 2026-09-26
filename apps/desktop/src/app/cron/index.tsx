@@ -46,7 +46,7 @@ import { AlertTriangle } from '@/lib/icons'
 import { requestModelOptions } from '@/lib/model-options'
 import { asText } from '@/lib/text'
 import { $cronFocusJobId, $cronJobs, invalidateCronJobsRequests, setCronFocusJobId } from '@/store/cron'
-import { notify, notifyError } from '@/store/notifications'
+import { notify } from '@/store/notifications'
 import { $profileScope, ALL_PROFILES } from '@/store/profile'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
@@ -69,12 +69,11 @@ import {
 } from '../overlays/panel'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
-import { BlueprintSlotControl, blueprintSlotHelp, cleanBlueprintFieldError, initialBlueprintValues } from './blueprints'
+import { BlueprintSlotControl, blueprintSlotHelp, initialBlueprintValues } from './blueprints'
 import { mutateAndRefreshCronJobs, refreshCronJobs, triggerAndRefreshCronJobs } from './cron-actions'
 import {
   cronEditorUpdates,
   jobIsScriptOnly,
-  lastErrorSummary,
   parseCronDeliveryTargets,
   toggleCronDeliveryTarget,
   validateCronEditor
@@ -361,7 +360,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
 
     if (refreshError) {
       setLoadFailed(true)
-      notifyError(refreshError, c.failedLoad)
+      notify({ kind: 'error', message: c.failedLoad })
     } else {
       setLoadFailed(false)
     }
@@ -479,7 +478,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
       }
 
       if (refreshError) {
-        notifyError(refreshError, c.failedLoad)
+        notify({ kind: 'error', message: c.failedLoad })
       }
 
       notify({
@@ -487,8 +486,8 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
         title: isPaused ? c.resumed : c.paused,
         message: truncate(jobTitle(job), 60)
       })
-    } catch (err) {
-      notifyError(err, c.failedUpdate)
+    } catch {
+      notify({ kind: 'error', message: c.failedUpdate })
     } finally {
       endJobBusy(job.id, busyToken)
     }
@@ -526,13 +525,13 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
       }
 
       if (refreshError) {
-        notifyError(refreshError, c.failedLoad)
+        notify({ kind: 'error', message: c.failedLoad })
       }
 
       notify({ kind: 'success', title: c.triggered, message: truncate(jobTitle(job), 60) })
-    } catch (err) {
+    } catch {
       if (triggerControllerRef.current === controller && cronProfileForScope($profileScope.get()) === viewProfile) {
-        notifyError(err, c.failedTrigger)
+        notify({ kind: 'error', message: c.failedTrigger })
       }
     }
   }
@@ -543,14 +542,22 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
       return
     }
 
-    const { refreshError, stale } = await mutateAndRefreshCronJobs(profile, () => deleteCronJob(pendingDelete.id))
+    let result: Awaited<ReturnType<typeof mutateAndRefreshCronJobs>>
+
+    try {
+      result = await mutateAndRefreshCronJobs(profile, () => deleteCronJob(pendingDelete.id))
+    } catch {
+      throw new Error(c.failedUpdate)
+    }
+
+    const { refreshError, stale } = result
 
     if (stale) {
       return
     }
 
     if (refreshError) {
-      notifyError(refreshError, c.failedLoad)
+      notify({ kind: 'error', message: c.failedLoad })
     }
 
     notify({ kind: 'success', title: c.deleted, message: truncate(jobTitle(pendingDelete), 60) })
@@ -577,7 +584,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
       }
 
       if (refreshError) {
-        notifyError(refreshError, c.failedLoad)
+        notify({ kind: 'error', message: c.failedLoad })
       }
 
       notify({ kind: 'success', title: c.created, message: truncate(jobTitle(created), 60) })
@@ -597,7 +604,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
       }
 
       if (refreshError) {
-        notifyError(refreshError, c.failedLoad)
+        notify({ kind: 'error', message: c.failedLoad })
       }
 
       notify({ kind: 'success', title: c.updated, message: truncate(jobTitle(updated), 60) })
@@ -627,7 +634,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
     }
 
     if (refreshError) {
-      notifyError(refreshError, c.failedLoad)
+      notify({ kind: 'error', message: c.failedLoad })
     }
 
     notify({ kind: 'success', title: c.blueprints.scheduled, message: asText(job.schedule_display) || blueprint.title })
@@ -856,8 +863,8 @@ function CronJobDetail({ busy, c, job, onEdit, onPauseResume, onTrigger }: CronJ
           <div className="space-y-1.5 rounded bg-destructive/10 p-2 text-[0.7rem] text-destructive">
             <div className="flex items-start gap-1.5">
               <AlertTriangle className="mt-px size-3 shrink-0" />
-              <span className="min-w-0 break-words" title={job.last_error}>
-                {c.lastRunFailed} {lastErrorSummary(job.last_error)}
+              <span className="min-w-0 break-words">
+                {c.lastRunFailed.replace(/:$/, '')}
               </span>
             </div>
             <div className="flex items-center gap-0.5 pl-4">
@@ -1109,8 +1116,8 @@ function CronEditorDialog({
         provider: overrideProvider,
         schedule: schedule.trim()
       })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : c.failedSave)
+    } catch {
+      setError(c.failedSave)
     } finally {
       setSaving(false)
     }
@@ -1128,9 +1135,8 @@ function CronEditorDialog({
 
     try {
       await onBlueprintCreate(blueprint, slotValues)
-    } catch (err) {
-      // 422 carries the slot-level validation message; surface it inline.
-      setError(cleanBlueprintFieldError(err instanceof Error ? err.message : String(err)))
+    } catch {
+      setError(c.failedSave)
     } finally {
       setSaving(false)
     }

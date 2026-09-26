@@ -65,7 +65,7 @@ function ScriptExecutionResult({ jobId, run }: { jobId: string; run: CronExecuti
   const [retryTick, setRetryTick] = useState(0)
 
   useEffect(() => {
-    if (!run.output_available) {
+    if (run.status !== 'completed' || !run.output_available) {
       return
     }
 
@@ -89,9 +89,13 @@ function ScriptExecutionResult({ jobId, run }: { jobId: string; run: CronExecuti
     return () => {
       cancelled = true
     }
-  }, [jobId, retryTick, run.id, run.output_available])
+  }, [jobId, retryTick, run.id, run.output_available, run.status])
 
-  if (!run.output_available) {
+  if (run.status === 'failed') {
+    return <div>{t.cron.lastRunFailed.replace(/:$/, '')}</div>
+  }
+
+  if (run.status !== 'completed' || !run.output_available) {
     return null
   }
 
@@ -218,7 +222,7 @@ export function CronJobRuns({ c, jobId, noAgent = false }: { c: Translations['cr
               >
                 <span className="truncate text-foreground/85">
                   {item.kind === 'session'
-                    ? item.run.title?.trim() || item.run.preview?.trim() || item.run.id
+                    ? item.run.title?.trim() || s.runResult
                     : executionLabel(item.run.status, c, t.messaging.unknown)}
                 </span>
                 <span className="shrink-0 text-[0.62rem] text-muted-foreground/55 tabular-nums">

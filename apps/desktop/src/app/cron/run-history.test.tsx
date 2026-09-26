@@ -160,3 +160,29 @@ it('keeps a failed script result read retryable without exposing an error body',
   expect(await screen.findByText('Safe result')).toBeTruthy()
   expect(getCronExecutionResult).toHaveBeenCalledTimes(2)
 })
+
+it('keeps failed script output and an untitled run preview out of consumer history', async () => {
+  vi.mocked(getCronJobExecutions).mockResolvedValueOnce([{
+    id: 'failed-execution',
+    status: 'failed',
+    output_available: true,
+    claimed_at: '2026-09-23T06:00:00+00:00',
+    finished_at: '2026-09-23T06:00:01+00:00'
+  }])
+
+  render(
+    <I18nProvider configClient={null} initialLocale="en">
+      <CronJobRuns c={en.cron} jobId="script-job" noAgent />
+    </I18nProvider>
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: /last run failed/i }))
+  expect(screen.getAllByText('Last run failed').length).toBeGreaterThan(0)
+  expect(getCronExecutionResult).not.toHaveBeenCalled()
+
+  cleanup()
+  vi.mocked(getCronJobRuns).mockResolvedValueOnce([{ id: 'run-untitled', preview: '/tmp/private/token: sk-test-secret' } as SessionInfo])
+  renderRuns('agent-job')
+  await screen.findByRole('button', { name: /automation result/i })
+  expect(screen.queryByText(/sk-test-secret|\/tmp\/private/)).toBeNull()
+})
