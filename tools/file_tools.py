@@ -29,6 +29,7 @@ from tools import file_state
 from agent.redact import _is_secret_file_arg, redact_sensitive_text
 from tools.file_tools_paths import (
     _expand_tilde, _path_resolution_warning, _resolve_base_dir, _resolve_path_for_task)
+from tools.file_tools_blocked_folders import blocked_folder_error
 from tools.file_tools_write_guards import (
     _READ_DEDUP_STATUS_MESSAGE, _check_approval_required_write, _check_binary_document_write,
     _check_cross_profile_path, _check_protected_instruction_write, _check_sensitive_path,
@@ -601,6 +602,12 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT, 
 
         _resolved = _resolve_path_for_task(path, task_id)
 
+        blocked = blocked_folder_error(
+            [(path, _resolved)], task_id=task_id,
+            host_paths=lambda: _file_ops_uses_host_paths(_get_file_ops(task_id)))
+        if blocked:
+            return tool_error(blocked)
+
         # A read on a FIFO/socket blocks until the exec timeout: a self-shipped DoS.
         if _file_ops_uses_host_paths(_get_file_ops(task_id)):
             kind = _special_file_kind(_resolved)
@@ -845,6 +852,11 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
     _resolved = _resolve_or_none(path, task_id)
     if not _resolved:
         return tool_error(f"Cannot safely resolve write target: {path}")
+    blocked = blocked_folder_error(
+        [(path, _resolved)], task_id=task_id,
+        host_paths=lambda: _file_ops_uses_host_paths(_get_file_ops(task_id)))
+    if blocked:
+        return tool_error(blocked)
     # write_file checks the binary-document guard before the mirror guard.
     err = (_check_sensitive_path(_resolved, task_id)
            or _check_binary_document_write(_resolved, task_id)
@@ -944,14 +956,33 @@ def patch_tool(mode: str = "replace", path: str = None, old_string: str = None,
             return collected
         _paths_to_check += collected[0]
         _content_write_paths += collected[1]
-    precheck_err = _write_precheck_error(_paths_to_check, _content_write_paths, task_id, cross_profile)
+    # Pin all targets before a precheck can wait for approval. A relative V4A
+    # header must not be re-resolved after the task cwd changes.
+    _path_to_resolved: dict[str, str | None] = {
+        _p: _resolve_or_none(_p, task_id) for _p in _paths_to_check}
+    if any(_r is None for _r in _path_to_resolved.values()):
+        return tool_error("Cannot safely resolve patch target")
+    # Preserve the raw namespace guard, then run the remaining checks against
+    # the exact pinned destinations handed to the patch backend.
+    for _p in _paths_to_check:
+        raw_err = _check_sensitive_path(_p, task_id)
+        if raw_err:
+            return tool_error(raw_err)
+    blocked = blocked_folder_error(
+        _path_to_resolved.items(), task_id=task_id,
+        host_paths=lambda: _file_ops_uses_host_paths(_get_file_ops(task_id)))
+    if blocked:
+        return tool_error(blocked)
+    precheck_err = _write_precheck_error(
+        [str(_path_to_resolved[_p]) for _p in _paths_to_check],
+        [str(_path_to_resolved[_p]) for _p in _content_write_paths],
+        task_id, cross_profile)
     if precheck_err:
         return tool_error(precheck_err)
     try:
         # Lock paths in sorted, deduplicated order so concurrent callers with
         # overlapping multi-file patches can't deadlock (every caller locks in
         # the same order). An unresolvable path is simply not locked.
-        _path_to_resolved: dict[str, str] = {_p: _resolve_or_none(_p, task_id) for _p in _paths_to_check}
         with ExitStack() as _locks:
             for _r in sorted({_r for _r in _path_to_resolved.values() if _r}):
                 _locks.enter_context(file_state.lock_path(_r))
