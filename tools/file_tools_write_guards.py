@@ -348,7 +348,9 @@ def _check_approval_required_write(paths: list[str], task_id: str = "default") -
     except Exception:
         return None
 
-    targets = [p for p in paths if is_write_approval_required(p)]
+    # File operations use the task's terminal cwd, which can differ from the
+    # process cwd. Check the target they will actually write.
+    targets = [p for p in paths if is_write_approval_required(_resolved_or_raw(p, task_id))]
     if not targets:
         return None
 
