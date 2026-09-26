@@ -195,6 +195,43 @@ def test_retrieval_matches_web_extract_normalized_request(tmp_path, monkeypatch)
     assert completed["source_urls_verified"] is False
 
 
+def test_failed_extract_and_retry_do_not_keep_retrieval_evidence(tmp_path, monkeypatch):
+    import cron.scheduler as scheduler
+
+    monkeypatch.setattr(feed, "_db_path", lambda: tmp_path / "feed" / "editions.sqlite3")
+    url = "https://example.test/page"
+    calls = 0
+
+    def fake_run_job(_job, *, tool_complete_callback):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            tool_complete_callback("fetched", "web_extract", {"urls": [url]}, json.dumps({
+                "results": [{"url": url, "content": "Actual page text", "error": None}],
+            }))
+            return False, None, f"Read {url}", "Agent run failed"
+        # A failed whole-call result must not count even if a malformed result
+        # also carries a plausible-looking page entry.
+        tool_complete_callback("failed", "web_extract", {"urls": [url]}, json.dumps({
+            "success": False, "error": "Provider failed",
+            "results": [{"url": url, "content": "Stale page text", "error": None}],
+        }))
+        return True, None, f"Read {url}", None
+
+    monkeypatch.setattr(scheduler, "run_job", fake_run_job)
+    first = feed.request_edition("Summarize")
+    failed = _eventually(lambda: feed.get_edition(first["id"]), "failed")
+    assert failed["source_urls"] == []
+    assert failed["retrieved_source_urls"] == []
+
+    feed.request_edition("Summarize", retry_id=first["id"])
+    completed = _eventually(lambda: feed.get_edition(first["id"]), "completed")
+    assert completed["attempt"] == 2
+    assert completed["source_urls"] == [url]
+    assert completed["retrieved_source_urls"] == []
+    assert completed["source_urls_verified"] is False
+
+
 def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
     """A shared serve process must not mix edition storage between profiles."""
     from starlette.testclient import TestClient

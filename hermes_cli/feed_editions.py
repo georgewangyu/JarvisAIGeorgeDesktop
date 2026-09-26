@@ -199,9 +199,12 @@ def _run_real_agent(prompt: str, edition_id: str) -> tuple[str, list[str]]:
                 # provider URL from the completed result.
                 requested_urls.add(normalize_url_for_request(value))
         try:
-            entries = json.loads(result).get("results")
+            payload = json.loads(result)
         except (ValueError, AttributeError):
             return
+        if not isinstance(payload, dict) or payload.get("success") is False or payload.get("error"):
+            return
+        entries = payload.get("results")
         if not isinstance(entries, list):
             return
         for entry in entries:
