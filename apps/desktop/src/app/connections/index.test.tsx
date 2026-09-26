@@ -237,7 +237,7 @@ it('filters only real connection and permission rows without inventing available
 
   fireEvent.change(search, { target: { value: 'calendar' } })
   expect(screen.getByText('Calendar')).toBeTruthy()
-  expect(screen.getByText('Apple Calendar preview. macOS access and a separate Jarvis connection are both required.')).toBeTruthy()
+  expect(screen.getByText('Apple Calendar preview. macOS access and a separate Jarvis connection are both required. Connect starts read only.')).toBeTruthy()
   expect(screen.queryByText('Connect')).toBeNull()
 
   fireEvent.change(search, { target: { value: '' } })
@@ -265,7 +265,7 @@ it('does not read or request Calendar access during status check, and disconnect
   expect(create).not.toHaveBeenCalled()
 
   fireEvent.click(within(section).getByRole('button', { name: 'Connect' }))
-  await waitFor(() => expect(within(section).getByText('Connected')).toBeTruthy())
+  await waitFor(() => expect(within(section).getByText('Read and interact')).toBeTruthy())
   expect(within(section).getByText('Calendar is connected for this profile. Other listed apps are detection only and cannot be read or used yet.')).toBeTruthy()
   fireEvent.click(within(section).getByRole('button', { name: 'View upcoming' }))
   await waitFor(() => expect(list).toHaveBeenCalledOnce())
@@ -277,6 +277,43 @@ it('does not read or request Calendar access during status check, and disconnect
   expect(within(section).queryByText(/Calendar is connected for this profile/)).toBeNull()
   expect(within(section).queryByRole('button', { name: 'View upcoming' })).toBeNull()
   expect(within(section).queryByRole('button', { name: 'Create event' })).toBeNull()
+})
+
+it('keeps Calendar read only until a separate action-scope confirmation, then allows downgrade', async () => {
+  const status = vi.fn().mockResolvedValue({ supported: true, authorization: 'fullAccess', connected: true, mode: 'read' })
+
+  const connect = vi.fn().mockImplementation(async (mode: 'read' | 'interact') => ({
+    supported: true, authorization: 'fullAccess', connected: true, mode
+  }))
+
+  const list = vi.fn().mockResolvedValue({ ok: true, command: 'list-events', events: [] })
+  const create = vi.fn()
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisCalendar: { status, connect, disconnect: vi.fn(), list, create } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+  await waitFor(() => expect(within(section).getByText('Read only')).toBeTruthy())
+  expect(within(section).queryByRole('button', { name: 'Create event' })).toBeNull()
+  fireEvent.click(within(section).getByRole('button', { name: 'View upcoming' }))
+  await waitFor(() => expect(list).toHaveBeenCalledOnce())
+  expect(create).not.toHaveBeenCalled()
+
+  fireEvent.click(within(section).getByRole('button', { name: 'Allow actions' }))
+  expect(screen.getByRole('dialog', { name: 'Allow Calendar actions?' })).toBeTruthy()
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+  expect(connect).not.toHaveBeenCalled()
+
+  fireEvent.click(within(section).getByRole('button', { name: 'Allow actions' }))
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Allow actions' }))
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'Create event' })).toBeTruthy())
+  expect(connect).toHaveBeenCalledWith('interact')
+  fireEvent.click(within(section).getByRole('button', { name: 'Switch to read only' }))
+  await waitFor(() => expect(within(section).getByText('Read only')).toBeTruthy())
+  expect(within(section).queryByRole('button', { name: 'Create event' })).toBeNull()
+  expect(connect).toHaveBeenLastCalledWith('read')
 })
 
 it('shows Calendar as unavailable when macOS authorization cannot be verified', async () => {

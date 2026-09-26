@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { listOAuthProviders } from '@/api/config'
 import { getGlobalModelInfo, setGlobalModel } from '@/api/models'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { SearchField } from '@/components/ui/search-field'
 import type { JarvisCalendarEvent, JarvisCalendarStatus, JarvisOnboardingPermissionSnapshot, JarvisPermissionStatus } from '@/global'
 import { useJarvisCopy } from '@/i18n/jarvis'
@@ -120,6 +121,7 @@ export function ConnectionsView() {
   const [calendarBusy, setCalendarBusy] = useState(false)
   const [calendarEvents, setCalendarEvents] = useState<JarvisCalendarEvent[] | null>(null)
   const [calendarError, setCalendarError] = useState<string | null>(null)
+  const [confirmCalendarActions, setConfirmCalendarActions] = useState(false)
   const [eventTitle, setEventTitle] = useState('')
   const [eventStart, setEventStart] = useState('')
   const [eventEnd, setEventEnd] = useState('')
@@ -175,7 +177,7 @@ export function ConnectionsView() {
       // A status refresh cannot prove that a previously read event is still authorized.
       setCalendarEvents(null)
 
-      if (calendarAccessRevoked(nextCalendar)) {clearCalendarDraft()}
+      if (calendarAccessRevoked(nextCalendar) || nextCalendar?.mode === 'read') {clearCalendarDraft()}
 
       setError(failures.length > 0 ? failures.join(' ') : null)
     } catch {
@@ -192,6 +194,7 @@ export function ConnectionsView() {
     setCalendarEvents(null)
     setCalendarError(null)
     setCalendarBusy(false)
+    setConfirmCalendarActions(false)
     setEventTitle('')
     setEventStart('')
     setEventEnd('')
@@ -235,15 +238,17 @@ export function ConnectionsView() {
   const calendarMatch = matches('Calendar')
   const appsMatch = mailMatch || messagesMatch || notesMatch || whatsAppMatch || browserMatch || calendarMatch
 
+  const calendarMode = calendar?.mode ?? (calendar?.connected ? 'interact' : 'off')
+
   const calendarLabel = !calendar?.supported
     ? 'Unavailable'
     : calendar.connected
-      ? 'Connected'
+      ? calendarMode === 'read' ? 'Read only' : 'Read and interact'
       : calendar.authorization === 'denied' || calendar.authorization === 'restricted'
         ? 'Needs macOS access'
         : 'Not connected'
 
-  const changeCalendarConnection = async (connect: boolean) => {
+  const changeCalendarConnection = async (connect: boolean, mode: 'read' | 'interact' = 'read') => {
     const bridge = window.hermesDesktop?.jarvisCalendar
 
     if (!bridge) {return}
@@ -253,7 +258,7 @@ export function ConnectionsView() {
     setCalendarEvents(null)
 
     try {
-      const next = connect ? await bridge.connect() : await bridge.disconnect()
+      const next = connect ? await bridge.connect(mode) : await bridge.disconnect()
 
       if (owner !== calendarScopeRef.current) {return}
       setCalendar(next)
@@ -263,6 +268,8 @@ export function ConnectionsView() {
 
         if (!connect || calendarAccessRevoked(next)) {clearCalendarDraft()}
       }
+
+      if (next.mode === 'read') {clearCalendarDraft()}
 
       if (connect && !next.connected) {setCalendarError('Calendar access was not granted. You can try again from macOS Settings.')}
     } catch {
@@ -308,7 +315,7 @@ export function ConnectionsView() {
   const createCalendarEvent = async () => {
     const bridge = window.hermesDesktop?.jarvisCalendar
 
-    if (!bridge || !calendar?.connected) {return}
+    if (!bridge || !calendar?.connected || calendarMode !== 'interact') {return}
     const owner = calendarScopeRef.current
     const start = new Date(eventStart)
     const end = new Date(eventEnd)
@@ -326,6 +333,15 @@ export function ConnectionsView() {
       const result = await bridge.create(eventTitle.trim(), start.toISOString(), end.toISOString())
 
       if (owner !== calendarScopeRef.current) {return}
+
+      if (!result.ok && result.code === 'not_allowed') {
+        setCalendarError('Calendar is read only. Allow actions before adding an event.')
+        const next = await bridge.status().catch(() => null)
+
+        if (owner === calendarScopeRef.current) {setCalendar(next)}
+
+        return
+      }
 
       if (!result.ok && result.code === 'outcome_unknown') {
         setCalendarError('Could not confirm whether the event was created. Check Calendar before trying again.')
@@ -551,7 +567,7 @@ export function ConnectionsView() {
                       {calendar.connected ? 'Disconnect' : 'Connect'}
                     </Button>
                   ) : null}
-                  detail="Apple Calendar preview. macOS access and a separate Jarvis connection are both required."
+                  detail="Apple Calendar preview. macOS access and a separate Jarvis connection are both required. Connect starts read only."
                   icon={Calendar}
                   label="Calendar"
                   status={<Status active={calendar?.connected}>{calendarLabel}</Status>}
@@ -576,6 +592,11 @@ export function ConnectionsView() {
                       </ul>
                     ) : null}
                     <div className="mt-6 border-t border-(--ui-stroke-tertiary) pt-5">
+                      <p className="text-sm font-medium">Calendar access</p>
+                      <p className="mt-1 text-xs text-(--ui-text-tertiary)">{calendarMode === 'read' ? 'This connection can show events when you ask. Adding events through it is off.' : 'This connection can show events and add one only when you choose Create event.'}</p>
+                      {calendarMode === 'read' ? <Button className="mt-3" disabled={calendarBusy} onClick={() => setConfirmCalendarActions(true)} size="sm" variant="secondary">Allow actions</Button> : <Button className="mt-3" disabled={calendarBusy} onClick={() => void changeCalendarConnection(true, 'read')} size="sm" variant="secondary">Switch to read only</Button>}
+                    </div>
+                    {calendarMode === 'interact' ? <div className="mt-6 border-t border-(--ui-stroke-tertiary) pt-5">
                       <p className="text-sm font-medium">Add an event</p>
                       <p className="mt-1 text-xs text-(--ui-text-tertiary)">Nothing is added until you choose Create event.</p>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -584,12 +605,24 @@ export function ConnectionsView() {
                         <input aria-label="Event end" className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-primary) px-3 py-2 text-sm" onChange={event => setEventEnd(event.target.value)} type="datetime-local" value={eventEnd} />
                       </div>
                       <Button className="mt-3" disabled={calendarBusy} onClick={() => void createCalendarEvent()} size="sm">Create event</Button>
-                    </div>
+                    </div> : null}
                   </div>
                 ) : null}
                 {calendarError ? <p className="border-t border-(--ui-stroke-tertiary) px-5 py-3 text-sm text-destructive">{calendarError}</p> : null}
               </>
             ) : null}
+            <Dialog onOpenChange={setConfirmCalendarActions} open={confirmCalendarActions}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Allow Calendar actions?</DialogTitle>
+                  <DialogDescription>This Calendar connection will be able to create events for this profile when you explicitly choose Create event. You can return to read only or disconnect here at any time.</DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button onClick={() => setConfirmCalendarActions(false)} variant="secondary">Cancel</Button>
+                  <Button onClick={() => { setConfirmCalendarActions(false); void changeCalendarConnection(true, 'interact') }}>Allow actions</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             {mailMatch ? (
               <ConnectionRow
                 detail="App detection only. Mail access is not connected yet."
