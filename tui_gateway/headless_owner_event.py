@@ -19,6 +19,73 @@ from typing import Any
 _TURN_STOP_GRACE_SECONDS = 3.0
 
 
+def _retire_consumed_wake_ticket(home: Path, delivery_id: str) -> bool:
+    """Remove only this profile's ticket after its receipt can never be replayed.
+
+    Keep deferred tickets when a lease or gateway admission fails. The mailbox
+    lock serializes this check with the producer's ticket/receipt commit.
+    """
+    from tools.bot_live_delivery import _delivery_id, _locked, _read
+    from tui_gateway.owner_event_inbox import _checked_wake_queue, _checked_wake_ticket
+    from utils import fsync_directory
+
+    key = _delivery_id(delivery_id)
+    with _locked(home) as root:
+        receipt = _read(root / f"{key}.json")
+        if (receipt is None or receipt.get("delivery_id") != key
+                or receipt.get("id") != key
+                or receipt.get("profile_home") != str(home)
+                or receipt.get("os_wake_requested") is not True
+                or receipt.get("status") not in {"claimed", "settled", "failed", "cancelled"}):
+            return False
+        try:
+            queue = _checked_wake_queue(home)
+            ticket = _checked_wake_ticket(queue, key)
+        except (FileNotFoundError, ValueError):
+            # An invalid ticket is not ours to unlink; preserve the original
+            # validation failure instead of masking it during cleanup.
+            return False
+        ticket.unlink()
+        fsync_directory(queue)
+        return True
+
+
+def run_one_wake_ticket(
+    profile: str, delivery_id: str, *, allow_headless: bool = False,
+    wait_seconds: float = 120.0, expected_profile_home: Path | str | None = None,
+) -> dict[str, Any]:
+    """Consume one exact, opted-in OS ticket through the existing event path.
+
+    A claimed receipt is an unknown outcome and is never retried. A terminal
+    receipt also cannot run again. Both may have a leftover ticket after a
+    crash, which this entrypoint can retire without starting a model turn.
+    """
+    if not allow_headless:
+        raise ValueError("headless event consumption requires explicit opt-in")
+    if not isinstance(profile, str) or not profile.strip():
+        raise ValueError("an exact profile name is required")
+
+    from tui_gateway import server
+    from tui_gateway.owner_event_inbox import read_jarvis_wake_ticket
+
+    resolved = server._profile_home(profile.strip())
+    home = Path(resolved or server._hermes_home).resolve()
+    if expected_profile_home is not None and home != Path(expected_profile_home).resolve():
+        raise ValueError("resolved profile does not match the exact event home")
+    try:
+        read_jarvis_wake_ticket(home, delivery_id)
+    except (FileNotFoundError, ValueError):
+        _retire_consumed_wake_ticket(home, delivery_id)
+        raise
+    try:
+        return run_one_deferred_event(
+            profile, delivery_id, allow_headless=True,
+            wait_seconds=wait_seconds, expected_profile_home=home,
+        )
+    finally:
+        _retire_consumed_wake_ticket(home, delivery_id)
+
+
 class _DiscardTransport:
     """Headless turns have no human client to answer requests or render events."""
 
@@ -200,8 +267,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-headless", action="store_true")
     parser.add_argument("--wait-seconds", type=float, default=120.0)
     parser.add_argument("--expected-profile-home")
+    parser.add_argument("--wake-ticket", action="store_true",
+                        help="require one exact opted-in opaque OS wake ticket")
     args = parser.parse_args(argv)
-    receipt = run_one_deferred_event(
+    consumer = run_one_wake_ticket if args.wake_ticket else run_one_deferred_event
+    receipt = consumer(
         args.profile, args.delivery_id, allow_headless=args.allow_headless,
         wait_seconds=args.wait_seconds, expected_profile_home=args.expected_profile_home)
     print(json.dumps({"delivery_id": receipt["delivery_id"], "status": receipt["status"]}), flush=True)
