@@ -6,7 +6,8 @@ import { $connection } from '@/store/session'
 import { ConsumerChatExportSettings } from './consumer-chat-export-settings'
 
 const exportChats = vi.hoisted(() => vi.fn())
-vi.mock('@/hermes', () => ({ exportConsumerChatHistory: exportChats }))
+const exportLocalData = vi.hoisted(() => vi.fn())
+vi.mock('@/hermes', () => ({ exportConsumerChatHistory: exportChats, exportConsumerLocalData: exportLocalData }))
 
 const pick = vi.fn()
 
@@ -39,7 +40,47 @@ it('does not open a local save action for a remote backend', () => {
   render(<ConsumerChatExportSettings profile="writer" />)
 
   expect(screen.getByRole('button', { name: 'Download chat history' }).hasAttribute('disabled')).toBe(true)
+  expect(screen.getByRole('button', { name: 'Download local Jarvis data' }).hasAttribute('disabled')).toBe(true)
   expect(exportChats).not.toHaveBeenCalled()
+  expect(exportLocalData).not.toHaveBeenCalled()
+})
+
+it('confirms sensitive bounded scope before saving local data for one profile', async () => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { selectSavePath: pick }
+  pick.mockResolvedValue('/synthetic/local-data.zip')
+  exportLocalData.mockResolvedValue({ ok: true, chats: 2, messages: 4, images: 1 })
+  render(<ConsumerChatExportSettings profile="writer" />)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Download local Jarvis data' }))
+  expect(screen.getByText(/not a complete or restorable backup/)).toBeTruthy()
+  expect(exportLocalData).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
+  await waitFor(() => expect(exportLocalData).toHaveBeenCalledWith('writer', '/synthetic/local-data.zip'))
+  expect(await screen.findByText('Local copy saved: 2 chats and 1 uploaded image.')).toBeTruthy()
+})
+
+it('reports refusal, allows retry, and drops a stale profile save selection', async () => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { selectSavePath: pick }
+  pick.mockResolvedValueOnce('/synthetic/refused.zip').mockResolvedValueOnce('/synthetic/good.zip')
+  exportLocalData.mockRejectedValueOnce(new Error('private path')).mockResolvedValueOnce({ ok: true, chats: 1, images: 0 })
+  const view = render(<ConsumerChatExportSettings profile="writer" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Download local Jarvis data' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('Choose another location and try again')
+  expect(screen.queryByText(/Local copy saved/)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
+  expect(await screen.findByText('Local copy saved: 1 chat and 0 uploaded images.')).toBeTruthy()
+
+  let finishOldPick!: (path: string) => void
+  pick.mockImplementationOnce(() => new Promise<string>(resolve => { finishOldPick = resolve }))
+  fireEvent.click(screen.getByRole('button', { name: 'Download local Jarvis data' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
+  await waitFor(() => expect(pick).toHaveBeenCalledTimes(3))
+  view.rerender(<ConsumerChatExportSettings profile="reader" />)
+  finishOldPick('/synthetic/stale-writer.zip')
+  expect(exportLocalData).not.toHaveBeenCalledWith('writer', '/synthetic/stale-writer.zip')
 })
 
 it('does not export the old profile after a switch in the save dialog and permits the new profile', async () => {

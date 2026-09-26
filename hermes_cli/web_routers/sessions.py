@@ -13,6 +13,8 @@ import sqlite3
 import time
 from typing import Callable, List, Optional
 
+import yaml
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
@@ -55,6 +57,11 @@ class ConsumerChatExportRequest(BaseModel):
 
 class ConsumerImageExportRequest(BaseModel):
     profile: Optional[str] = None
+    output: str
+
+
+class ConsumerLocalDataExportRequest(BaseModel):
+    profile: str
     output: str
 
 
@@ -127,6 +134,31 @@ async def export_consumer_chat_history_endpoint(body: ConsumerChatExportRequest)
         result = await asyncio.to_thread(_export_consumer_chat_history, body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **result}
+
+
+def _export_consumer_local_data(body: ConsumerLocalDataExportRequest):
+    from hermes_cli.consumer_local_data_export import export_consumer_local_data
+
+    if not body.profile.strip():
+        raise ValueError("choose a profile to export")
+    name, home = _cron_profile_home(body.profile)
+    db = _open_session_db_for_profile(body.profile, read_only=True)
+    try:
+        return export_consumer_local_data(db, home, name, body.output)
+    finally:
+        db.close()
+
+
+@manage_router.post("/api/sessions/export-consumer-local-data")
+async def export_consumer_local_data_endpoint(body: ConsumerLocalDataExportRequest, request: Request):
+    """Export bounded profile data only through the local Desktop backend."""
+    if request.client is None or request.client.host not in {"127.0.0.1", "::1"}:
+        raise HTTPException(status_code=403, detail="Local export is available on this Mac only")
+    try:
+        result = await asyncio.to_thread(_export_consumer_local_data, body)
+    except (ValueError, PermissionError, OSError, yaml.YAMLError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail="Local data export could not be completed") from exc
     return {"ok": True, **result}
 
 

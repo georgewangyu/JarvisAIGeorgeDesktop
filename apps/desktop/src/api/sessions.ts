@@ -39,6 +39,23 @@ export function exportConsumerChatHistory(profile: string, output: string): Prom
   })
 }
 
+/** Bounded local copy: visible chats, reviewed setup, and verified uploads. */
+export function exportConsumerLocalData(profile: string, output: string): Promise<{
+  ok: boolean
+  output: string
+  chats: number
+  messages: number
+  images: number
+}> {
+  return hermesApi({
+    body: { profile, output },
+    connectionId: 'local',
+    method: 'POST',
+    path: '/api/sessions/export-consumer-local-data',
+    timeoutMs: 120_000
+  })
+}
+
 export interface ConsumerUploadedImage {
   artifact_id: string
   session_id: string
