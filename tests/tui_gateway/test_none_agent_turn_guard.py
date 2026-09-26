@@ -175,3 +175,34 @@ def test_provider_init_failure_persists_safe_classification_not_raw_path(monkeyp
     assert saved[-1]["content"] == "No inference provider is configured."
     assert "SYNTHETIC_PRIVATE_PATH" not in saved[-1]["content"]
     db.close()
+
+
+def test_providerless_retry_keeps_one_failure_per_submitted_turn(monkeypatch, tmp_path):
+    """A second send remains possible and does not rewrite the first turn's recovery row."""
+    emitted = _turn_env(monkeypatch, tmp_path)
+    path = tmp_path / "state.db"
+    db = SessionDB(path)
+    db.create_session("gw-session-key", source="desktop")
+    monkeypatch.setattr(server, "_get_db", lambda: db)
+    monkeypatch.setattr(server, "_ensure_session_db_row", lambda session: True)
+    session = _session(None, agent_error=AGENT_BUILD_ABANDONED)
+
+    for prompt in ("first synthetic prompt", "second synthetic prompt"):
+        session["running"] = True
+        server._persist_submit_user_row(session, prompt, None)
+        server._start_inflight_turn(session, prompt)
+        assert server._run_prompt_submit("rid", "ui-sid", session, prompt) is False
+        assert session["running"] is False
+
+    frames = [payload for kind, _, payload in emitted if kind == "message.complete"]
+    assert len(frames) == 2
+    assert all(frame["error_surface"]["code"] == "agent_init_failed" for frame in frames)
+    db.close()
+    with SessionDB(path) as reopened:
+        _, display = reopened.get_resume_conversations("gw-session-key")
+    messages = server._history_to_messages(display)
+    assert [message["role"] for message in messages] == ["user", "assistant", "user", "assistant"]
+    assert [message["text"] for message in messages if message["role"] == "user"] == [
+        "first synthetic prompt", "second synthetic prompt"]
+    assert all(message["display_metadata"]["turn_failure"]["code"] == "agent_init_failed"
+               for message in messages if message["role"] == "assistant")
