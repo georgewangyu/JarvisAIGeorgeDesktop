@@ -12,11 +12,14 @@ from tui_gateway.jarvis_wake_launchd import (
 
 
 def _contract(tmp_path, profile):
+    base_home = tmp_path / "hermes-home"
+    source = base_home / "hermes-agent"
     return {
         "profile": profile,
-        "profile_home": tmp_path / "profiles" / profile,
-        "python_executable": tmp_path / "stable" / "bin" / "python3",
-        "entrypoint": tmp_path / "stable" / "tui_gateway" / "headless_owner_event.py",
+        "profile_home": base_home if profile == "default" else base_home / "profiles" / profile,
+        "hermes_home": base_home,
+        "python_executable": source / "venv" / "bin" / "python",
+        "entrypoint": source / "tui_gateway" / "headless_owner_event.py",
     }
 
 
@@ -35,7 +38,10 @@ def test_on_demand_exact_profile_queue_and_one_shot_argv(tmp_path):
             "--expected-profile-home", str(inputs["profile_home"]),
         ]
         assert job["WorkingDirectory"] == str(inputs["entrypoint"].parent.parent)
-        assert job["EnvironmentVariables"] == {"PYTHONPATH": job["WorkingDirectory"]}
+        assert job["EnvironmentVariables"] == {
+            "HERMES_HOME": str(inputs["hermes_home"]),
+            "PYTHONPATH": job["WorkingDirectory"],
+        }
         assert set(job) == {
             "Label", "ProgramArguments", "WorkingDirectory", "EnvironmentVariables",
             "QueueDirectories",
@@ -60,15 +66,36 @@ def test_validator_refuses_trigger_or_identity_changes(tmp_path, change):
         validate_launch_agent_plist(plistlib.dumps(job), **inputs)
 
 
+def test_validator_refuses_unpinned_base_home(tmp_path):
+    inputs = _contract(tmp_path, "research")
+    job = plistlib.loads(render_launch_agent_plist(**inputs))
+    job["EnvironmentVariables"].pop("HERMES_HOME")
+    with pytest.raises(ValueError, match="exact one-shot wake contract"):
+        validate_launch_agent_plist(plistlib.dumps(job), **inputs)
+
+
 @pytest.mark.parametrize("field,value", [
     ("profile", "../escape"), ("profile", "A"), ("profile", "a;echo"),
     ("profile_home", "/tmp/a/../b"), ("profile_home", "relative/home"),
     ("profile_home", "/"), ("python_executable", "/bin/sh"),
     ("python_executable", "/tmp/bin/../python"),
     ("entrypoint", "/tmp/other.py"), ("entrypoint", "/tmp/tui_gateway/./headless_owner_event.py"),
+    ("hermes_home", "/"), ("hermes_home", "relative/home"),
 ])
 def test_renderer_refuses_unsafe_inputs(tmp_path, field, value):
     inputs = _contract(tmp_path, "research")
     inputs[field] = value
     with pytest.raises(ValueError):
+        render_launch_agent_plist(**inputs)
+
+
+def test_renderer_refuses_a_different_install_root_or_default_profile_home(tmp_path):
+    inputs = _contract(tmp_path, "research")
+    inputs["python_executable"] = tmp_path / "other-checkout" / "venv" / "bin" / "python"
+    with pytest.raises(ValueError, match="installed Jarvis venv"):
+        render_launch_agent_plist(**inputs)
+
+    inputs = _contract(tmp_path, "default")
+    inputs["profile_home"] = tmp_path / "other-profile"
+    with pytest.raises(ValueError, match="default profile home"):
         render_launch_agent_plist(**inputs)

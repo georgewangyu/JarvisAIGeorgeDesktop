@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 _PROFILE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
-_PYTHON_EXECUTABLE = re.compile(r"python(?:3(?:\.\d+)?)?\Z")
 _WAKE_QUEUE = "jarvis_event_wake"
 _LABEL_PREFIX = "ai.hermes.jarvis-wake"
 
@@ -30,21 +29,24 @@ def _absolute_path(value: Path | str, name: str) -> Path:
 def _inputs(
     profile: str, profile_home: Path | str,
     python_executable: Path | str, entrypoint: Path | str,
-) -> tuple[Path, Path, Path]:
+    hermes_home: Path | str,
+) -> tuple[Path, Path, Path, Path]:
     if not isinstance(profile, str) or not _PROFILE.fullmatch(profile):
         raise ValueError("profile must be a canonical lowercase profile id")
     home = _absolute_path(profile_home, "profile_home")
+    base_home = _absolute_path(hermes_home, "hermes_home")
     python = _absolute_path(python_executable, "python_executable")
     script = _absolute_path(entrypoint, "entrypoint")
-    if home == Path("/"):
-        raise ValueError("profile_home must not be the filesystem root")
-    if not _PYTHON_EXECUTABLE.fullmatch(python.name):
-        raise ValueError("python_executable must name a Python interpreter")
-    if script.name != "headless_owner_event.py" or script.parent.name != "tui_gateway":
-        raise ValueError("entrypoint must be tui_gateway/headless_owner_event.py")
-    if python == script or home == script:
-        raise ValueError("executable, entrypoint, and profile home must be distinct")
-    return home, python, script
+    if home == Path("/") or base_home == Path("/"):
+        raise ValueError("profile_home and hermes_home must not be the filesystem root")
+    if profile == "default" and home != base_home:
+        raise ValueError("default profile home must equal the base Hermes home")
+    source = base_home / "hermes-agent"
+    if python != source / "venv" / "bin" / "python":
+        raise ValueError("python_executable must be the installed Jarvis venv interpreter")
+    if script != source / "tui_gateway" / "headless_owner_event.py":
+        raise ValueError("entrypoint must be in the installed Jarvis source")
+    return home, base_home, python, script
 
 
 def launch_agent_label(profile: str, profile_home: Path | str) -> str:
@@ -61,9 +63,11 @@ def launch_agent_label(profile: str, profile_home: Path | str) -> str:
 def launch_agent_plist(
     profile: str, profile_home: Path | str,
     python_executable: Path | str, entrypoint: Path | str,
+    *, hermes_home: Path | str,
 ) -> dict[str, Any]:
     """Build one on-demand job with no implicit shell or periodic trigger."""
-    home, python, script = _inputs(profile, profile_home, python_executable, entrypoint)
+    home, base_home, python, script = _inputs(
+        profile, profile_home, python_executable, entrypoint, hermes_home)
     root = script.parent.parent
     return {
         "Label": launch_agent_label(profile, home),
@@ -72,7 +76,7 @@ def launch_agent_plist(
             "--profile", profile, "--expected-profile-home", str(home),
         ],
         "WorkingDirectory": str(root),
-        "EnvironmentVariables": {"PYTHONPATH": str(root)},
+        "EnvironmentVariables": {"HERMES_HOME": str(base_home), "PYTHONPATH": str(root)},
         "QueueDirectories": [str(home / "runtime" / _WAKE_QUEUE)],
     }
 
@@ -80,10 +84,12 @@ def launch_agent_plist(
 def render_launch_agent_plist(
     profile: str, profile_home: Path | str,
     python_executable: Path | str, entrypoint: Path | str,
+    *, hermes_home: Path | str,
 ) -> bytes:
     """Return XML plist bytes without touching the filesystem or launchd."""
     return plistlib.dumps(
-        launch_agent_plist(profile, profile_home, python_executable, entrypoint),
+        launch_agent_plist(profile, profile_home, python_executable, entrypoint,
+                           hermes_home=hermes_home),
         fmt=plistlib.FMT_XML, sort_keys=True,
     )
 
@@ -91,9 +97,11 @@ def render_launch_agent_plist(
 def validate_launch_agent_plist(
     plist: bytes, *, profile: str, profile_home: Path | str,
     python_executable: Path | str, entrypoint: Path | str,
+    hermes_home: Path | str,
 ) -> None:
     """Refuse any changed trigger, argument, path, label, or environment key."""
-    expected = launch_agent_plist(profile, profile_home, python_executable, entrypoint)
+    expected = launch_agent_plist(profile, profile_home, python_executable, entrypoint,
+                                  hermes_home=hermes_home)
     try:
         actual = plistlib.loads(plist)
     except (TypeError, ValueError, plistlib.InvalidFileException) as exc:
