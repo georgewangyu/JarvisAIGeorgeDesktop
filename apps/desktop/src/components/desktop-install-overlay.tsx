@@ -305,6 +305,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   const [copied, setCopied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [remoteOpen, setRemoteOpen] = useState(false)
+  const [remoteConnected, setRemoteConnected] = useState(false)
   const [guidedSetup, setGuidedSetup] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const logEndRef = useRef<HTMLDivElement | null>(null)
@@ -406,10 +407,10 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   )
 
   useEffect(() => {
-    setOnboardingSurfaceActive('setup', Boolean(enabled && (state.setupChoice || guidedSetup || installedFirstRun || reviewReady)))
+    setOnboardingSurfaceActive('setup', Boolean(enabled && (state.setupChoice || guidedSetup || installedFirstRun || remoteOpen || remoteConnected || reviewReady)))
 
     return () => setOnboardingSurfaceActive('setup', false)
-  }, [enabled, guidedSetup, installedFirstRun, reviewReady, state.setupChoice])
+  }, [enabled, guidedSetup, installedFirstRun, remoteConnected, remoteOpen, reviewReady, state.setupChoice])
 
   // Mount logic: show whenever a bootstrap is in flight, completed-with-error,
   // or actively running with a manifest. Hide entirely after a successful
@@ -435,7 +436,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       return true
     }
 
-    if (guidedSetup) {
+    if (guidedSetup || remoteOpen || remoteConnected) {
       return true
     }
 
@@ -444,22 +445,31 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     }
 
     return false
-  }, [enabled, guidedSetup, installedFirstRun, reviewReady, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
+  }, [enabled, guidedSetup, installedFirstRun, remoteConnected, remoteOpen, reviewReady, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
 
   if (!shouldShow) {
     return null
   }
 
   if (remoteOpen) {
-    return <FirstRunRemoteForm onBack={() => setRemoteOpen(false)} />
+    return <FirstRunRemoteForm
+      onBack={() => setRemoteOpen(false)}
+      onConnected={() => {
+        setRemoteOpen(false)
+        setRemoteConnected(true)
+        setGuidedSetup(false)
+        setState(EMPTY_STATE)
+      }}
+    />
   }
 
-  if (state.setupChoice || guidedSetup || installedFirstRun || reviewReady) {
+  if (state.setupChoice || guidedSetup || installedFirstRun || remoteConnected || reviewReady) {
     return (
       <JarvisSetupJourney
         alreadyConnected={reviewReady && onboarding.configured === true}
-        bootstrapComplete={installedFirstRun || reviewReady || Boolean(state.completedAt && !state.active && !state.error)}
+        bootstrapComplete={installedFirstRun || remoteConnected || reviewReady || Boolean(state.completedAt && !state.active && !state.error)}
         bootstrapError={state.error}
+        connectedGateway={remoteConnected}
         onBeginSetup={async () => {
           if (installedFirstRun || reviewReady) {
             return
@@ -485,6 +495,17 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           }
         }}
         onFinish={async () => {
+          if (remoteConnected) {
+            // Connecting another Jarvis setup is a completed first-run path,
+            // even if that setup has not configured a model yet. Do not open
+            // the local provider picker or falsely mark Codex as connected.
+            dismissFirstRunOnboarding()
+            setRemoteConnected(false)
+            setGuidedSetup(false)
+
+            return
+          }
+
           if (reviewReady && onboarding.configured === true) {
             closeConsumerSetupReview()
 

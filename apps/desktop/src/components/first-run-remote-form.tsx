@@ -14,13 +14,14 @@ type ProbeStatus = 'idle' | 'probing' | 'done' | 'error'
 
 interface FirstRunRemoteFormProps {
   onBack: () => void
+  onConnected: () => void
 }
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err || 'Unknown error')
 }
 
-export function FirstRunRemoteForm({ onBack }: FirstRunRemoteFormProps) {
+export function FirstRunRemoteForm({ onBack, onConnected }: FirstRunRemoteFormProps) {
   const { t } = useI18n()
   const copy = t.install
   const [remoteUrl, setRemoteUrl] = useState('')
@@ -218,7 +219,7 @@ export function FirstRunRemoteForm({ onBack }: FirstRunRemoteFormProps) {
     }
 
     if (applied) {
-      onBack()
+      onConnected()
     }
   }
 

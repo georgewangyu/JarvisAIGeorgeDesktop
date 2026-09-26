@@ -310,7 +310,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Other AI providers' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
     await waitFor(() => expect(screen.queryByText('Set up Jarvis')).toBeNull())
     expect($desktopOnboarding.get().configured).toBe(false)
     expect($desktopOnboarding.get().firstRunSkipped).toBe(false)
@@ -327,7 +327,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     render(<DesktopInstallOverlay />)
 
     expect(await screen.findByText('Set up Jarvis')).toBeTruthy()
-    expect(screen.getByText('Other AI providers')).toBeTruthy()
+    expect(screen.getByText('Connect another Jarvis setup')).toBeTruthy()
     expect(screen.getByText('Get started')).toBeTruthy()
     expect(screen.queryByText(/steps complete/i)).toBeNull()
     expect(screen.queryByText(/Fetching installer manifest/i)).toBeNull()
@@ -404,7 +404,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('Other AI providers'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
 
     expect(await screen.findByText('Service address')).toBeTruthy()
     expect(screen.getByText('Connect another Jarvis setup')).toBeTruthy()
@@ -422,7 +422,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('Other AI providers'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
     expect(await screen.findByText('Service address')).toBeTruthy()
 
     fireEvent.click(screen.getByText('Back'))
@@ -459,7 +459,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('Other AI providers'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
     fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
@@ -499,6 +499,21 @@ describe('DesktopInstallOverlay first-run setup', () => {
       })
     })
     await waitFor(() => expect(screen.queryByText('Service address')).toBeNull())
+    expect(await screen.findByRole('heading', { name: 'Let Jarvis work with your files?' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Set up Jarvis' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue without access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    expect(await screen.findByRole('heading', { name: 'Your other setup is connected' })).toBeTruthy()
+    expect(screen.queryByText(/Sign in with ChatGPT to start asking Jarvis/)).toBeNull()
+    expect(screen.queryByRole('button', { name: "I'll choose a provider later" })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Start using Jarvis' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Your other setup is connected' })).toBeNull())
+    expect($desktopOnboarding.get().configured).not.toBe(true)
+    expect($desktopOnboarding.get().firstRunSkipped).toBe(true)
+    expect(screen.queryByRole('heading', { name: 'Connect your AI to Jarvis' })).toBeNull()
   })
 
   it('ignores a completed probe after the gateway URL becomes invalid', async () => {
@@ -518,7 +533,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('Other AI providers'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
     const urlInput = await screen.findByPlaceholderText('https://assistant.example.com')
     fireEvent.change(urlInput, { target: { value: 'https://gateway.example.com/hermes' } })
 
@@ -571,7 +586,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('Other AI providers'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
     fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
@@ -622,7 +637,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('Other AI providers'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
     fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
@@ -674,7 +689,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
 
     render(<DesktopInstallOverlay />)
 
-    fireEvent.click(await screen.findByText('Other AI providers'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
     fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
       target: { value: 'https://gateway.example.com/hermes' }
     })
@@ -714,6 +729,15 @@ describe('DesktopInstallOverlay first-run setup', () => {
         remoteUrl: 'https://gateway.example.com/hermes'
       })
     })
+    expect(await screen.findByRole('heading', { name: 'Let Jarvis work with your files?' })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Set up Jarvis' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue without access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start using Jarvis' }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Your other setup is connected' })).toBeNull())
+    expect(screen.queryByRole('heading', { name: 'Set up Jarvis' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Connect your AI to Jarvis' })).toBeNull()
   })
 
   it('offers remote connection from the unsupported packaged install screen', async () => {

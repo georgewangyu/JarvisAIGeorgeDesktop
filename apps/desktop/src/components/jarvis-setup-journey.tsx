@@ -12,6 +12,7 @@ type AppId = keyof JarvisOnboardingPermissionSnapshot['apps']
 
 interface JarvisSetupJourneyProps {
   alreadyConnected?: boolean
+  connectedGateway?: boolean
   reviewMode?: boolean
   bootstrapComplete: boolean
   bootstrapError: string | null
@@ -112,6 +113,7 @@ function PermissionStatus({ granted }: { granted: boolean }) {
 
 export function JarvisSetupJourney({
   alreadyConnected = false,
+  connectedGateway = false,
   reviewMode = false,
   bootstrapComplete,
   bootstrapError,
@@ -122,7 +124,7 @@ export function JarvisSetupJourney({
   onShowInstallDetails
 }: JarvisSetupJourneyProps) {
   const s = useJarvisCopy()
-  const [step, setStep] = useState<Step>('connect')
+  const [step, setStep] = useState<Step>(connectedGateway ? 'files' : 'connect')
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [signingIn, setSigningIn] = useState(false)
@@ -132,7 +134,7 @@ export function JarvisSetupJourney({
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS)
 
   const stepIndex = STEPS.indexOf(step)
-  const back = stepIndex > 0 ? () => setStep(STEPS[stepIndex - 1]) : undefined
+  const back = stepIndex > 0 && !(connectedGateway && step === 'files') ? () => setStep(STEPS[stepIndex - 1]) : undefined
 
   useEffect(() => setPermissionError(null), [step])
 
@@ -198,7 +200,7 @@ export function JarvisSetupJourney({
               Get started
             </Button>
             <Button onClick={onConnectOther} size="sm" variant="text">
-              Other AI providers
+              Connect another Jarvis setup
             </Button>
             {onSkip && !reviewMode ? (
               <Button onClick={onSkip} size="sm" variant="text">
@@ -411,12 +413,16 @@ export function JarvisSetupJourney({
           {bootstrapComplete ? <Check className="size-9" strokeWidth={2} /> : <BrandMark className="size-12" />}
         </div>
         <h1 className="mt-7 text-4xl font-semibold tracking-[-0.04em]">
-          {alreadyConnected
+          {connectedGateway
+            ? 'Your other setup is connected'
+            : alreadyConnected
             ? 'Setup reviewed'
             : bootstrapComplete ? 'Finish connecting Jarvis' : bootstrapError ? 'Setup needs attention' : 'Preparing Jarvis'}
         </h1>
         <p className="mt-4 max-w-lg text-base leading-7 text-(--ui-text-secondary)">
-          {alreadyConnected
+          {connectedGateway
+            ? 'Jarvis can reach your other setup. AI replies depend on the provider configured there; you can adjust access later in Connections.'
+            : alreadyConnected
             ? 'Your account and conversations are unchanged. You can adjust access later in Connections.'
             : bootstrapComplete
             ? 'Sign in with ChatGPT to start asking Jarvis, or choose a provider later.'
@@ -448,10 +454,10 @@ export function JarvisSetupJourney({
               }}
               size="lg"
             >
-              {alreadyConnected ? 'Return to Jarvis' : signingIn ? 'Finish sign-in in your browser' : 'Continue with ChatGPT / Codex'}
+              {connectedGateway ? 'Start using Jarvis' : alreadyConnected ? 'Return to Jarvis' : signingIn ? 'Finish sign-in in your browser' : 'Continue with ChatGPT / Codex'}
             </Button>
           )}
-          {onSkip && !reviewMode && bootstrapComplete && !signingIn ? (
+          {onSkip && !connectedGateway && !reviewMode && bootstrapComplete && !signingIn ? (
             <Button onClick={onSkip} size="sm" variant="text">
               I'll choose a provider later
             </Button>
