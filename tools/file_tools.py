@@ -1082,6 +1082,43 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
             # path is itself denylisted (that error wins).
             if isinstance(exc, RuntimeError) and not get_read_block_error(path):
                 raise
+        # A missing path may be retried by ShellFileOperations as comma- or
+        # whitespace-separated roots. Check those roots before that recovery
+        # can run, while preserving a real path whose name contains spaces.
+        search_paths = [path]
+        if not Path(resolved_search_path).exists():
+            parts = ([part.strip() for part in path.split(",") if part.strip()]
+                     if "," in path else path.split())
+            if len(parts) >= 2:
+                search_paths = parts
+        search_targets = [(root, _resolve_path_for_task(root, task_id)) for root in search_paths]
+        blocked = blocked_folder_error(
+            search_targets, task_id=task_id,
+            host_paths=lambda: _file_ops_uses_host_paths(_get_file_ops(task_id)))
+        if blocked:
+            return tool_error(blocked)
+
+        # Search traverses a directory tree. A permitted root above a blocked
+        # folder would otherwise expose that folder's contents and filenames.
+        # The shared guard has already validated the active profile's setting
+        # and confirmed that the backend uses host paths.
+        from hermes_cli.config import load_config_readonly
+
+        configured = load_config_readonly().get("file_tools", {}).get("blocked_folders", [])
+        if configured:
+            for root, resolved_root in search_targets:
+                search_input = Path(_expand_tilde(root))
+                search_lexical = Path(os.path.abspath(str(
+                    search_input if search_input.is_absolute()
+                    else Path(_resolve_base_dir(task_id)) / search_input)))
+                search_canonical = Path(resolved_root).resolve()
+                if any(
+                    Path(os.path.abspath(folder)).is_relative_to(search_lexical)
+                    or Path(folder).resolve().is_relative_to(search_canonical)
+                    for folder in configured
+                ):
+                    return tool_error(
+                        "This search root contains a blocked folder; local file search is unavailable.")
         block_error = get_read_block_error(resolved_search_path)
         if block_error:
             return tool_error(block_error)
