@@ -35,6 +35,7 @@ afterEach(() => {
   $activeGatewayProfile.set('default')
   $connection.set(null)
   $freshSessionRequest.set(0)
+  delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
 })
 
 it('sends only an explicit Generate request and saves a real returned edition', async () => {
@@ -159,6 +160,11 @@ it('retries a failed start rather than reloading editions, using the original pr
 })
 
 it('labels generated links as unverified on completed editions only', async () => {
+  const fetchLinkTitle = vi.fn().mockResolvedValue('Unexpected network title')
+  const desktopWindow = window as unknown as { hermesDesktop: unknown }
+
+  desktopWindow.hermesDesktop = { fetchLinkTitle }
+
   const linked = {
     ...edition,
     content: 'Read [release notes](https://example.test/release).',
@@ -170,7 +176,9 @@ it('labels generated links as unverified on completed editions only', async () =
   const view = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
 
   expect(await screen.findByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeTruthy()
-  expect(screen.getByRole('link', { name: 'release notes' }).getAttribute('href')).toBe('https://example.test/release')
+  expect(screen.queryByRole('link', { name: 'release notes' })).toBeNull()
+  expect(screen.getByRole('link', { name: 'https://example.test/release' }).getAttribute('href')).toBe('https://example.test/release')
+  expect(fetchLinkTitle).not.toHaveBeenCalled()
   expect(screen.getByRole('list', { name: 'Generated briefing links and retrieval status' }).textContent)
     .toContain('https://example.test/release — Retrieval status unavailable')
 
@@ -187,6 +195,7 @@ it('labels generated links as unverified on completed editions only', async () =
   expect(sourceList.textContent).toContain('https://example.test/release — Page content retrieved; claims not verified')
   expect(sourceList.textContent).toContain('https://example.test/other — Page content not retrieved')
   expect(screen.getByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeTruthy()
+  expect(fetchLinkTitle).not.toHaveBeenCalled()
 
   vi.mocked(getFeedEditions).mockResolvedValue([{
     ...linked, content: null, error: 'Provider unavailable', status: 'failed'

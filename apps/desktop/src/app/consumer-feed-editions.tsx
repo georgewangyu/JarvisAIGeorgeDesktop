@@ -6,6 +6,7 @@ import { type FeedEdition, generateFeedEdition, getFeedEditions } from '@/api/fe
 import { MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ExternalLink } from '@/lib/external-link'
 import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $connection } from '@/store/session'
@@ -249,10 +250,12 @@ export function ConsumerFeedEditions() {
                   {item.source_urls.length > 0 ? <div className="mt-2 text-xs text-(--ui-text-tertiary)">
                     <p>Links mentioned in this generated briefing:</p>
                     <ul aria-label="Generated briefing links and retrieval status" className="mt-1 list-inside list-disc break-all">
-                      {item.source_urls.map(url => <li key={url}>{url} — {feedRetrievalCopy(item, url)}</li>)}
+                      {item.source_urls.map(url => <li key={url}><ExternalLink href={url}>{url}</ExternalLink> — {feedRetrievalCopy(item, url)}</li>)}
                     </ul>
                   </div> : null}
-                  <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div>
+                  {/* Generated prose is passive until the user chooses a listed source.
+                      Rich transcript links fetch titles and embeds on mount. */}
+                  <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={item.content} /></div>
                 </> : null}
                 {item.status === 'generating' ? <p className="mt-5 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}
                 {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-5 text-sm text-destructive" role="alert">{feedFailureCopy(item)}</p>}
