@@ -1011,7 +1011,9 @@ export const en: Translations = {
       shortcutDesc: 'Needs at least one modifier, e.g. CommandOrControl+Shift+Space.',
       active: 'Shortcut is active.',
       takenBy: 'Another app already uses this shortcut — pick a different one.',
-      invalidShortcut: 'Not a valid shortcut. Include at least one modifier key.'
+      invalidShortcut: 'Not a valid shortcut. Include at least one modifier key.',
+      loadFailed: 'Could not check the shortcut on this Mac. Retry to see whether it is active.',
+      saveFailed: 'Could not confirm the shortcut change. Retry to check whether it took effect.'
     },
     credentials: {
       pasteKey: 'Paste key',

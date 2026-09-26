@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
@@ -11,6 +12,7 @@ import {
   canUseQuickEntry,
   loadQuickEntrySettings,
   QUICK_ENTRY_DEFAULT_SHORTCUT,
+  retryQuickEntrySettings,
   saveQuickEntrySettings
 } from '@/store/quick-entry'
 
@@ -70,16 +72,17 @@ export function QuickEntrySettings({ consumer = false }: { consumer?: boolean })
     }
   }
 
-  const status =
-    state.registered === null
+  const registrationStatus = state.error
+    ? { invalid: q.invalidShortcut, taken: q.takenBy }[state.error]
+    : state.enabled && state.registered
+      ? q.active
+      : null
+
+  const status = state.failure
+    ? { load: q.loadFailed, save: q.saveFailed }[state.failure]
+    : state.registered === null
       ? null
-      : state.error === 'taken'
-        ? q.takenBy
-        : state.error === 'invalid'
-          ? q.invalidShortcut
-          : state.enabled && state.registered
-            ? q.active
-            : null
+      : registrationStatus
 
   const shortcutInput = (
     <Input
@@ -127,9 +130,12 @@ export function QuickEntrySettings({ consumer = false }: { consumer?: boolean })
             <p className="font-medium">{q.shortcutTitle}</p>
             {editingShortcut && <p className="mt-1 text-sm text-muted-foreground">{q.shortcutDesc}</p>}
             {status && (
-              <p className={state.error ? 'mt-1 text-sm text-amber-500/90' : 'mt-1 text-sm text-muted-foreground'}>
-                {status}
-              </p>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <p className={state.error || state.failure ? 'text-sm text-amber-500/90' : 'text-sm text-muted-foreground'}>
+                  {status}
+                </p>
+                {state.failure && <Button onClick={() => void retryQuickEntrySettings()} size="inline" variant="textStrong">{t.common.retry}</Button>}
+              </div>
             )}
           </div>
           <div className="w-full shrink-0 sm:w-56">
@@ -167,12 +173,13 @@ export function QuickEntrySettings({ consumer = false }: { consumer?: boolean })
           status && (
             <div
               className={
-                state.error
+                state.error || state.failure
                   ? 'mt-1 text-[length:var(--conversation-caption-font-size)] text-amber-500/90'
                   : 'mt-1 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)'
               }
             >
-              {status}
+              <span>{status}</span>
+              {state.failure && <Button className="ml-2" onClick={() => void retryQuickEntrySettings()} size="inline" variant="textStrong">{t.common.retry}</Button>}
             </div>
           )
         }

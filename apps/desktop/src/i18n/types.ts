@@ -874,6 +874,8 @@ export interface Translations {
       active: string
       takenBy: string
       invalidShortcut: string
+      loadFailed: string
+      saveFailed: string
     }
     credentials: {
       pasteKey: string

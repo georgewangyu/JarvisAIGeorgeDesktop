@@ -23,7 +23,15 @@ export interface QuickEntryState {
   registered: boolean | null
   /** Why the OS shortcut isn't live: taken by another app, or unusable. */
   error: null | QuickEntryRegistrationError
+  /** A bridge failure means the displayed registration is unverified until retry. */
+  failure: null | 'load' | 'save'
+  retryPatch: null | QuickEntrySettingsPatch
   shortcut: string
+}
+
+export interface QuickEntrySettingsPatch {
+  enabled?: boolean
+  shortcut?: string
 }
 
 export type QuickEntryRegistrationError = 'invalid' | 'taken'
@@ -40,21 +48,29 @@ export const QUICK_ENTRY_DEFAULT_SHORTCUT = 'CommandOrControl+Shift+Space'
 export const $quickEntry = atom<QuickEntryState>({
   enabled: true,
   error: null,
+  failure: null,
   registered: null,
+  retryPatch: null,
   shortcut: QUICK_ENTRY_DEFAULT_SHORTCUT
 })
 
-function applyStatus(status: QuickEntryStatus | undefined): void {
+let settingsRequestRevision = 0
+
+function applyStatus(status: QuickEntryStatus | undefined): boolean {
   if (!status) {
-    return
+    return false
   }
 
   $quickEntry.set({
     enabled: status.enabled === true,
     error: status.error ?? null,
+    failure: null,
     registered: status.registered === true,
+    retryPatch: null,
     shortcut: typeof status.shortcut === 'string' && status.shortcut ? status.shortcut : QUICK_ENTRY_DEFAULT_SHORTCUT
   })
+
+  return true
 }
 
 /** True when the shell exposes the Quick Entry capability (desktop only). */
@@ -68,10 +84,22 @@ export async function loadQuickEntrySettings(): Promise<void> {
     return
   }
 
+  const revision = ++settingsRequestRevision
+
   try {
-    applyStatus(await window.hermesDesktop.quickEntry.getSettings())
+    const status = await window.hermesDesktop.quickEntry.getSettings()
+
+    if (revision !== settingsRequestRevision) {
+      return
+    }
+
+    if (!applyStatus(status)) {
+      throw new Error('Quick Entry status unavailable')
+    }
   } catch {
-    // A failed read leaves the store as-is; the row keeps its last known copy.
+    if (revision === settingsRequestRevision) {
+      $quickEntry.set({ ...$quickEntry.get(), failure: 'load', registered: null, retryPatch: null })
+    }
   }
 }
 
@@ -80,20 +108,42 @@ export async function loadQuickEntrySettings(): Promise<void> {
  * rejected shortcut or an already-taken chord comes back as an error state
  * instead of a silently-lost setting.
  */
-export async function saveQuickEntrySettings(patch: { enabled?: boolean; shortcut?: string }): Promise<void> {
+export async function saveQuickEntrySettings(patch: QuickEntrySettingsPatch): Promise<void> {
   if (!canUseQuickEntry()) {
     return
   }
 
   // Optimistic: paint the intent immediately, then let the authoritative reply
   // (which knows whether the OS accepted it) get the last word.
+  const revision = ++settingsRequestRevision
   const previous = $quickEntry.get()
-  $quickEntry.set({ ...previous, ...patch, registered: previous.registered })
+  $quickEntry.set({ ...previous, ...patch, error: null, failure: null, registered: null, retryPatch: null })
 
   try {
-    applyStatus(await window.hermesDesktop.quickEntry.setSettings(patch))
+    const status = await window.hermesDesktop.quickEntry.setSettings(patch)
+
+    if (revision !== settingsRequestRevision) {
+      return
+    }
+
+    if (!applyStatus(status)) {
+      throw new Error('Quick Entry change unconfirmed')
+    }
   } catch {
-    $quickEntry.set(previous)
+    if (revision === settingsRequestRevision) {
+      $quickEntry.set({ ...previous, failure: 'save', registered: null, retryPatch: patch })
+    }
+  }
+}
+
+/** Retry the exact unconfirmed write, or refresh machine truth after a failed read. */
+export async function retryQuickEntrySettings(): Promise<void> {
+  const { failure, retryPatch } = $quickEntry.get()
+
+  if (failure === 'save' && retryPatch) {
+    await saveQuickEntrySettings(retryPatch)
+  } else if (failure === 'load') {
+    await loadQuickEntrySettings()
   }
 }
 

@@ -966,7 +966,9 @@ export const ja = defineLocale({
       shortcutDesc: '修飾キーが 1 つ以上必要です（例: CommandOrControl+Shift+Space）。',
       active: 'ショートカットは有効です。',
       takenBy: 'このショートカットは他のアプリが使用しています。別のものを選んでください。',
-      invalidShortcut: '有効なショートカットではありません。修飾キーを 1 つ以上含めてください。'
+      invalidShortcut: '有効なショートカットではありません。修飾キーを 1 つ以上含めてください。',
+      loadFailed: 'このMacでショートカットの状態を確認できませんでした。有効かどうか確認するには再試行してください。',
+      saveFailed: 'ショートカットの変更を確認できませんでした。反映されたかどうか確認するには再試行してください。'
     },
     credentials: {
       pasteKey: 'キーを貼り付け',

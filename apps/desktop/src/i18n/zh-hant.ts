@@ -999,12 +999,14 @@ export const zhHant = defineLocale({
     },
     quickEntry: {
       enabledTitle: '快速輸入',
-      enabledDesc: '用全域快速鍵在任何地方喚出一個小輸入框，無需開啟 Hermes 即可送出提示。',
+      enabledDesc: '用全域快速鍵在任何地方喚出小輸入框，無需開啟主視窗。',
       shortcutTitle: '快速輸入快速鍵',
       shortcutDesc: '至少需要一個修飾鍵，例如 CommandOrControl+Shift+Space。',
       active: '快速鍵已生效。',
       takenBy: '此快速鍵已被其他應用程式占用，請換一個。',
-      invalidShortcut: '不是有效的快速鍵。請至少包含一個修飾鍵。'
+      invalidShortcut: '不是有效的快速鍵。請至少包含一個修飾鍵。',
+      loadFailed: '無法確認這台 Mac 上的快速鍵狀態。請重試以檢查是否已生效。',
+      saveFailed: '無法確認快速鍵是否已變更。請重試以檢查是否已生效。'
     },
     credentials: {
       pasteKey: '貼上金鑰',

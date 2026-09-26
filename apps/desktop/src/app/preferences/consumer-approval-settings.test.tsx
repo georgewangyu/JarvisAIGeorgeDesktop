@@ -117,7 +117,7 @@ it('shows Japanese approval copy while keeping the same permission limits and co
   )
 
   expect(await screen.findByRole('heading', { name: '操作の承認' })).toBeTruthy()
-  expect(screen.getByRole('radiogroup', { name: '承認モード' })).toBeTruthy()
+  expect(await screen.findByRole('radiogroup', { name: '承認モード' })).toBeTruthy()
   expect(screen.getByText(/一部の破壊的なターミナルコマンドはブロックされます/)).toBeTruthy()
   fireEvent.click(screen.getByRole('radio', { name: /確認を減らす/ }))
   await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.objectContaining({
