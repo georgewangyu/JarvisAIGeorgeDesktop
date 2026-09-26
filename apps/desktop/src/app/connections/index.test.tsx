@@ -178,6 +178,26 @@ it('refreshes account and model state immediately after successful sign-in', asy
   expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
 })
 
+it('keeps OAuth callback diagnostics out of Connections and permits retry', async () => {
+  const startCodexOAuth = vi.fn()
+    .mockRejectedValueOnce(new Error('callback code=private-code at /private/synthetic/auth.json'))
+    .mockResolvedValueOnce({ ok: false, message: 'state=private-state /private/synthetic/creds' })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisOnboarding: { startCodexOAuth } }
+  })
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+  expect(await screen.findByText('ChatGPT sign-in did not finish. Please try again.')).toBeTruthy()
+  expect(screen.queryByText(/private-code|auth\.json/)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+  await waitFor(() => expect(startCodexOAuth).toHaveBeenCalledTimes(2))
+  expect(screen.getByText('ChatGPT sign-in did not finish. Please try again.')).toBeTruthy()
+  expect(screen.queryByText(/private-state|creds/)).toBeNull()
+})
+
 it('shows detected local apps without claiming their access is connected', async () => {
   Object.defineProperty(window, 'hermesDesktop', {
     configurable: true,

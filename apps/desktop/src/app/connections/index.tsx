@@ -435,8 +435,10 @@ export function ConnectionsView() {
                         $currentProvider.set(model.provider)
                         $currentModel.set(model.model)
                         await refresh()
-                      } catch (cause) {
-                        setError(cause instanceof Error ? cause.message : 'ChatGPT sign-in did not finish.')
+                      } catch {
+                        // OAuth errors can include callback codes, credential
+                        // paths or provider diagnostics; keep them out of UI.
+                        setError('ChatGPT sign-in did not finish. Please try again.')
                       } finally {
                         setSigningIn(false)
                       }
