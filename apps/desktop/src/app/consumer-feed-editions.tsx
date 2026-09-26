@@ -203,10 +203,10 @@ export function ConsumerFeedEditions() {
                 {(item.feedback_applied_count ?? 0) > 0 ? <p className="mt-2 text-xs text-(--ui-text-tertiary)">Guided by {item.feedback_applied_count} loved {item.feedback_applied_count === 1 ? 'briefing' : 'briefings'}</p> : null}
                 {item.status === 'completed' && item.content ? <>
                   <p className="mt-4 text-xs text-(--ui-text-tertiary)">Sources have not been verified. Links in this generated briefing may be inaccurate.</p>
-                  {(item.retrieved_source_urls?.length ?? 0) > 0 ? <div className="mt-2 text-xs text-(--ui-text-tertiary)">
-                    <p>Page content was returned for these links while preparing this briefing. That does not verify the pages or the generated claims:</p>
-                    <ul aria-label="Pages retrieved during generation" className="mt-1 list-inside list-disc break-all">
-                      {item.retrieved_source_urls?.map(url => <li key={url}>{url}</li>)}
+                  {item.source_urls.length > 0 ? <div className="mt-2 text-xs text-(--ui-text-tertiary)">
+                    <p>Links mentioned in this generated briefing:</p>
+                    <ul aria-label="Generated briefing links and retrieval status" className="mt-1 list-inside list-disc break-all">
+                      {item.source_urls.map(url => <li key={url}>{url} — {item.retrieved_source_urls?.includes(url) ? 'Page content retrieved; claims not verified' : 'Page content not retrieved'}</li>)}
                     </ul>
                   </div> : null}
                   <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div>

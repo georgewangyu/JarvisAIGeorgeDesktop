@@ -160,8 +160,10 @@ it('labels generated links as unverified on completed editions only', async () =
   }])
   view.unmount()
   const retrievedView = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
-  expect(await screen.findByText('Page content was returned for these links while preparing this briefing. That does not verify the pages or the generated claims:')).toBeTruthy()
-  expect(screen.getByRole('list', { name: 'Pages retrieved during generation' }).textContent).toBe('https://example.test/release')
+  expect(await screen.findByText('Links mentioned in this generated briefing:')).toBeTruthy()
+  const sourceList = screen.getByRole('list', { name: 'Generated briefing links and retrieval status' })
+  expect(sourceList.textContent).toContain('https://example.test/release — Page content retrieved; claims not verified')
+  expect(sourceList.textContent).toContain('https://example.test/other — Page content not retrieved')
   expect(screen.getByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeTruthy()
 
   vi.mocked(getFeedEditions).mockResolvedValue([{
