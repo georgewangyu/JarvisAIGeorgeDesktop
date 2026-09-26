@@ -180,6 +180,8 @@ def _run_real_agent(prompt: str, edition_id: str) -> tuple[str, list[str]]:
         # web_extract has already applied secret-URL and SSRF gates.
         if name != "web_extract" or not isinstance(args, dict) or not isinstance(result, str):
             return
+        from tools.url_safety import normalize_url_for_request
+
         requested = args.get("urls")
         if not isinstance(requested, list):
             return
@@ -192,7 +194,10 @@ def _run_real_agent(prompt: str, edition_id: str) -> tuple[str, list[str]]:
             else:
                 continue
             if isinstance(value, str):
-                requested_urls.add(value)
+                # web_extract normalizes IRIs before dispatch and reports the
+                # normalized URL; match that exact request, not an arbitrary
+                # provider URL from the completed result.
+                requested_urls.add(normalize_url_for_request(value))
         try:
             entries = json.loads(result).get("results")
         except (ValueError, AttributeError):

@@ -174,6 +174,27 @@ def test_only_completed_exact_web_extract_results_record_retrieved_citations(tmp
     assert retrieved["source_urls_verified"] is False
 
 
+def test_retrieval_matches_web_extract_normalized_request(tmp_path, monkeypatch):
+    import cron.scheduler as scheduler
+
+    monkeypatch.setattr(feed, "_db_path", lambda: tmp_path / "feed" / "editions.sqlite3")
+    requested = "https://example.test/café"
+    fetched = "https://example.test/caf%C3%A9"
+
+    def fake_run_job(_job, *, tool_complete_callback):
+        tool_complete_callback("fetched", "web_extract", {"urls": [requested]}, json.dumps({
+            "results": [{"url": fetched, "content": "Page text", "error": None}],
+        }))
+        return True, "response document", f"Read {fetched}", None
+
+    monkeypatch.setattr(scheduler, "run_job", fake_run_job)
+    row = feed.request_edition("Summarize")
+    completed = _eventually(lambda: feed.get_edition(row["id"]), "completed")
+    assert completed["source_urls"] == [fetched]
+    assert completed["retrieved_source_urls"] == [fetched]
+    assert completed["source_urls_verified"] is False
+
+
 def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
     """A shared serve process must not mix edition storage between profiles."""
     from starlette.testclient import TestClient
