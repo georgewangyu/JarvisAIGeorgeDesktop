@@ -99,6 +99,11 @@ def reset_current_observability_context(tokens: _Tokens) -> None:
     _approval_turn_id.reset(turn_token)
 
 
+def get_current_approval_turn_id() -> str:
+    """Return the active model turn identity passed through tool dispatch."""
+    return _approval_turn_id.get()
+
+
 def get_current_session_key(default: str = "default") -> str:
     """Return the active session key: approval contextvar → session_context → os.environ."""
     if session_key := _approval_session_key.get():

@@ -1472,6 +1472,7 @@ class TestApprovalTimeoutIsNotConsent:
         mod._gateway_queues.clear()
         mod._gateway_notify_cbs.clear()
         mod._session_approved.clear()
+        mod._session_denied_commands.clear()
         mod._permanent_approved.clear()
         mod._pending.clear()
 

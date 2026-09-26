@@ -54,6 +54,12 @@ _pending: dict[str, dict] = {}
 # Keep their in-memory grants separate; unscoped keys retain their legacy shape.
 _session_approved: dict[str | tuple[str, str], set] = {}
 _session_yolo: set[str | tuple[str, str]] = set()
+# A human refusal blocks the exact action for this model turn. Normal tool dispatch
+# supplies its turn ID; legacy callers without one conservatively use a session bucket.
+# Only digests are retained, and both bucket and per-turn counts are bounded.
+_session_denied_commands: dict[tuple[str | tuple[str, str], str], set[str] | None] = {}
+_DENIED_COMMAND_MAX_TURNS = 512
+_DENIED_COMMAND_MAX_PER_TURN = 256
 _permanent_approved: set = set()
 # Routed multiplex profiles: one permanent allowlist per profile home (see ``_permanent_set``).
 _permanent_approved_by_home: dict[str, set] = {}
@@ -305,6 +311,36 @@ def _session_grant_key(session_key: str) -> str | tuple[str, str]:
     return (hermes_home_key(), session_key)
 
 
+def _command_denial_digest(command: str) -> str:
+    return hashlib.sha256(command.encode("utf-8")).hexdigest()
+
+
+def _command_denial_key(session_key: str) -> tuple[str | tuple[str, str], str]:
+    return (_gateway_queue_key(session_key), approval_context.get_current_approval_turn_id())
+
+
+def _remember_user_denial(session_key: str, command: str) -> None:
+    with _lock:
+        key = _command_denial_key(session_key)
+        denied = _session_denied_commands.pop(key, set())
+        if denied is not None:
+            denied.add(_command_denial_digest(command))
+            if len(denied) >= _DENIED_COMMAND_MAX_PER_TURN:
+                denied = None  # Saturated: fail closed for the remainder of this turn.
+        _session_denied_commands[key] = denied
+        while len(_session_denied_commands) > _DENIED_COMMAND_MAX_TURNS:
+            _session_denied_commands.pop(next(iter(_session_denied_commands)))
+
+
+def _was_command_denied(session_key: str, command: str) -> bool:
+    with _lock:
+        key = _command_denial_key(session_key)
+        denied = _session_denied_commands.get(key, set())
+        if key in _session_denied_commands:
+            _session_denied_commands[key] = _session_denied_commands.pop(key)
+        return denied is None or _command_denial_digest(command) in denied
+
+
 def approve_session(session_key: str, pattern_key: str):
     """Approve a pattern for this session only."""
     with _lock:
@@ -349,6 +385,9 @@ def clear_session(session_key: str) -> None:
         grant_key = _session_grant_key(session_key)
         _session_approved.pop(grant_key, None)
         _session_yolo.discard(grant_key)
+        denied_owner = _gateway_queue_key(session_key)
+        for key in [key for key in _session_denied_commands if key[0] == denied_owner]:
+            _session_denied_commands.pop(key, None)
         _pending.pop(session_key, None)
         for entry in _gateway_queues.pop(_gateway_queue_key(session_key), []):
             # Cancel blocked waits now so the old run unwinds instead of idling until timeout;
@@ -865,6 +904,13 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
     """
     from agent.redact import redact_sensitive_text
 
+    if _was_command_denied(session_key, command):
+        return _denied(
+            "BLOCKED: The user already denied this action in the current turn. "
+            "Do NOT retry or rephrase it. Report the refusal to the user.",
+            pattern_key=pattern_key, description=description, outcome="denied", noun=spec.noun,
+        )
+
     smart_denied = False
     if smart:
         result, smart_denied = _smart_gate(spec, command, description, pattern_key, pattern_keys,
@@ -903,6 +949,7 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
             return denied
         if choice is not None:
             if choice == "deny":
+                _remember_user_denial(session_key, command)
                 _record_denial(session_key)
                 return deny(spec.transport_denied, "denied")
             return grant(choice)
@@ -946,6 +993,8 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
                             reason_addendum="", timeout_addendum=" Silence is not consent.",
                             deny_reason=deny_reason)
             if choice is None or choice == "deny":
+                if choice == "deny":
+                    _remember_user_denial(session_key, command)
                 return deny(spec.gateway_refused, "denied", reason="denied by user",
                             reason_addendum=(f' Reason given by the user: "{deny_reason}".' if deny_reason else ""),
                             timeout_addendum="", deny_reason=deny_reason)
@@ -987,6 +1036,7 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
     if choice == "deny":
         # No _record_denial(): the breaker counts consecutive guardian LLM
         # DENY verdicts, not deliberate human denials.
+        _remember_user_denial(session_key, command)
         return deny(spec.cli_denied, "denied")
     return grant(choice)
 
