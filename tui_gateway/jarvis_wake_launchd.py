@@ -8,8 +8,10 @@ source tree must be stable across app updates before anyone installs it.
 from __future__ import annotations
 
 import hashlib
+import os
 import plistlib
 import re
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +43,8 @@ def _inputs(
         raise ValueError("profile_home and hermes_home must not be the filesystem root")
     if profile == "default" and home != base_home:
         raise ValueError("default profile home must equal the base Hermes home")
+    if profile != "default" and home != base_home / "profiles" / profile:
+        raise ValueError("named profile home must match its installed profile directory")
     source = base_home / "hermes-agent"
     if python != source / "venv" / "bin" / "python":
         raise ValueError("python_executable must be the installed Jarvis venv interpreter")
@@ -108,3 +112,87 @@ def validate_launch_agent_plist(
         raise ValueError("invalid LaunchAgent plist") from exc
     if actual != expected:
         raise ValueError("LaunchAgent plist differs from the exact one-shot wake contract")
+
+
+def _no_symlink_components(path: Path) -> None:
+    """Refuse path redirection before checking an installation snapshot."""
+    current = Path(path.anchor)
+    for part in path.parts[1:]:
+        current /= part
+        if stat.S_ISLNK(current.lstat().st_mode):
+            raise ValueError(f"wake installation path is symlinked: {current}")
+
+
+def _owned_directory(path: Path) -> None:
+    _no_symlink_components(path)
+    info = path.lstat()
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) & 0o077):
+        raise ValueError(f"wake installation directory is not owner-private: {path}")
+
+
+def validate_launch_agent_readiness(
+    plist: bytes, *, profile: str, profile_home: Path | str,
+    python_executable: Path | str, entrypoint: Path | str,
+    hermes_home: Path | str,
+) -> None:
+    """Check the exact rendered job against the current local installation.
+
+    This is a read-only pre-install snapshot, not a launch or a race-free lease.
+    A venv Python may be a symlink: its pinned link and resolved executable are
+    checked structurally, without claiming its runtime imports will succeed.
+    """
+    validate_launch_agent_plist(
+        plist, profile=profile, profile_home=profile_home,
+        python_executable=python_executable, entrypoint=entrypoint,
+        hermes_home=hermes_home,
+    )
+    home, base, python, script = _inputs(
+        profile, profile_home, python_executable, entrypoint, hermes_home)
+    queue = home / "runtime" / _WAKE_QUEUE
+    if profile != "default":
+        _owned_directory(base / "profiles")
+    for directory in (base, home, home / "runtime", queue):
+        _owned_directory(directory)
+
+    source = base / "hermes-agent"
+    for directory in (source, source / "tui_gateway", source / "venv",
+                      source / "venv" / "bin"):
+        _no_symlink_components(directory)
+        info = directory.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o022):
+            raise ValueError(f"installed Jarvis directory is unsafe: {directory}")
+
+    _no_symlink_components(script)
+    script_info = script.lstat()
+    if (not stat.S_ISREG(script_info.st_mode) or script_info.st_uid != os.getuid()
+            or stat.S_IMODE(script_info.st_mode) & 0o022
+            or not os.access(script, os.R_OK)):
+        raise ValueError("installed Jarvis entrypoint is not a usable owned file")
+
+    # Python's final venv link is normal on macOS. All of its parent path is
+    # pinned above; the target must exist and be an executable regular file.
+    _no_symlink_components(python.parent)
+    python_info = python.lstat()
+    if python_info.st_uid != os.getuid() or not (
+            stat.S_ISLNK(python_info.st_mode) or stat.S_ISREG(python_info.st_mode)):
+        raise ValueError("installed Jarvis interpreter path is unsafe")
+    resolved_python = python.resolve(strict=True)
+    target_info = resolved_python.stat()
+    if (not stat.S_ISREG(target_info.st_mode)
+            or target_info.st_uid not in {0, os.getuid()}
+            or stat.S_IMODE(target_info.st_mode) & 0o022
+            or not os.access(resolved_python, os.X_OK)):
+        raise ValueError("installed Jarvis interpreter is not executable")
+
+    config = home / "config.yaml"
+    _no_symlink_components(config)
+    config_info = config.lstat()
+    if (not stat.S_ISREG(config_info.st_mode) or config_info.st_uid != os.getuid()
+            or stat.S_IMODE(config_info.st_mode) & 0o077):
+        raise ValueError("Jarvis activation config is not an owner-private file")
+    from tui_gateway.owner_event_inbox import jarvis_headless_activation_enabled
+
+    if not jarvis_headless_activation_enabled(home):
+        raise ValueError("headless activation is not enabled for the exact profile")

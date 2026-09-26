@@ -1,12 +1,15 @@
 """Synthetic contract tests; these never register a LaunchAgent."""
 
 import plistlib
+import sys
+from pathlib import Path
 
 import pytest
 
 from tui_gateway.jarvis_wake_launchd import (
     launch_agent_label,
     render_launch_agent_plist,
+    validate_launch_agent_readiness,
     validate_launch_agent_plist,
 )
 
@@ -99,3 +102,101 @@ def test_renderer_refuses_a_different_install_root_or_default_profile_home(tmp_p
     inputs["profile_home"] = tmp_path / "other-profile"
     with pytest.raises(ValueError, match="default profile home"):
         render_launch_agent_plist(**inputs)
+
+    inputs = _contract(tmp_path, "research")
+    inputs["profile_home"] = tmp_path / "other-profile"
+    with pytest.raises(ValueError, match="named profile home"):
+        render_launch_agent_plist(**inputs)
+
+
+def _installed_contract(tmp_path: Path, profile: str, *, enabled: bool = True):
+    inputs = _contract(tmp_path, profile)
+    base = inputs["hermes_home"]
+    home = inputs["profile_home"]
+    for directory in (base, home, home / "runtime",
+                      home / "runtime" / "jarvis_event_wake"):
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        directory.chmod(0o700)
+    if profile != "default":
+        (base / "profiles").chmod(0o700)
+    source = base / "hermes-agent"
+    for directory in (source, source / "tui_gateway", source / "venv" / "bin"):
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    inputs["entrypoint"].write_text("# synthetic installed source\n", encoding="utf-8")
+    if not inputs["python_executable"].exists():
+        inputs["python_executable"].symlink_to(sys.executable)
+    config = home / "config.yaml"
+    config.write_text(
+        f"desktop:\n  jarvis_headless_event_activation: {str(enabled).lower()}\n",
+        encoding="utf-8",
+    )
+    config.chmod(0o600)
+    return inputs
+
+
+def test_readiness_is_exact_profile_scoped_across_a_b_a(tmp_path):
+    a = _installed_contract(tmp_path, "default")
+    b = _installed_contract(tmp_path, "research")
+    for inputs in (a, b, a):
+        validate_launch_agent_readiness(render_launch_agent_plist(**inputs), **inputs)
+    b["profile_home"].joinpath("config.yaml").write_text(
+        "desktop:\n  jarvis_headless_event_activation: false\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not enabled"):
+        validate_launch_agent_readiness(render_launch_agent_plist(**b), **b)
+    validate_launch_agent_readiness(render_launch_agent_plist(**a), **a)
+
+
+def test_readiness_denials_and_recovery(tmp_path):
+    inputs = _installed_contract(tmp_path, "default")
+    data = render_launch_agent_plist(**inputs)
+
+    def check():
+        validate_launch_agent_readiness(data, **inputs)
+
+    check()
+    queue = inputs["profile_home"] / "runtime" / "jarvis_event_wake"
+    queue.chmod(0o755)
+    with pytest.raises(ValueError, match="owner-private"):
+        check()
+    queue.chmod(0o700)
+    check()
+
+    script = inputs["entrypoint"]
+    script.unlink()
+    with pytest.raises(FileNotFoundError):
+        check()
+    script.write_text("# restored\n", encoding="utf-8")
+    check()
+
+    python = inputs["python_executable"]
+    python.unlink()
+    with pytest.raises(FileNotFoundError):
+        check()
+    inert_python = tmp_path / "inert-python"
+    inert_python.write_text("not an interpreter\n", encoding="utf-8")
+    python.symlink_to(inert_python)
+    with pytest.raises(ValueError, match="not executable"):
+        check()
+    python.unlink()
+    python.symlink_to(sys.executable)
+    check()
+
+    config = inputs["profile_home"] / "config.yaml"
+    config.unlink()
+    config.symlink_to(tmp_path / "other-config")
+    with pytest.raises(ValueError, match="symlinked"):
+        check()
+    config.unlink()
+    config.write_text("desktop:\n  jarvis_headless_event_activation: true\n", encoding="utf-8")
+    config.chmod(0o600)
+    check()
+
+    source = inputs["hermes_home"] / "hermes-agent"
+    moved = inputs["hermes_home"] / "moved-source"
+    source.rename(moved)
+    source.symlink_to(moved)
+    with pytest.raises(ValueError, match="symlinked"):
+        check()
+    source.unlink()
+    moved.rename(source)
+    check()
