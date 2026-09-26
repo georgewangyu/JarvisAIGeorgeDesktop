@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -9,10 +9,24 @@ import { $connection } from '@/store/session'
 export function ConsumerChatExportSettings({ profile }: { profile: string }) {
   const connection = useStore($connection)
   const local = connection?.mode === 'local'
+  const request = useRef(0)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState('')
+
+  // An already-open save dialog must not export the previous profile after a switch.
+  // eslint-disable-next-line no-restricted-syntax
+  useEffect(() => {
+    const current = ++request.current
+
+    setOpen(false)
+    setBusy(false)
+    setError('')
+    setResult('')
+
+    return () => { request.current = current + 1 }
+  }, [local, profile])
 
   async function download() {
     if (!local || busy) {return}
@@ -24,6 +38,8 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
       return
     }
 
+    const current = request.current
+
     setBusy(true)
     setError('')
 
@@ -34,16 +50,18 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
         title: 'Save Jarvis chat history'
       })
 
-      if (!output) {return}
+      if (!output || request.current !== current) {return}
       const saved = await exportConsumerChatHistory(profile, output)
+
+      if (request.current !== current) {return}
 
       if (!saved.ok) {throw new Error('Export was not completed')}
       setResult(`${saved.chats} ${saved.chats === 1 ? 'chat' : 'chats'} saved to the location you chose.`)
       setOpen(false)
     } catch {
-      setError('Could not save chat history. Choose another location and try again.')
+      if (request.current === current) {setError('Could not save chat history. Choose another location and try again.')}
     } finally {
-      setBusy(false)
+      if (request.current === current) {setBusy(false)}
     }
   }
 

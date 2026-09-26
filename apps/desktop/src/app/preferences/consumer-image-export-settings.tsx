@@ -29,6 +29,7 @@ export function ConsumerImageExportSettings({ profile }: { profile: string }) {
     setImages(null)
     setListError(false)
     setOpen(false)
+    setBusy(false)
     setError('')
     setResult('')
 

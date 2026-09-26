@@ -83,6 +83,34 @@ it('does not export after the selected profile changes while the save dialog is 
   expect(exportImages).not.toHaveBeenCalled()
 })
 
+it('lets the new profile recover while the old save dialog is still pending', async () => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  let finishOldPick!: (path: string) => void
+  pick.mockImplementationOnce(() => new Promise<string>(resolve => { finishOldPick = resolve }))
+    .mockResolvedValueOnce('/synthetic/reader-images.zip')
+  Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { selectSavePath: pick } })
+  listImages.mockResolvedValue({ images: [image] })
+  exportImages.mockResolvedValue({ ok: true, images: 1, bytes: 2048 })
+  const view = render(<ConsumerImageExportSettings profile="writer" />)
+
+  await screen.findByText('1 image available to download.')
+  fireEvent.click(screen.getByRole('button', { name: 'Download uploaded images' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
+  await waitFor(() => expect(pick).toHaveBeenCalledOnce())
+
+  view.rerender(<ConsumerImageExportSettings profile="reader" />)
+  await waitFor(() => expect(listImages).toHaveBeenCalledWith('reader'))
+  fireEvent.click(screen.getByRole('button', { name: 'Download uploaded images' }))
+  const choose = screen.getByRole('button', { name: 'Choose save location' })
+  expect(choose.hasAttribute('disabled')).toBe(false)
+  fireEvent.click(choose)
+  await waitFor(() => expect(exportImages).toHaveBeenCalledWith('reader', '/synthetic/reader-images.zip'))
+
+  finishOldPick('/synthetic/stale-writer.zip')
+  await waitFor(() => expect(pick).toHaveBeenCalledTimes(2))
+  expect(exportImages).not.toHaveBeenCalledWith('writer', '/synthetic/stale-writer.zip')
+})
+
 it('reports a refused write without claiming success and permits retry', async () => {
   $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
   Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { selectSavePath: pick } })

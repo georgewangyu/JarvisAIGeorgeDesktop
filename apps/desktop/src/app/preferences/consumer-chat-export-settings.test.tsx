@@ -42,6 +42,29 @@ it('does not open a local save action for a remote backend', () => {
   expect(exportChats).not.toHaveBeenCalled()
 })
 
+it('does not export the old profile after a switch in the save dialog and permits the new profile', async () => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  let finishOldPick!: (path: string) => void
+  pick.mockImplementationOnce(() => new Promise<string>(resolve => { finishOldPick = resolve }))
+    .mockResolvedValueOnce('/synthetic/reader-history.jsonl')
+  ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { selectSavePath: pick }
+  exportChats.mockResolvedValue({ ok: true, chats: 1, messages: 2 })
+  const view = render(<ConsumerChatExportSettings profile="writer" />)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Download chat history' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Choose save location' }))
+  await waitFor(() => expect(pick).toHaveBeenCalledOnce())
+  view.rerender(<ConsumerChatExportSettings profile="reader" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Download chat history' }))
+  const choose = screen.getByRole('button', { name: 'Choose save location' })
+  expect(choose.hasAttribute('disabled')).toBe(false)
+  fireEvent.click(choose)
+  await waitFor(() => expect(exportChats).toHaveBeenCalledWith('reader', '/synthetic/reader-history.jsonl'))
+
+  finishOldPick('/synthetic/stale-writer-history.jsonl')
+  expect(exportChats).not.toHaveBeenCalledWith('writer', '/synthetic/stale-writer-history.jsonl')
+})
+
 it('reports an export refusal without claiming a saved file and permits retry', async () => {
   $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
   ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { selectSavePath: pick }
