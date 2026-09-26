@@ -34,10 +34,10 @@ export function ConsumerPage({
 }) {
   return (
     <div className="consumer-page h-full overflow-y-auto bg-(--ui-chat-surface-background) pt-(--titlebar-height)">
-      <main className="mx-auto w-full max-w-3xl px-8 pb-20 pt-10">
-        <h1 className="text-3xl font-semibold tracking-[-0.035em]">{title}</h1>
-        {description && <p className="mt-3 max-w-2xl text-sm leading-6 text-(--ui-text-secondary)">{description}</p>}
-        <div className="mt-9">{children}</div>
+      <main className="mx-auto w-full max-w-4xl px-8 pb-24 pt-12 sm:px-12 sm:pt-16">
+        <h1 className="text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">{title}</h1>
+        {description && <p className="mt-4 max-w-2xl text-base leading-7 text-(--ui-text-secondary)">{description}</p>}
+        <div className="mt-12">{children}</div>
       </main>
     </div>
   )
@@ -318,7 +318,7 @@ export function ConsumerIdeasView() {
 
   return (
     <ConsumerPage description="Choose a starting point for an editable chat. Nothing is sent until you send it." title="Ideas">
-      <div className="space-y-10">
+      <div className="space-y-14">
         {goalLoadError && gateway ? (
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) px-4 py-3 text-sm">
             <span>Your saved goals are unavailable. Other ideas still work.</span>
@@ -327,16 +327,16 @@ export function ConsumerIdeasView() {
         ) : null}
         {sections.map(group => (
           <section key={group.title}>
-            <h2 className="mb-3 text-xl font-semibold tracking-tight">{group.title}</h2>
-            <div className="space-y-3">
+            <h2 className="mb-5 text-2xl font-semibold tracking-tight">{group.title}</h2>
+            <div className="space-y-5">
               {group.ideas.map(idea => (
                 <div className="flex items-start gap-4 rounded-2xl transition-colors hover:bg-(--ui-control-hover-background)" key={idea.id}>
                   <span aria-hidden="true" className="ml-3 mt-4 grid size-11 shrink-0 place-items-center rounded-2xl bg-[#f1eefe] text-xl text-[#6f55b5] dark:bg-[#2a2440]">
                     {idea.id.startsWith('goal:') || idea.id.startsWith('goal-review:') ? '✦' : IDEA_ICONS[idea.id] || '✦'}
                   </span>
                   <button className="min-w-0 flex-1 px-1 py-4 text-left" onClick={() => startIdea(idea.prompt)} type="button">
-                    <span className="block text-base font-medium leading-6">{idea.title}</span>
-                    <span className="mt-1 block text-sm leading-6 text-(--ui-text-tertiary)">{idea.description}</span>
+                    <span className="block text-lg font-medium leading-7 tracking-tight">{idea.title}</span>
+                    <span className="mt-2 block text-base leading-7 text-(--ui-text-tertiary)">{idea.description}</span>
                     {feedback[idea.id] && <span className="mt-1 block text-xs text-(--ui-text-secondary)">{feedbackLabel[feedback[idea.id]]}</span>}
                   </button>
                   <DropdownMenu>
