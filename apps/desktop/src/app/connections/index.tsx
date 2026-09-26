@@ -338,7 +338,11 @@ export function ConnectionsView() {
         setCalendarError('Calendar is read only. Allow actions before adding an event.')
         const next = await bridge.status().catch(() => null)
 
-        if (owner === calendarScopeRef.current) {setCalendar(next)}
+        if (owner === calendarScopeRef.current) {
+          setCalendar(next)
+
+          if (next?.mode === 'read' || calendarAccessRevoked(next)) {clearCalendarDraft()}
+        }
 
         return
       }

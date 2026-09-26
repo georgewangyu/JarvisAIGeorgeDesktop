@@ -430,6 +430,43 @@ it('keeps a Calendar draft and warns when a create result is uncertain', async (
   expect(within(section).queryByText('Event was not created. Check Calendar access and try again.')).toBeNull()
 })
 
+it('discards a Calendar draft after another window downgrades action access', async () => {
+  let mode: 'read' | 'interact' = 'interact'
+  const status = vi.fn(async () => ({ supported: true, authorization: 'fullAccess', connected: true, mode }))
+
+  const connect = vi.fn(async (next: 'read' | 'interact') => {
+    mode = next
+
+    return { supported: true, authorization: 'fullAccess', connected: true, mode }
+  })
+
+  const create = vi.fn(async () => {
+    mode = 'read'
+
+    return { ok: false, code: 'not_allowed' }
+  })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisCalendar: { status, connect, disconnect: vi.fn(), list: vi.fn(), create } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  const section = screen.getByRole('heading', { name: 'Apps' }).closest('section')!
+  await waitFor(() => expect(within(section).getByRole('button', { name: 'Create event' })).toBeTruthy())
+  fireEvent.change(within(section).getByRole('textbox', { name: 'Event title' }), { target: { value: 'Private old draft' } })
+  fireEvent.change(within(section).getByLabelText('Event start'), { target: { value: '2026-09-23T10:00' } })
+  fireEvent.change(within(section).getByLabelText('Event end'), { target: { value: '2026-09-23T11:00' } })
+  fireEvent.click(within(section).getByRole('button', { name: 'Create event' }))
+
+  await waitFor(() => expect(within(section).getByText('Read only')).toBeTruthy())
+  expect(within(section).queryByRole('textbox', { name: 'Event title' })).toBeNull()
+  fireEvent.click(within(section).getByRole('button', { name: 'Allow actions' }))
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Allow actions' }))
+  await waitFor(() => expect(within(section).getByRole('textbox', { name: 'Event title' })).toHaveProperty('value', ''))
+  expect(create).toHaveBeenCalledOnce()
+})
+
 it('does not resurrect previously read events after Calendar access is revoked and reconnected', async () => {
   let granted = true
   const calendarStatus = () => ({ supported: true, authorization: granted ? 'fullAccess' : 'denied', connected: granted })
