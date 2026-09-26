@@ -37,6 +37,13 @@ test('packaged bootstrap fetches the installer from the Jarvis fork at its pinne
   )
 })
 
+test('an explicit desktop browser opt-out reaches the POSIX installer only when selected', () => {
+  const options = { installStamp: null, activeRoot: '/tmp/test-agent', hermesHome: '/tmp/test-home' }
+
+  assert.ok(!buildPosixPinArgs({ ...options, skipBrowser: false }).includes('--skip-browser'))
+  assert.ok(buildPosixPinArgs({ ...options, skipBrowser: true }).includes('--skip-browser'))
+})
+
 test('a newly pushed pinned installer gets one cache-busted retry after raw GitHub returns 404', async () => {
   const ref = 'a'.repeat(40)
   const attempts: boolean[] = []

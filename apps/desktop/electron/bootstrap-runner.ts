@@ -807,8 +807,15 @@ function buildPinArgs(installStamp, { pinCommit = true } = {}) {
   return args
 }
 
-function buildPosixPinArgs({ installStamp, activeRoot, hermesHome, pinCommit = true }) {
+function buildPosixPinArgs({ installStamp, activeRoot, hermesHome, pinCommit = true, skipBrowser = process.env.JARVIS_DESKTOP_SKIP_BROWSER_INSTALL === '1' }) {
   const args = ['--dir', activeRoot, '--hermes-home', hermesHome]
+
+  // Explicit opt-out for constrained/test environments. The installer still
+  // provisions the assistant; only its optional Playwright browser download
+  // is skipped. Never infer this from a missing browser or a failed download.
+  if (skipBrowser) {
+    args.push('--skip-browser')
+  }
 
   if (installStamp && installStamp.branch) {
     args.push('--branch', installStamp.branch)
