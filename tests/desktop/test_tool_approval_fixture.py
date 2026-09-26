@@ -408,6 +408,7 @@ def serve(root: Path, *, resume: bool = False) -> None:
     finally:
         approval.clear_session(data["session_id"])
         (root / "sandbox-target" / "approval-marker").chmod(0o600)
+        (root / "sandbox-target" / "delegate-approval-marker").chmod(0o600)
         if worker is not None:
             worker.join(timeout=2)
 
