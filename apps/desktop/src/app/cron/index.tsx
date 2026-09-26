@@ -258,6 +258,24 @@ function scheduleSummary(option: ScheduleOption, expr: string, c: Translations['
   return c.scheduleHints[option.value] ?? ''
 }
 
+function consumerFrequencyDisplay(job: CronJob, c: Translations['cron']): string {
+  const display = jobFrequencyDisplay(job, c.completedOneTimeFrequency)
+  const expr = jobScheduleExpr(job)
+
+  // Older scheduler responses can omit schedule_display and leave only a raw
+  // cron expression. Translate recognized presets for the consumer view while
+  // keeping genuinely custom expressions exact rather than guessing.
+  if (display === expr && cronParts(expr)) {
+    const option = scheduleOptionForExpr(expr)
+
+    if (option.value !== 'custom') {
+      return scheduleSummary(option, expr, c)
+    }
+  }
+
+  return display
+}
+
 function formatTime(iso?: null | string): string {
   if (!iso) {
     return '—'
@@ -825,7 +843,7 @@ function CronJobListRow({
           <span className="flex min-w-0 flex-col gap-0.5 py-1">
             <span className="truncate text-sm font-medium text-foreground">{jobTitle(job)}</span>
             <span className="truncate text-[0.72rem] font-normal text-(--ui-text-tertiary)">
-              {jobFrequencyDisplay(job, c.completedOneTimeFrequency)}
+              {consumerFrequencyDisplay(job, c)}
             </span>
           </span>
         }
@@ -867,7 +885,7 @@ function CronJobDetail({ busy, c, job, onEdit, onPauseResume, onTrigger }: CronJ
           <div className="space-y-1 sm:col-span-2">
             <dt className="text-xs font-medium text-(--ui-text-secondary)">{c.frequencyLabel}</dt>
             <dd className="break-words text-base font-medium text-foreground">
-              {jobFrequencyDisplay(job, c.completedOneTimeFrequency)}
+              {consumerFrequencyDisplay(job, c)}
             </dd>
           </div>
           <div className="space-y-1">

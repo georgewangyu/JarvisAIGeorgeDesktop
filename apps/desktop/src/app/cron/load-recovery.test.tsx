@@ -75,3 +75,23 @@ it('shows a failed automation without rendering backend paths or credentials', a
   expect(container.textContent).not.toContain(diagnostic)
   expect(container.querySelector(`[title="${diagnostic}"]`)).toBeNull()
 })
+
+it('describes a known daily schedule instead of exposing cron syntax in consumer rows', async () => {
+  getCronJobs.mockResolvedValueOnce([{
+    id: 'daily', name: 'Daily briefing', enabled: true,
+    schedule: { kind: 'cron', expr: '0 9 * * *' }
+  }])
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+  const { container } = render(
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider configClient={null} initialLocale="en">
+        <CronView onClose={() => undefined} />
+      </I18nProvider>
+    </QueryClientProvider>
+  )
+
+  await screen.findAllByText('Daily briefing')
+  expect(screen.getAllByText('Every day at 9:00 AM').length).toBeGreaterThan(0)
+  expect(container.textContent).not.toContain('0 9 * * *')
+})
