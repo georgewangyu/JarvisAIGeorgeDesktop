@@ -24,6 +24,7 @@ import { VoiceEngineRows } from './voice-engine-rows'
 
 export interface VoiceMenuProps {
   autoSpeak: boolean
+  consumer?: boolean
   disabled: boolean
   directDictation?: boolean
   state: ChatBarState
@@ -50,6 +51,7 @@ export interface VoiceMenuProps {
  */
 export function VoiceMenu({
   autoSpeak,
+  consumer = false,
   disabled,
   directDictation = false,
   state,
@@ -119,8 +121,10 @@ export function VoiceMenu({
           <AudioLines className={iconSize.sm} />
           {c.startVoice}
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <VoiceEngineRows disabled={disabled} />
+        {consumer ? null : <>
+          <DropdownMenuSeparator />
+          <VoiceEngineRows disabled={disabled} />
+        </>}
         <DropdownMenuSeparator />
         {/* Checkbox items, because all three are toggles the user is reading
             the CURRENT state of — the reason they were pressed-state buttons

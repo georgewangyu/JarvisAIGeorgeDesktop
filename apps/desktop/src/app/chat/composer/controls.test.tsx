@@ -9,7 +9,7 @@ import { applyWakeStartResult, applyWakeStatus, resetWakeWordState } from '@/sto
 import { ComposerControls } from './controls'
 
 vi.mock('./model-pill', () => ({ ModelPill: () => <button type="button">Choose model</button> }))
-vi.mock('./voice-engine-rows', () => ({ useVoiceEngineName: () => 'Test engine', VoiceEngineRows: () => null }))
+vi.mock('./voice-engine-rows', () => ({ useVoiceEngineName: () => 'Test engine', VoiceEngineRows: () => <div>Technical voice engines</div> }))
 
 const state: ChatBarState = {
   model: { canSwitch: false, model: '', provider: '' },
@@ -199,6 +199,15 @@ describe('consumer composer', () => {
     renderControls({ consumer: true, hasComposerPayload: false })
     expect(screen.getByLabelText('Start voice conversation')).toBeTruthy()
     expect(screen.queryByLabelText('Voice chat engine')).toBeNull()
+  })
+
+  it('keeps backend voice engines out of the consumer voice menu', async () => {
+    renderControls({ consumer: true })
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Voice' }), { button: 0, ctrlKey: false })
+
+    expect(await screen.findByRole('menu', { name: 'Voice' })).toBeTruthy()
+    expect(screen.queryByText('Technical voice engines')).toBeNull()
+    expect(screen.getByText('Read replies aloud')).toBeTruthy()
   })
 
   it('opens options for its own keyboard target, not another pane', () => {

@@ -129,6 +129,7 @@ export function ComposerControls({
   const voiceControls = foldedVoice ? (
     <VoiceMenu
       autoSpeak={autoSpeak}
+      consumer={consumer}
       directDictation={directDictation}
       disabled={disabled}
       onDictate={onDictate}
