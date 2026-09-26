@@ -105,9 +105,18 @@ export function registerJarvisCodexOAuth({
 
       activeLogin = child
       let output = ''
+      let portBusy = false
 
       const remember = (chunk: Buffer | string) => {
         output = `${output}${String(chunk)}`.slice(-16_384)
+
+        // The CLI falls back to a device code when Codex owns its fixed
+        // callback port. Desktop does not display CLI output, so that flow
+        // cannot be completed here. Stop it instead of waiting invisibly.
+        if (!portBusy && /port 1455 is already in use/i.test(output)) {
+          portBusy = true
+          child.kill()
+        }
       }
 
       collectOutput(child.stdout, remember)
@@ -120,14 +129,21 @@ export function registerJarvisCodexOAuth({
 
         resolve({ ok: false, message: 'ChatGPT sign-in could not start. Please try again.' })
       })
-      child.once('exit', code => {
+      // 'close' follows stdio closure; 'exit' can arrive before the CLI's
+      // final diagnostic reaches us.
+      child.once('close', code => {
         if (activeLogin === child) {
           activeLogin = null
           loginPending = false
         }
 
-        if (code !== 0) {
-          resolve({ ok: false, message: safeFailure(output) })
+        if (code !== 0 || portBusy) {
+          resolve({
+            ok: false,
+            message: portBusy
+              ? 'Another Codex sign-in is using the browser callback. Finish or close it, then try again.'
+              : safeFailure(output)
+          })
 
           return
         }

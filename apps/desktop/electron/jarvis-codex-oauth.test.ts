@@ -42,7 +42,7 @@ describe('Jarvis Codex OAuth', () => {
 
     deniedChild.stderr.emit('data', 'Authorization failed: access_denied')
     deniedChild.exitCode = 1
-    deniedChild.emit('exit', 1)
+    deniedChild.emit('close', 1)
     await expect(first).resolves.toEqual({
       ok: false,
       message: 'Sign-in was declined in the browser. Try again when you are ready.'
@@ -51,7 +51,7 @@ describe('Jarvis Codex OAuth', () => {
     const retry = handler!()
     await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledTimes(2))
     retryChild.exitCode = 0
-    retryChild.emit('exit', 0)
+    retryChild.emit('close', 0)
     await expect(retry).resolves.toEqual({ ok: true })
   })
 
@@ -95,7 +95,7 @@ describe('Jarvis Codex OAuth', () => {
     })
 
     child.exitCode = 0
-    child.emit('exit', 0)
+    child.emit('close', 0)
     await expect(result).resolves.toEqual({ ok: true })
   })
 
@@ -131,11 +131,41 @@ describe('Jarvis Codex OAuth', () => {
 
     child.stderr.emit('data', 'Authorization timed out waiting for the local callback.\n')
     child.exitCode = 1
-    child.emit('exit', 1)
+    child.emit('close', 1)
 
     await expect(result).resolves.toEqual({
       ok: false,
       message: 'The sign-in window expired. Choose Continue with ChatGPT / Codex to try again.'
+    })
+  })
+
+  it('stops an invisible device-code fallback when the browser callback port is occupied', async () => {
+    let handler: (() => Promise<{ message?: string; ok: boolean }>) | undefined
+    const ipcMain = { handle: vi.fn((_channel: string, callback: typeof handler) => { handler = callback }) }
+    const child = Object.assign(childProcessFixture(), { kill: vi.fn(() => true) })
+
+    registerJarvisCodexOAuth({
+      ipcMain: ipcMain as never,
+      resolveCommand: async () => ({ args: ['auth', 'add', 'openai-codex', '--browser'], command: '/usr/local/bin/hermes', cwd: '/fixture/oauth', env: {} }),
+      spawnProcess: vi.fn(() => child) as never
+    })
+
+    const result = handler!()
+    await vi.waitFor(() => expect(child.listenerCount('close')).toBe(1))
+
+    child.stdout.emit('data', 'Port 1455 is alre')
+    expect(child.kill).not.toHaveBeenCalled()
+    child.emit('exit', 0)
+    child.stdout.emit('data', 'ady in use (a Codex CLI sign-in may be running). Falling back to device-code login.')
+    expect(child.kill).toHaveBeenCalledOnce()
+
+    // Even if the child reports success during the cancellation race, the
+    // desktop must never report this hidden fallback as a completed login.
+    child.exitCode = 0
+    child.emit('close', 0)
+    await expect(result).resolves.toEqual({
+      ok: false,
+      message: 'Another Codex sign-in is using the browser callback. Finish or close it, then try again.'
     })
   })
 
@@ -158,10 +188,10 @@ describe('Jarvis Codex OAuth', () => {
 
     const result = handler!()
 
-    await vi.waitFor(() => expect(child.listenerCount('exit')).toBe(1))
+    await vi.waitFor(() => expect(child.listenerCount('close')).toBe(1))
     child.stderr.emit('data', 'callback code=private-code state=private-state for user@example.com at /Users/example/auth.json\n')
     child.exitCode = 1
-    child.emit('exit', 1)
+    child.emit('close', 1)
 
     await expect(result).resolves.toEqual({
       ok: false,
@@ -199,9 +229,9 @@ describe('Jarvis Codex OAuth', () => {
 
     const retry = handler!()
 
-    await vi.waitFor(() => expect(retryChild.listenerCount('exit')).toBe(1))
+    await vi.waitFor(() => expect(retryChild.listenerCount('close')).toBe(1))
     retryChild.exitCode = 0
-    retryChild.emit('exit', 0)
+    retryChild.emit('close', 0)
     await expect(retry).resolves.toEqual({ ok: true })
     expect(spawnProcess).toHaveBeenCalledTimes(2)
   })
