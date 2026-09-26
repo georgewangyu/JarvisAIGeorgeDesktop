@@ -835,12 +835,22 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
     (unadvertised in the schema; the mirror rejection error teaches it — the
     cross-PROFILE guard it was named for no longer exists).
     """
+    # Resolve once before any guard can wait for a human. A session's terminal
+    # cwd may change while an approval prompt is open; checking a relative path
+    # before that wait and resolving it again afterward can write a *different*
+    # target that was never approved. Check and write the same pinned path.
+    raw_error = _check_sensitive_path(path, task_id)
+    if raw_error:
+        return tool_error(raw_error)
+    _resolved = _resolve_or_none(path, task_id)
+    if not _resolved:
+        return tool_error(f"Cannot safely resolve write target: {path}")
     # write_file checks the binary-document guard before the mirror guard.
-    err = (_check_sensitive_path(path, task_id)
-           or _check_binary_document_write(path, task_id)
-           or _check_protected_instruction_write([path], task_id)
-           or _check_approval_required_write([path], task_id)
-           or (None if cross_profile else _check_cross_profile_path(path, task_id)))
+    err = (_check_sensitive_path(_resolved, task_id)
+           or _check_binary_document_write(_resolved, task_id)
+           or _check_protected_instruction_write([_resolved], task_id)
+           or _check_approval_required_write([_resolved], task_id)
+           or (None if cross_profile else _check_cross_profile_path(_resolved, task_id)))
     if not err and _is_internal_file_tool_content(content):
         err = ("Refusing to write internal read_file display text as file content. "
                "Strip read_file line-number prefixes or reconstruct the intended "
@@ -848,9 +858,6 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
     if err:
         return tool_error(err)
     try:
-        # Resolution failure falls back to the legacy unlocked path (the write
-        # still proceeds; the per-task staleness check still runs).
-        _resolved = _resolve_or_none(path, task_id)
         path_to_resolved = {path: _resolved}
         with ExitStack() as _lock:
             if _resolved:
