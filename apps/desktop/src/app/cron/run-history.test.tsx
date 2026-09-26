@@ -37,6 +37,19 @@ it('distinguishes a failed history read from an empty history and retries the sa
   expect(getCronJobRuns).toHaveBeenNthCalledWith(2, 'job-one')
 })
 
+it('does not claim no run happened when an attempt failed before a result was saved', async () => {
+  vi.mocked(getCronJobRuns).mockResolvedValueOnce([])
+
+  render(
+    <I18nProvider configClient={null} initialLocale="en">
+      <CronJobRuns c={en.cron} hadAttempt jobId="failed-before-session" />
+    </I18nProvider>
+  )
+
+  await screen.findByText('No saved result for the latest attempt.')
+  expect(screen.queryByText('No runs yet')).toBeNull()
+})
+
 it('does not let an older job response overwrite the newly selected job', async () => {
   let resolveOld: (runs: SessionInfo[]) => void = () => undefined
 

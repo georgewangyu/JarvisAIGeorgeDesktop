@@ -2230,6 +2230,7 @@ export interface Translations {
     next: string
     overdueSince: string
     noRuns: string
+    noSavedRun: string
     manage: string
     showRuns: string
     hideRuns: string

@@ -2618,6 +2618,7 @@ export const en: Translations = {
     // Replaces `next` when the stored next_run_at is already past the scheduler grace (#114309).
     overdueSince: 'Overdue since:',
     noRuns: 'No runs yet',
+    noSavedRun: 'No saved result for the latest attempt.',
     manage: 'Manage',
     showRuns: 'Show runs',
     hideRuns: 'Hide runs',

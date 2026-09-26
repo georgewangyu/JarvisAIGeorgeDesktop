@@ -116,7 +116,17 @@ function ScriptExecutionResult({ jobId, run }: { jobId: string; run: CronExecuti
   </div>
 }
 
-export function CronJobRuns({ c, jobId, noAgent = false }: { c: Translations['cron']; jobId: string; noAgent?: boolean }) {
+export function CronJobRuns({
+  c,
+  hadAttempt = false,
+  jobId,
+  noAgent = false,
+}: {
+  c: Translations['cron']
+  hadAttempt?: boolean
+  jobId: string
+  noAgent?: boolean
+}) {
   const { t } = useI18n()
   const s = useJarvisCopy()
   const [runs, setRuns] = useState<HistoryItem[] | null>(null)
@@ -208,7 +218,7 @@ export function CronJobRuns({ c, jobId, noAgent = false }: { c: Translations['cr
         )
       ) : runs.length === 0 ? (
         loadFailed ? null : (
-          <div className="py-1 text-xs text-muted-foreground">{c.noRuns}</div>
+          <div className="py-1 text-xs text-muted-foreground">{hadAttempt ? c.noSavedRun : c.noRuns}</div>
         )
       ) : (
         <div className="flex flex-col gap-px">

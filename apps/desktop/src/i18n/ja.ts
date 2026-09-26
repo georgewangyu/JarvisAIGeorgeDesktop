@@ -2121,6 +2121,7 @@ export const ja = defineLocale({
     last: '前回',
     next: '次回',
     noRuns: 'まだ実行されていません',
+    noSavedRun: '直近の実行結果は保存されていません。',
     manage: '管理',
     showRuns: '実行履歴を表示',
     hideRuns: '実行履歴を隠す',

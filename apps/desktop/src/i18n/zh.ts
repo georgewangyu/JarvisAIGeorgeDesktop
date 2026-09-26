@@ -2758,6 +2758,7 @@ export const zh = defineLocale({
     last: '上次：',
     next: '下次：',
     noRuns: '尚无运行',
+    noSavedRun: '最近一次尝试没有已保存的结果。',
     manage: '管理',
     showRuns: '显示运行记录',
     hideRuns: '隐藏运行记录',

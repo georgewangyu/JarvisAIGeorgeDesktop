@@ -2381,6 +2381,7 @@ export const ru = defineLocale({
     last: 'Последний:',
     next: 'Следующий:',
     noRuns: 'Запусков пока не было',
+    noSavedRun: 'Результат последней попытки не сохранён.',
     manage: 'Управлять',
     showRuns: 'Показать запуски',
     hideRuns: 'Скрыть запуски',

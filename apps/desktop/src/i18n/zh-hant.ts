@@ -2111,6 +2111,7 @@ export const zhHant = defineLocale({
     last: '上次：',
     next: '下次：',
     noRuns: '尚無執行',
+    noSavedRun: '最近一次嘗試沒有已儲存的結果。',
     manage: '管理',
     showRuns: '顯示執行記錄',
     hideRuns: '隱藏執行記錄',

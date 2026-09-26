@@ -1806,6 +1806,7 @@ export const ar = defineLocale({
     last: 'آخر تشغيل',
     next: 'التالي',
     noRuns: 'لا توجد تشغيلات',
+    noSavedRun: 'لم تُحفظ نتيجة للمحاولة الأخيرة.',
     manage: 'إدارة',
     showRuns: 'إظهار التشغيلات',
     hideRuns: 'إخفاء التشغيلات',
