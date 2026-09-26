@@ -48,10 +48,10 @@ export function detectFullDiskAccess(): JarvisPermissionStatus {
     fs.accessSync(probe, fs.constants.R_OK)
 
     return 'granted'
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException)?.code
-
-    return code === 'EACCES' || code === 'EPERM' ? 'denied' : 'unknown'
+  } catch {
+    // A failed read can also be a filesystem/ACL restriction. macOS does not
+    // expose enough information here to claim Full Disk Access was denied.
+    return 'unknown'
   }
 }
 

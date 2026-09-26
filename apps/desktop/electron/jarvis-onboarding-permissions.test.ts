@@ -1,8 +1,22 @@
+import fs from 'node:fs'
+
 import type { IpcMain, IpcMainInvokeEvent } from 'electron'
 import { expect, it, vi } from 'vitest'
 
 import { calendarRendererMatches } from './jarvis-calendar'
-import { registerJarvisOnboardingPermissions } from './jarvis-onboarding-permissions'
+import { detectFullDiskAccess, registerJarvisOnboardingPermissions } from './jarvis-onboarding-permissions'
+
+it.runIf(process.platform === 'darwin')('does not label a Messages database read error as Full Disk Access denial', () => {
+  const access = vi.spyOn(fs, 'accessSync').mockImplementation(() => {
+    throw Object.assign(new Error('Permission denied'), { code: 'EACCES' })
+  })
+
+  try {
+    expect(detectFullDiskAccess()).toBe('unknown')
+  } finally {
+    access.mockRestore()
+  }
+})
 
 it.runIf(process.platform === 'darwin')('recovers a denied microphone through settings rather than a dead prompt', async () => {
   const handlers = new Map<string, (event: IpcMainInvokeEvent) => Promise<unknown>>()
