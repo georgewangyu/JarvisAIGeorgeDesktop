@@ -90,6 +90,45 @@ def test_claimed_or_ambiguous_event_never_replays(tmp_path, monkeypatch):
         run_one_deferred_event("a", event["id"], allow_headless=True)
 
 
+def test_live_lease_refusal_preserves_deferred_event_for_later_owner(tmp_path, monkeypatch):
+    from hermes_cli.active_sessions import try_acquire_active_session
+    from tui_gateway import server
+    from tui_gateway.headless_owner_event import run_one_deferred_event
+    from tui_gateway.owner_event_inbox import owner_event_receipt
+    from tui_gateway.synthetic_turn import SyntheticHeavyAgent
+
+    home, event = _profile(tmp_path, "a")
+    monkeypatch.setattr(server, "_profile_home", lambda name: home if name == "a" else None)
+    monkeypatch.setattr(server, "_load_cfg", lambda: {})
+    monkeypatch.setattr(server, "_profile_build_scope", lambda _home: contextlib.nullcontext())
+    monkeypatch.setattr(server, "_session_profile_runtime_scope", lambda _session: contextlib.nullcontext())
+    agents = []
+
+    def build(_sid, key, **_kwargs):
+        agent = SyntheticHeavyAgent(key)
+        agents.append(agent)
+        return agent
+
+    monkeypatch.setattr(server, "_make_agent_in_context", build)
+    monkeypatch.setenv("HERMES_ISO_CERTIFY_DURATION_S", "0.01")
+    lease, refusal = try_acquire_active_session(
+        session_id="main", surface="desktop", config={}, registry_home=home,
+        metadata={"live_session_id": "other-window"})
+    assert refusal is None
+    try:
+        with pytest.raises(RuntimeError, match="another owner"):
+            run_one_deferred_event("a", event["id"], allow_headless=True)
+        assert agents == []
+        assert owner_event_receipt(home, source="test", event_id="same")["status"] == "deferred"
+    finally:
+        lease.release()
+
+    receipt = run_one_deferred_event("a", event["id"], allow_headless=True, wait_seconds=10)
+    assert receipt["status"] == "settled"
+    assert len(agents) == 1
+    assert agents[0].session_api_calls == 1
+
+
 def test_headless_source_has_no_poller_continuation_or_answering_client(tmp_path, monkeypatch):
     from tui_gateway import server
     from tui_gateway import server_requests
