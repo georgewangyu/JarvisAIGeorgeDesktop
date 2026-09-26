@@ -2960,14 +2960,17 @@ export interface Translations {
     signInWith: (provider: string) => string
     enterUrlFirst: string
     signInIncomplete: string
+    remoteSignInError: string
     tokenTitle: string
     tokenDesc: string
     pasteSessionToken: string
     incompleteSignInTest: string
     incompleteTokenTest: string
     testConnection: string
+    remoteTestError: string
     testSucceeded: (baseUrl: string, version?: string) => string
     applyRemote: string
+    remoteApplyError: string
     backToSetup: string
     failedTitle: string
     settingUpTitle: string

@@ -17,10 +17,6 @@ interface FirstRunRemoteFormProps {
   onConnected: () => void
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err || 'Unknown error')
-}
-
 export function FirstRunRemoteForm({ onBack, onConnected }: FirstRunRemoteFormProps) {
   const { t } = useI18n()
   const copy = t.install
@@ -83,14 +79,14 @@ export function FirstRunRemoteForm({ onBack, onConnected }: FirstRunRemoteFormPr
             setOauthConnected(false)
           }
         })
-        .catch(err => {
+        .catch(() => {
           if (seq !== probeSeq.current) {
             return
           }
 
           setProbe(null)
           setProbeStatus('error')
-          setError(errorMessage(err))
+          setError(null)
         })
     }, 500)
 
@@ -141,8 +137,8 @@ export function FirstRunRemoteForm({ onBack, onConnected }: FirstRunRemoteFormPr
       if (!result.connected) {
         setError(copy.signInIncomplete)
       }
-    } catch (err) {
-      setError(errorMessage(err))
+    } catch {
+      setError(copy.remoteSignInError)
     } finally {
       setSigningIn(false)
     }
@@ -174,7 +170,7 @@ export function FirstRunRemoteForm({ onBack, onConnected }: FirstRunRemoteFormPr
 
         setProbe(result)
         setProbeStatus(result.reachable ? 'done' : 'error')
-        setError(result.reachable && result.authMode !== 'unknown' ? null : result.error || copy.probeError)
+        setError(result.reachable && result.authMode === 'unknown' ? copy.probeError : null)
 
         return
       }
@@ -187,9 +183,9 @@ export function FirstRunRemoteForm({ onBack, onConnected }: FirstRunRemoteFormPr
 
       setSuccess(copy.testSucceeded(result.baseUrl || trimmedUrl, result.version ?? undefined))
       setLastTestedPayloadKey(testedPayloadKey)
-    } catch (err) {
+    } catch {
       if (seq === testSeq.current && testedPayloadKey === payloadKeyRef.current) {
-        setError(errorMessage(err))
+        setError(copy.remoteTestError)
       }
     } finally {
       if (seq === testSeq.current) {
@@ -212,8 +208,8 @@ export function FirstRunRemoteForm({ onBack, onConnected }: FirstRunRemoteFormPr
     try {
       await window.hermesDesktop.applyConnectionConfig(testedPayload)
       applied = true
-    } catch (err) {
-      setError(errorMessage(err))
+    } catch {
+      setError(copy.remoteApplyError)
     } finally {
       setApplying(false)
     }
@@ -260,15 +256,7 @@ export function FirstRunRemoteForm({ onBack, onConnected }: FirstRunRemoteFormPr
           {probeStatus === 'error' ? (
             <div className="flex items-start gap-2 text-sm text-destructive">
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
-              <div className="min-w-0">
-                <span>{copy.probeError}</span>
-                {probe?.error ? (
-                  <details className="mt-1 text-xs text-muted-foreground">
-                    <summary className="cursor-pointer select-none">{copy.probeErrorDetails}</summary>
-                    <pre className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-[0.6875rem]">{probe.error}</pre>
-                  </details>
-                ) : null}
-              </div>
+              <span>{copy.probeError}</span>
             </div>
           ) : null}
 

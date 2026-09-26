@@ -431,6 +431,22 @@ describe('DesktopInstallOverlay first-run setup', () => {
     expect(screen.getByText('Get started')).toBeTruthy()
   })
 
+  it('keeps probe diagnostics out of the first-run connection screen', async () => {
+    const desktop = installDesktopMock(
+      bootstrapState({ setupChoice: { platform: 'linux', activeRoot: '/test-owned/remote' } })
+    )
+
+    desktop.probeConnectionConfig.mockRejectedValue(new Error('IPC internal-trace token=synthetic-secret'))
+    render(<DesktopInstallOverlay />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
+    fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
+      target: { value: 'https://gateway.example.com/hermes' }
+    })
+
+    expect(await screen.findByText("Jarvis can't reach that address. Check the address and make sure the other setup is running.")).toBeTruthy()
+    expect(screen.queryByText(/synthetic-secret|internal-trace/)).toBeNull()
+  })
+
   it('requires a successful token connection test before applying remote config', async () => {
     const desktop = installDesktopMock(
       bootstrapState({
@@ -655,9 +671,52 @@ describe('DesktopInstallOverlay first-run setup', () => {
     const apply = screen.getByText('Connect').closest('button') as HTMLButtonElement
     fireEvent.click(apply)
 
-    expect(await screen.findByText('remote apply failed')).toBeTruthy()
+    expect(await screen.findByText('Could not save this connection. Please try again.')).toBeTruthy()
+    expect(screen.queryByText('remote apply failed')).toBeNull()
     expect(apply.disabled).toBe(false)
     expect(screen.getByText('Service address')).toBeTruthy()
+  })
+
+  it('hides rejected gateway diagnostics and recovers after correcting the token', async () => {
+    const desktop = installDesktopMock(
+      bootstrapState({ setupChoice: { platform: 'linux', activeRoot: '/test-owned/remote' } })
+    )
+
+    desktop.probeConnectionConfig.mockResolvedValue({
+      authMode: 'token',
+      baseUrl: 'https://gateway.example.com/hermes',
+      error: null,
+      providers: [],
+      reachable: true,
+      version: '0.17.0'
+    })
+    desktop.testConnectionConfig
+      .mockRejectedValueOnce(new Error('IPC internal-trace token=synthetic-secret'))
+      .mockResolvedValueOnce({ baseUrl: 'https://gateway.example.com/hermes', ok: true, version: '0.17.0' })
+    desktop.applyConnectionConfig.mockResolvedValue({ mode: 'remote' })
+
+    render(<DesktopInstallOverlay />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect another Jarvis setup' }))
+    fireEvent.change(await screen.findByPlaceholderText('https://assistant.example.com'), {
+      target: { value: 'https://gateway.example.com/hermes' }
+    })
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 550))
+    })
+
+    const tokenInput = await screen.findByPlaceholderText('Paste session token')
+
+    fireEvent.change(tokenInput, { target: { value: 'wrong-synthetic-token' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+    expect(await screen.findByText('Could not connect. Check the address and sign-in details, then try again.')).toBeTruthy()
+    expect(screen.queryByText(/synthetic-secret|internal-trace/)).toBeNull()
+    expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.change(tokenInput, { target: { value: 'correct-synthetic-token' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+    await screen.findByText('Connected to https://gateway.example.com/hermes (0.17.0).')
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    expect(await screen.findByRole('heading', { name: 'Let Jarvis work with your files?' })).toBeTruthy()
   })
 
   it('signs in, tests, and applies a password-style remote gateway', async () => {
