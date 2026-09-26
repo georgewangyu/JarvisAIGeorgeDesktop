@@ -233,6 +233,24 @@ describe('ownership refusal recovery (#106217)', () => {
 })
 
 describe('code-keyed error card copy and actions', () => {
+  it('keeps a resumed providerless turn actionable without inviting an unchanged retry', async () => {
+    render(
+      <MemoryRouter>
+        <LocationProbe />
+        <Harness assistant={failedMessage(
+          { code: 'agent_init_failed', layer: 'runtime', retryable: true },
+          'No inference provider is configured.'
+        )} />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText(en.assistant.thread.errorProviderSetupTitle)).toBeTruthy()
+    expect(screen.getByText(en.assistant.thread.errorProviderSetup)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: en.assistant.thread.errorOpenProviders }))
+    expect(screen.getByTestId('location').textContent).toBe('/settings?tab=providers')
+  })
+
   it('hides Retry and offers Edit message for a safety refusal', async () => {
     render(
       <Harness

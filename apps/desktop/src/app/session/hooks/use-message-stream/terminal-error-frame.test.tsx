@@ -2,7 +2,9 @@ import { act, cleanup } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ClientSessionState } from '@/app/types'
-import { chatMessageText } from '@/lib/chat-messages'
+import { chatMessageText, textPart } from '@/lib/chat-messages'
+import { createClientSessionState } from '@/lib/chat-runtime'
+import { $notifications } from '@/store/notifications'
 
 import { type MessageStreamHarness, renderMessageStream } from './test-harness'
 
@@ -33,7 +35,48 @@ function lastAssistant() {
 describe('terminal error message.complete frames', () => {
   afterEach(() => {
     cleanup()
+    $notifications.set([])
     vi.restoreAllMocks()
+  })
+
+  it('keeps one durable failure for one providerless prompt after the build diagnostic', async () => {
+    const user = { id: 'user-1', role: 'user' as const, parts: [textPart('Hello Jarvis')], timestamp: 1 }
+
+    const states = new Map([[SID, {
+      ...createClientSessionState('stored-1', [user]),
+      awaitingResponse: true,
+      busy: true
+    }]])
+
+    stream = renderMessageStream(SID, { states })
+
+    const reason = 'No inference provider is configured.'
+
+    act(() => stream.handleEvent({
+      payload: { message: `Hermes could not start the assistant for this session. Details: ${reason} Check the model and provider with /model.` },
+      session_id: SID,
+      type: 'error'
+    }))
+
+    const eventFailure = getState().messages.filter(message => message.role === 'assistant' && message.error)
+
+    // This remains a visible, recoverable failure if transport drops before
+    // the terminal frame. The frame must upgrade this row, not create another.
+    expect(eventFailure).toHaveLength(1)
+    expect($notifications.get().filter(notification => notification.kind === 'error')).toHaveLength(1)
+
+    await completeWithError({
+      text: 'Turn failed',
+      error: reason,
+      error_surface: { layer: 'runtime', code: 'agent_init_failed', retryable: true }
+    })
+
+    const failures = getState().messages.filter(message => message.role === 'assistant' && message.error)
+    expect(failures).toHaveLength(1)
+    expect(failures[0].id).toBe(eventFailure[0].id)
+    expect(failures[0].error).toBe(reason)
+    expect(getState().messages.filter(message => message.role === 'user')).toHaveLength(1)
+    expect(getState().busy).toBe(false)
   })
 
   it('marks the bubble failed from the structured error field, not the text heuristic', async () => {

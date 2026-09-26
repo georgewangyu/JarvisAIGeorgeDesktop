@@ -683,11 +683,24 @@ export function useMessageStream({
         const prev = state.messages
         let nextMessages = prev
 
+        // Agent construction can emit an `error` event after submit and then
+        // close the same accepted turn with a structured terminal frame. Keep
+        // the first card if the frame never arrives; when it does, upgrade that
+        // card in place instead of appending a second assistant failure.
+        const lastMessage = prev.at(-1)
+
+        const eventErrorIndex = failure?.surface?.code === 'agent_init_failed' && Boolean(failure.error) && !state.awaitingResponse && !state.busy
+          && lastMessage?.id.startsWith('assistant-error-') && lastMessage.error?.includes(failure.error)
+          ? prev.length - 1
+          : -1
+
         const streamIndex = streamId ? prev.findIndex(message => message.id === streamId) : -1
 
         let collapsed: DuplicateFinalCollapse | null = null
 
-        if (streamIndex >= 0) {
+        if (eventErrorIndex >= 0) {
+          nextMessages = prev.map((message, index) => index === eventErrorIndex ? completeMessage(message) : message)
+        } else if (streamIndex >= 0) {
           collapsed = collapseDuplicateFinalAfterToolInterim(prev, streamIndex, {
             completeMessage,
             finalText,

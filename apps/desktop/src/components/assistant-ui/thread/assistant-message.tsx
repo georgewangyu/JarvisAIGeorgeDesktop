@@ -61,6 +61,7 @@ import {
   XIcon
 } from '@/lib/icons'
 import { extractPreviewTargets } from '@/lib/preview-targets'
+import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { markAssistantIdSpoken } from '@/lib/spoken-reply'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
@@ -541,9 +542,11 @@ const ErrorCardHeadline: FC = () => {
   const errorText = useErrorText()
   const defaultCopy = errorCardText(t.assistant.thread, surface, themeName === 'jarvis' ? 'jarvis' : undefined)
 
-  const { body, title } = themeName === 'jarvis' && surface?.code === 'format_error'
-    ? { body: jarvisCopy.errorFormatBody, title: jarvisCopy.errorFormatTitle }
-    : defaultCopy
+  const { body, title } = isProviderSetupErrorMessage(errorText)
+    ? { body: t.assistant.thread.errorProviderSetup, title: t.assistant.thread.errorProviderSetupTitle }
+    : themeName === 'jarvis' && surface?.code === 'format_error'
+      ? { body: jarvisCopy.errorFormatBody, title: jarvisCopy.errorFormatTitle }
+      : defaultCopy
 
   return (
     <>
@@ -775,6 +778,7 @@ const ErrorRecoveryActions: FC = () => {
   const copy = t.assistant.thread
   const surface = useErrorSurface()
   const errorText = useErrorText()
+  const providerSetup = isProviderSetupErrorMessage(errorText)
 
   // useNavigate() would throw here when no Router is above us; the deep-link
   // children mount only when one is (see SettingsLinkAction).
@@ -790,7 +794,9 @@ const ErrorRecoveryActions: FC = () => {
   const remoteConnection = connection?.mode === 'remote'
 
   // One table decides which buttons this failure gets (lib/error-surface.ts).
-  const plan = errorRecoveryPlan(surface)
+  const plan = providerSetup
+    ? { ...errorRecoveryPlan(surface), retry: false, switchProvider: false }
+    : errorRecoveryPlan(surface)
 
   // An expired/revoked OAuth grant (HTTP 401 on nous / openai-codex / ...):
   // the one-click fix is re-running that provider's sign-in, which the
@@ -926,6 +932,9 @@ const ErrorRecoveryActions: FC = () => {
           label={copy.errorUpdateApiKey}
           to={updateApiKeyRoute(surface)}
         />
+      )}
+      {providerSetup && inRouter && (
+        <SettingsLinkAction label={copy.errorOpenProviders} to="/settings?tab=providers" />
       )}
       {plan.openHermesFolder && localFolders && (
         <button className="aui-error-action" onClick={() => void openHermesFolder()} type="button">
