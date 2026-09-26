@@ -122,6 +122,18 @@ describe('consumer chat navigation', () => {
     expect(await screen.findByRole('dialog', { name: 'Chats' })).toBeTruthy()
   })
 
+  it('preserves a Chats click when its mounted rail unmounts before the drawer commits', async () => {
+    const first = renderSidebar('/feed', 'feed')
+
+    act(() => {
+      requestConsumerChats()
+      first.unmount()
+    })
+
+    renderSidebar('/', 'chat')
+    expect(await screen.findByRole('dialog', { name: 'Chats' })).toBeTruthy()
+  })
+
   it('honors a Chats request made while the sidebar pane was unmounted', async () => {
     requestConsumerChats()
     renderSidebar()

@@ -2,7 +2,7 @@ import { KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/c
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useStore } from '@nanostores/react'
 import type * as React from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 
 import { PlatformAvatar } from '@/app/messaging/platform-icon'
@@ -148,7 +148,7 @@ import type { NewSessionSplitHandler } from '../new-session-drag'
 
 import { SidebarSectionAddButton } from './chrome'
 import { ConsumerActivity, consumerChatCue } from './consumer-activity'
-import { consumeConsumerChatsRequest, OPEN_CONSUMER_CHATS_EVENT, restoreConsumerChatsLayout } from './consumer-chats-request'
+import { completeConsumerChatsRequest, hasConsumerChatsRequest, OPEN_CONSUMER_CHATS_EVENT, restoreConsumerChatsLayout } from './consumer-chats-request'
 import { SidebarFilterMenu } from './filter-menu'
 import { useGatewaySessionGroups } from './gateway-group-model'
 import { isConsumerSearchSource, type LibrarySearchHit, matchingLibraryHits, scanLibrary } from './library-search'
@@ -503,19 +503,24 @@ export function ChatSidebar({
   useEffect(() => {
     const onOpenChats = (event?: Event) => {
       event?.preventDefault()
-      consumeConsumerChatsRequest()
       setDrawerMode('chats')
       setChatsOpen(true)
     }
 
     window.addEventListener(OPEN_CONSUMER_CHATS_EVENT, onOpenChats)
 
-    if (consumeConsumerChatsRequest()) {
+    if (hasConsumerChatsRequest()) {
       onOpenChats()
     }
 
     return () => window.removeEventListener(OPEN_CONSUMER_CHATS_EVENT, onOpenChats)
   }, [])
+
+  useLayoutEffect(() => {
+    if (chatsOpen && drawerMode === 'chats') {
+      completeConsumerChatsRequest()
+    }
+  }, [chatsOpen, drawerMode])
 
   const openNewSideChat = useCallback(() => {
     setChatsOpen(false)
