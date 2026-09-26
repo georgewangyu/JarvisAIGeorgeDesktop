@@ -132,17 +132,29 @@ export function buildConsumerActivityRows(
   const sessions = [...chatSessions, ...automationSessions]
   const lastActiveById = new Map(sessions.map(session => [session.id, session.last_active]))
 
-  return sessions
+  const eligible = sessions.filter(session => {
+    const source = normalizeSessionSource(session.source)
+    const isAutomation = automationSessions.includes(session)
+
+    return !['subagent', 'tool'].includes(source ?? '') &&
+      (isAutomation || (!isMessagingSource(source) && !['cron', 'kanban', 'oneshot'].includes(source ?? '')))
+  })
+
+  const idCounts = new Map<string, number>()
+
+  for (const session of eligible) {
+    idCounts.set(session.id, (idCounts.get(session.id) ?? 0) + 1)
+  }
+
+  return eligible
     .flatMap(session => {
-      const source = normalizeSessionSource(session.source)
       const isAutomation = automationSessions.includes(session)
 
-      // An optimistic/backend row can briefly enter the recents store even
-      // when its normal fetch excludes worker and channel sources. Activity
-      // must never turn those private execution titles into consumer rows.
-      if (['subagent', 'tool'].includes(source ?? '') ||
-        (!isAutomation && (isMessagingSource(source) ||
-          ['cron', 'kanban', 'oneshot'].includes(source ?? '')))) {
+      // A stored id can occur under two connection/profile owners. Activity's
+      // status and click lookup are id-keyed, so showing either row would
+      // borrow status or navigate to an arbitrary owner. Keep exact-owner
+      // unavailable-approval receipts separate above; omit ambiguous rows.
+      if (idCounts.get(session.id) !== 1) {
         return []
       }
 

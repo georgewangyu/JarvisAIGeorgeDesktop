@@ -209,6 +209,19 @@ describe('consumer activity rows', () => {
     expect(buildConsumerActivityRows(hidden, states)).toEqual([])
   })
 
+  it('does not guess an Activity owner when two consumer chats share a stored id', () => {
+    const foreign = { ...session('shared-id', 'Foreign chat', 20), connection_id: 'remote', profile: 'default' }
+    const local = { ...session('shared-id', 'My chat', 10), connection_id: 'local', profile: 'default' }
+    const openChat = vi.fn()
+
+    expect(buildConsumerActivityRows([foreign, local], { 'shared-id': 'unread' })).toEqual([])
+
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={openChat} sessions={[foreign, local]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    expect(screen.queryByRole('button', { name: /Foreign chat|My chat/ })).toBeNull()
+    expect(openChat).not.toHaveBeenCalled()
+  })
+
   it('routes automation rows to Automations and chat rows to their visible chat', () => {
     const openChat = vi.fn()
     const openAutomations = vi.fn()
