@@ -33,6 +33,23 @@ it.runIf(process.platform === 'darwin')('recovers a denied microphone through se
   expect(openExternal).toHaveBeenCalledWith(expect.stringContaining('Privacy_Microphone'))
 })
 
+it.runIf(process.platform === 'darwin')('keeps the onboarding snapshot available when native microphone status fails', () => {
+  const handlers = new Map<string, (event: IpcMainInvokeEvent) => unknown>()
+  registerJarvisOnboardingPermissions({
+    ipcMain: { handle: (name: string, fn: (event: IpcMainInvokeEvent) => unknown) => handlers.set(name, fn) } as unknown as IpcMain,
+    shell: { openExternal: vi.fn().mockResolvedValue(undefined) },
+    systemPreferences: {
+      getMediaAccessStatus: () => { throw new Error('native status unavailable') },
+      askForMediaAccess: vi.fn().mockResolvedValue(false)
+    },
+    trustedSender: () => true
+  })
+
+  const snapshot = handlers.get('jarvis:onboarding-permissions:get')?.({} as IpcMainInvokeEvent)
+  expect(snapshot).toMatchObject({ microphone: 'unknown', platform: 'darwin' })
+  expect((snapshot as { apps: Record<string, boolean> }).apps).toHaveProperty('mail')
+})
+
 it('refuses foreign and nested frames before inspecting or requesting Mac permissions', async () => {
   const handlers = new Map<string, (event: IpcMainInvokeEvent) => unknown>()
   const openExternal = vi.fn().mockResolvedValue(undefined)

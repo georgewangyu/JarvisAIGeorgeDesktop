@@ -58,10 +58,16 @@ export function detectFullDiskAccess(): JarvisPermissionStatus {
 function permissionSnapshot(
   systemPreferences: JarvisOnboardingPermissionDeps['systemPreferences']
 ): JarvisOnboardingPermissionSnapshot {
-  const microphone =
-    process.platform === 'darwin' && typeof systemPreferences.getMediaAccessStatus === 'function'
-      ? systemPreferences.getMediaAccessStatus('microphone')
-      : 'unknown'
+  let microphone: JarvisPermissionStatus = 'unknown'
+
+  if (process.platform === 'darwin' && typeof systemPreferences.getMediaAccessStatus === 'function') {
+    try {
+      microphone = systemPreferences.getMediaAccessStatus('microphone')
+    } catch {
+      // A native status failure is not a denial and must not block the other
+      // onboarding permissions from rendering.
+    }
+  }
 
   return {
     apps: {
