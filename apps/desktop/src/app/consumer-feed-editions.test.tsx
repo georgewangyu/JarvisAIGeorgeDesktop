@@ -171,7 +171,7 @@ it('labels generated links as unverified on completed editions only', async () =
   }])
   retrievedView.unmount()
   render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
-  expect(await screen.findByText('Provider unavailable')).toBeTruthy()
+  expect(await screen.findByText('This briefing did not finish. Check your connection and try again.')).toBeTruthy()
   expect(screen.queryByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeNull()
 })
 
@@ -180,11 +180,29 @@ it('shows durable failed editions and retries only by explicit choice with the o
   vi.mocked(generateFeedEdition).mockResolvedValue({ ...edition, content: null, error: null, status: 'generating', attempt: 2 })
   render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
 
-  expect(await screen.findByText('Provider unavailable')).toBeTruthy()
+  expect(await screen.findByText('This briefing did not finish. Check your connection and try again.')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   expect(await screen.findByText('Jarvis is preparing this briefing…')).toBeTruthy()
   expect(screen.queryByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeNull()
   expect(generateFeedEdition).toHaveBeenCalledWith('default', 'What matters today?', 'edition-1', [])
+})
+
+it('hides backend paths and routes providerless generation to Connections', async () => {
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...edition,
+    content: null,
+    error: 'RuntimeError: [blocked_config] provider credential missing in /private/synthetic/profile/.env',
+    status: 'denied'
+  }])
+  render(<MemoryRouter initialEntries={['/feed']}><Routes>
+    <Route element={<ConsumerFeedEditions />} path="/feed" />
+    <Route element={<p>Connections destination</p>} path="/connections" />
+  </Routes></MemoryRouter>)
+
+  expect(await screen.findByText('Connect an AI account in Connections before generating a briefing.')).toBeTruthy()
+  expect(screen.queryByText(/RuntimeError|synthetic\/profile/)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Connections' }))
+  expect(screen.getByText('Connections destination')).toBeTruthy()
 })
 
 it('saves and reverses Love on a completed edition without generating a new one', async () => {

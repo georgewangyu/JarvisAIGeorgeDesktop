@@ -13,7 +13,23 @@ import { $connection } from '@/store/session'
 import { feedEditionLovedKey, readLovedFeedEditions, setFeedEditionLoved } from './feed/edition-feedback'
 import { groupFeedEditionsByDay } from './feed/group-editions'
 import { readFeedPrompt, saveFeedPrompt } from './feed/prompt'
-import { NEW_CHAT_ROUTE } from './routes'
+import { CONNECTIONS_ROUTE, NEW_CHAT_ROUTE } from './routes'
+
+function feedFailureCopy(item: FeedEdition): string {
+  if (item.error?.includes('[blocked_config]')) {
+    return 'Connect an AI account in Connections before generating a briefing.'
+  }
+
+  if (item.status === 'denied') {
+    return 'Jarvis needs access to prepare this briefing. Review Connections, then try again.'
+  }
+
+  if (item.status === 'interrupted') {
+    return 'This briefing was interrupted. Try again when you’re ready.'
+  }
+
+  return 'This briefing did not finish. Check your connection and try again.'
+}
 
 export function ConsumerFeedEditions() {
   const navigate = useNavigate()
@@ -212,11 +228,12 @@ export function ConsumerFeedEditions() {
                   <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div>
                 </> : null}
                 {item.status === 'generating' ? <p className="mt-5 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}
-                {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-5 text-sm text-destructive" role="alert">{item.error || 'This briefing did not finish.'}</p>}
+                {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-5 text-sm text-destructive" role="alert">{feedFailureCopy(item)}</p>}
                 <div className="mt-5 flex gap-3">
                   {item.status === 'completed' && <Button aria-pressed={lovedEditions.includes(item.id)} onClick={() => toggleLove(item.id)} size="sm" variant="text">{lovedEditions.includes(item.id) ? 'Loved' : 'Love'}</Button>}
                   {item.status === 'completed' && <Button onClick={() => discuss(item)} size="sm" variant="textStrong">Discuss</Button>}
                   {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <Button disabled={busy || generating} onClick={() => void generate(item)} size="sm" variant="textStrong">Try again</Button>}
+                  {(item.status === 'failed' || item.status === 'denied') && item.error?.includes('[blocked_config]') && <Button onClick={() => navigate(CONNECTIONS_ROUTE)} size="sm" variant="text">Connections</Button>}
                 </div>
               </article>
             ))}
