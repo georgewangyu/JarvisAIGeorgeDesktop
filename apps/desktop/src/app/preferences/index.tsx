@@ -37,24 +37,30 @@ export function PreferencesView() {
 
   return (
     <ConsumerSettingsLayout section="general">
-      <h1 className="text-2xl font-semibold tracking-tight">{s.general}</h1>
-      <section className="mt-10 flex flex-wrap items-center justify-between gap-4">
+      <header className="border-b border-(--ui-stroke-tertiary) pb-8">
+        <h1 className="text-3xl font-semibold tracking-tight">{s.general}</h1>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{s.intro}</p>
+      </header>
+      <section className="flex flex-wrap items-center justify-between gap-4 pt-8">
         <div>
           <h2 className="text-base font-semibold">{t.language.label}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{t.language.description}</p>
         </div>
         <LanguageSwitcher />
       </section>
-      <section className="mt-10 space-y-5 border-t border-(--ui-stroke-tertiary) pt-8">
+      <section className="mt-8 space-y-6 border-t border-(--ui-stroke-tertiary) pt-8">
         <h2 className="text-base font-semibold">{t.settings.sections.appearance}</h2>
-        <SegmentedControl<ThemeMode>
-          onChange={setMode}
-          options={(['system', 'light', 'dark'] as const).map(id => ({
-            id,
-            label: t.settings.modeOptions[id].label
-          }))}
-          value={mode}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h3 className="font-medium">{t.settings.appearance.colorMode}</h3>
+          <SegmentedControl<ThemeMode>
+            onChange={setMode}
+            options={(['system', 'light', 'dark'] as const).map(id => ({
+              id,
+              label: t.settings.modeOptions[id].label
+            }))}
+            value={mode}
+          />
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h3 className="font-medium">{s.theme}</h3>
@@ -87,9 +93,9 @@ export function PreferencesView() {
         <Button onClick={openConsumerSetupReview} variant="secondary">Review setup steps</Button>
       </section>
       <ConsumerApprovalSettings key={profile} profile={profile} />
-      <ConsumerBackupSettings key={`backup-${profile}`} profile={profile} />
       <ConsumerChatExportSettings key={`chat-export-${profile}`} profile={profile} />
       <ConsumerImageExportSettings key={`image-export-${profile}`} profile={profile} />
+      <ConsumerBackupSettings key={`backup-${profile}`} profile={profile} />
       <details className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
         <summary className="cursor-pointer text-base font-semibold">{t.settings.sections.advanced}</summary>
         <p className="mb-4 mt-3 text-sm text-muted-foreground">{s.advancedDetail}</p>
@@ -97,11 +103,13 @@ export function PreferencesView() {
           Jarvis keeps provider and runtime details managed automatically in this preview.
         </p>
       </details>
-      <section className="mt-10 flex items-center justify-between gap-4 border-t border-(--ui-stroke-tertiary) pt-8">
-        <h2 className="text-sm font-medium">{s.appVersion}</h2>
-        <span className="text-sm text-muted-foreground">{version?.desktopAppVersion ?? '—'}</span>
-      </section>
-      <p className="mt-12 text-xs leading-5 text-muted-foreground">{s.local}</p>
+      <footer className="mt-10 space-y-6 border-t border-(--ui-stroke-tertiary) pt-8">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-sm font-medium">{s.appVersion}</h2>
+          <span className="text-sm text-muted-foreground">{version?.desktopAppVersion ?? '—'}</span>
+        </div>
+        <p className="max-w-xl text-xs leading-5 text-muted-foreground">{s.local}</p>
+      </footer>
     </ConsumerSettingsLayout>
   )
 }
