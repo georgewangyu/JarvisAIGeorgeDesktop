@@ -421,6 +421,7 @@ export function ConnectionsView() {
                     onClick={async () => {
                       setSigningIn(true)
                       setError(null)
+                      let signedIn = false
 
                       try {
                         const result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
@@ -429,6 +430,8 @@ export function ConnectionsView() {
                           throw new Error(result?.message || 'ChatGPT sign-in did not finish.')
                         }
 
+                        signedIn = true
+                        await refresh()
                         await setGlobalModel('openai-codex', 'gpt-5.6-sol')
                         const model = await getGlobalModelInfo()
 
@@ -438,7 +441,9 @@ export function ConnectionsView() {
                       } catch {
                         // OAuth errors can include callback codes, credential
                         // paths or provider diagnostics; keep them out of UI.
-                        setError('ChatGPT sign-in did not finish. Please try again.')
+                        setError(signedIn
+                          ? 'ChatGPT connected, but Jarvis could not select a model. Refresh and try again.'
+                          : 'ChatGPT sign-in did not finish. Please try again.')
                       } finally {
                         setSigningIn(false)
                       }

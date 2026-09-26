@@ -198,6 +198,22 @@ it('keeps OAuth callback diagnostics out of Connections and permits retry', asyn
   expect(screen.queryByText(/private-state|creds/)).toBeNull()
 })
 
+it('keeps a completed account connected when model selection fails', async () => {
+  const connected = makeOAuthProvider('openai-codex')
+  connected.status.logged_in = true
+  vi.mocked(listOAuthProviders)
+    .mockResolvedValueOnce({ providers: [makeOAuthProvider('openai-codex')] })
+    .mockResolvedValue({ providers: [connected] })
+  vi.mocked(setGlobalModel).mockRejectedValue(new Error('private model path /private/synthetic/auth.json'))
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+
+  expect(await screen.findByText('Connected')).toBeTruthy()
+  expect(await screen.findByText('ChatGPT connected, but Jarvis could not select a model. Refresh and try again.')).toBeTruthy()
+  expect(screen.queryByText(/private model path|auth\.json/)).toBeNull()
+})
+
 it('shows detected local apps without claiming their access is connected', async () => {
   Object.defineProperty(window, 'hermesDesktop', {
     configurable: true,
