@@ -307,6 +307,10 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   const [remoteOpen, setRemoteOpen] = useState(false)
   const [remoteConnected, setRemoteConnected] = useState(false)
   const [guidedSetup, setGuidedSetup] = useState(false)
+  // Provider discovery may report configured before the browser callback has
+  // finished. Keep the first-run journey mounted until the OAuth command
+  // actually settles, rather than dropping the user into an unconnected chat.
+  const [oauthHandoffStarted, setOauthHandoffStarted] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const logEndRef = useRef<HTMLDivElement | null>(null)
 
@@ -402,15 +406,15 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
 
   // The installer can finish before provider discovery resolves to an explicit
   // `configured: false`. Keep the defer choice available on that path too.
-  const canDeferProvider = installedFirstRun || Boolean(
+  const canDeferProvider = installedFirstRun || oauthHandoffStarted || Boolean(
     guidedSetup && state.completedAt && !state.active && !state.error && !reviewReady
   )
 
   useEffect(() => {
-    setOnboardingSurfaceActive('setup', Boolean(enabled && (state.setupChoice || guidedSetup || installedFirstRun || remoteOpen || remoteConnected || reviewReady)))
+    setOnboardingSurfaceActive('setup', Boolean(enabled && (state.setupChoice || guidedSetup || installedFirstRun || oauthHandoffStarted || remoteOpen || remoteConnected || reviewReady)))
 
     return () => setOnboardingSurfaceActive('setup', false)
-  }, [enabled, guidedSetup, installedFirstRun, remoteConnected, remoteOpen, reviewReady, state.setupChoice])
+  }, [enabled, guidedSetup, installedFirstRun, oauthHandoffStarted, remoteConnected, remoteOpen, reviewReady, state.setupChoice])
 
   // Mount logic: show whenever a bootstrap is in flight, completed-with-error,
   // or actively running with a manifest. Hide entirely after a successful
@@ -436,7 +440,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       return true
     }
 
-    if (guidedSetup || remoteOpen || remoteConnected) {
+    if (guidedSetup || oauthHandoffStarted || remoteOpen || remoteConnected) {
       return true
     }
 
@@ -445,7 +449,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     }
 
     return false
-  }, [enabled, guidedSetup, installedFirstRun, remoteConnected, remoteOpen, reviewReady, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
+  }, [enabled, guidedSetup, installedFirstRun, oauthHandoffStarted, remoteConnected, remoteOpen, reviewReady, state.active, state.error, state.setupChoice, state.unsupportedPlatform])
 
   if (!shouldShow) {
     return null
@@ -463,11 +467,11 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     />
   }
 
-  if (state.setupChoice || guidedSetup || installedFirstRun || remoteConnected || reviewReady) {
+  if (state.setupChoice || guidedSetup || installedFirstRun || oauthHandoffStarted || remoteConnected || reviewReady) {
     return (
       <JarvisSetupJourney
         alreadyConnected={reviewReady && onboarding.configured === true}
-        bootstrapComplete={installedFirstRun || remoteConnected || reviewReady || Boolean(state.completedAt && !state.active && !state.error)}
+        bootstrapComplete={installedFirstRun || oauthHandoffStarted || remoteConnected || reviewReady || Boolean(state.completedAt && !state.active && !state.error)}
         bootstrapError={state.error}
         connectedGateway={remoteConnected}
         onBeginSetup={async () => {
@@ -514,6 +518,8 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
 
           let result: { message?: string; ok: boolean } | undefined
 
+          setOauthHandoffStarted(true)
+
           try {
             result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
           } catch {
@@ -528,6 +534,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           completeDesktopOnboarding()
           closeConsumerSetupReview()
           setGuidedSetup(false)
+          setOauthHandoffStarted(false)
         }}
         onShowInstallDetails={() => {
           closeConsumerSetupReview()
@@ -536,6 +543,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
         onSkip={reviewReady ? closeConsumerSetupReview : canDeferProvider ? () => {
           dismissFirstRunOnboarding()
           setGuidedSetup(false)
+          setOauthHandoffStarted(false)
         } : undefined}
         reviewMode={reviewReady}
       />

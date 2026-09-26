@@ -457,6 +457,7 @@ export function JarvisSetupJourney({
               {connectedGateway ? 'Start using Jarvis' : alreadyConnected ? 'Return to Jarvis' : signingIn ? 'Finish sign-in in your browser' : 'Continue with ChatGPT / Codex'}
             </Button>
           )}
+          {signingIn ? <p className="text-sm text-(--ui-text-secondary)" role="status">Finish sign-in in your browser. Jarvis will continue when it completes.</p> : null}
           {onSkip && !connectedGateway && !reviewMode && bootstrapComplete && !signingIn ? (
             <Button onClick={onSkip} size="sm" variant="text">
               I'll choose a provider later

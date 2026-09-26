@@ -218,6 +218,41 @@ describe('DesktopInstallOverlay first-run setup', () => {
     await waitFor(() => expect($desktopOnboarding.get().configured).toBe(true))
   })
 
+  it('keeps browser sign-in visible until OAuth settles even if provider discovery changes', async () => {
+    $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
+    const desktop = installDesktopMock(bootstrapState())
+    let finishSignIn: ((result: { ok: boolean }) => void) | undefined
+
+    const startCodexOAuth = vi.fn(() => new Promise<{ ok: boolean }>(resolve => {
+      finishSignIn = resolve
+    }))
+
+    Object.assign(desktop, {
+      jarvisOnboarding: {
+        getPermissions: vi.fn().mockResolvedValue({
+          apps: { mail: false, messages: false, notes: false, whatsapp: false },
+          fullDiskAccess: 'denied', microphone: 'denied', platform: 'darwin'
+        }),
+        startCodexOAuth
+      }
+    })
+    render(<DesktopInstallOverlay />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Get started' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue without access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with ChatGPT / Codex' }))
+    await waitFor(() => expect(startCodexOAuth).toHaveBeenCalledTimes(1))
+
+    act(() => $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: true }))
+    expect(screen.getByRole('heading', { name: 'Finish connecting Jarvis' })).toBeTruthy()
+    expect(screen.getByRole('status').textContent).toContain('Finish sign-in in your browser')
+
+    act(() => finishSignIn?.({ ok: true }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Finish connecting Jarvis' })).toBeNull())
+  })
+
   it('lets an already-installed first-run user defer the provider without claiming connection', async () => {
     $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
     const desktop = installDesktopMock(bootstrapState())
