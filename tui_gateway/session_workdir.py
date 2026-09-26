@@ -370,6 +370,29 @@ def _persist_submit_user_row(session: dict, text: Any, display_kind: str | None)
     session["_submit_user_row"] = staged
 
 
+def _persist_agent_init_failure(session: dict, text: str, surface: dict) -> None:
+    """Close an accepted, submit-time user row when agent construction never reaches persistence.
+
+    A normal agent turn writes its own assistant reply. Only the exact staged row is eligible here;
+    a later user turn or an already saved reply makes a synthetic failure misleading.
+    """
+    staged = session.get("_submit_user_row")
+    row_id = _message_row_id(staged) if isinstance(staged, dict) else None
+    key = str(session.get("session_key") or "")
+    if not key or row_id is None or not text:
+        return
+    with _session_db(session) as db:
+        if db is None or db.get_message_role(key, row_id) != "user":
+            return
+        if db.latest_message_row_id(key, role="user", require_text=False) != row_id:
+            return
+        if any(message.get("role") in {"user", "assistant", "tool"}
+               for message in db.get_messages(key, after_id=row_id)):
+            return
+        db.append_message(key, "assistant", content=text,
+                          display_metadata={"turn_failure": surface})
+
+
 def _adopt_submit_user_row(session: dict, agent, persist_user_message: Any, text: Any) -> int | None:
     """Hand the row written at submit to the turn as its user dict (``agent._pending_cli_user_message``,
     adopted by ``_stage_turn_user_message`` when the content matches). A prompt the prologue rewrote

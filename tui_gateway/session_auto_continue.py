@@ -388,6 +388,13 @@ def _emit_terminal_turn_error(
                 error, provider=str(getattr(agent, "provider", "") or ""), model=str(getattr(agent, "model", "") or ""),
                 api_key=getattr(agent, "api_key", None))
     with session["history_lock"]:
+        if error_surface and error_surface.get("code") == "agent_init_failed":
+            # No agent exists to flush a reply. Persist the same card while the submit-time
+            # user row still identifies this turn; storage trouble cannot suppress the frame.
+            try:
+                _persist_agent_init_failure(session, turn_error_text(error, error_surface), error_surface)
+            except Exception:
+                logger.warning("failed to persist agent initialization failure", exc_info=True)
         _fail_inflight_turn(session, error, error_surface=error_surface)
         turn = session.get("inflight_turn") or {}
         message, partial = str(turn.get("error") or "turn failed"), str(turn.get("assistant") or "")

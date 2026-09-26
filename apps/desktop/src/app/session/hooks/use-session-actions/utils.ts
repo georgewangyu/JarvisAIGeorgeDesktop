@@ -838,7 +838,16 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
     typeof turnStartedAt === 'number' &&
       turnStartedAt > 0 &&
       savedUser?.timestamp !== undefined &&
-      savedUser.timestamp >= turnStartedAt
+      (savedUser.timestamp >= turnStartedAt || (
+        // Submit-time persistence writes the user row just BEFORE the turn's
+        // in-flight clock starts. A durable terminal failure written after
+        // that clock is stronger evidence than the earlier user timestamp.
+        savedReply?.role === 'assistant' &&
+        Boolean(savedReply.error) &&
+        savedReply.timestamp !== undefined &&
+        savedReply.timestamp >= turnStartedAt &&
+        savedUser.timestamp <= savedReply.timestamp
+      ))
   )
 
   const savedFailureOfCurrentTurn = Boolean(

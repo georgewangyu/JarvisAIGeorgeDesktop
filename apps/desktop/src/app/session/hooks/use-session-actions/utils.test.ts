@@ -1344,6 +1344,35 @@ describe('appendLiveSessionProjection', () => {
     expect(restored.filter(message => message.role === 'assistant')).toHaveLength(1)
   })
 
+  it('matches a persisted submit-time user row that predates its failed turn clock', () => {
+    const startedAt = 1_795_000_000
+
+    const stored = [
+      msg('user', 'user', 'synthetic request', { timestamp: startedAt - 0.2 }),
+      msg('saved-failure', 'assistant', 'Turn failed', {
+        error: 'Turn failed',
+        errorSurface: { layer: 'runtime', code: 'agent_init_failed', retryable: true },
+        timestamp: startedAt + 0.1
+      })
+    ]
+
+    const restored = appendLiveSessionProjection(stored, {
+      session_id: 'runtime-1',
+      inflight: {
+        user: 'synthetic request',
+        assistant: '',
+        error: 'No inference provider is configured.',
+        error_surface: { layer: 'runtime', code: 'agent_init_failed', retryable: true },
+        streaming: false
+      },
+      turn_started_at: startedAt
+    })
+
+    expect(restored).toBe(stored)
+    expect(restored.filter(message => message.error)).toHaveLength(1)
+    expect(restored.filter(message => message.role === 'user')).toHaveLength(1)
+  })
+
   // A synthetic starting prompt keeps the display typing its persisted row
   // will get: on reconnect it renders as the same timeline event as history,
   // never as a user bubble; a real user quoting the marker text stays a user

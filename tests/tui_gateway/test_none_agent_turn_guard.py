@@ -12,6 +12,9 @@ from __future__ import annotations
 import threading
 import types
 
+import pytest
+
+from hermes_state import SessionDB
 from tui_gateway import server
 from tui_gateway.user_messages import AGENT_BUILD_ABANDONED
 
@@ -96,3 +99,58 @@ def test_replaced_record_build_records_reason_and_leaves_agent_unset(monkeypatch
     assert session["agent"] is None
     assert session["agent_ready"].is_set()
     assert session["agent_error"] == AGENT_BUILD_ABANDONED
+
+
+@pytest.mark.parametrize("failure_path", ["deferred_build", "missing_agent"])
+def test_accepted_init_failure_survives_store_reopen(monkeypatch, tmp_path, failure_path):
+    emitted = _turn_env(monkeypatch, tmp_path)
+    path = tmp_path / "state.db"
+    db = SessionDB(path)
+    db.create_session("gw-session-key", source="desktop")
+    monkeypatch.setattr(server, "_get_db", lambda: db)
+    monkeypatch.setattr(server, "_ensure_session_db_row", lambda session: True)
+    session = _session(None, agent_error=AGENT_BUILD_ABANDONED)
+    server._persist_submit_user_row(session, "synthetic prompt", None)
+    server._start_inflight_turn(session, "synthetic prompt")
+
+    if failure_path == "deferred_build":
+        session["agent_ready"] = threading.Event()
+        session["agent_ready"].set()
+        monkeypatch.setattr(server, "_session_info", lambda *args: {})
+        server._run_after_agent_ready("rid", "ui-sid", session, "synthetic prompt", None, None, None)
+    else:
+        assert server._run_prompt_submit("rid", "ui-sid", session, "synthetic prompt") is False
+    frames = [payload for kind, _, payload in emitted if kind == "message.complete"]
+    assert len(frames) == 1
+    assert frames[0]["status"] == "error"
+    assert frames[0]["error_surface"]["code"] == "agent_init_failed"
+    assert session["inflight_turn"]["status"] == "error"
+
+    db.close()
+    with SessionDB(path) as reopened:
+        _, display = reopened.get_resume_conversations("gw-session-key")
+    messages = server._history_to_messages(display)
+    assert [message["role"] for message in messages] == ["user", "assistant"]
+    assert messages[0]["text"] == "synthetic prompt"
+    assert messages[1]["display_metadata"]["turn_failure"] == frames[0]["error_surface"]
+    assert messages[1]["text"] == frames[0]["text"]
+
+
+@pytest.mark.parametrize("later_role", ["assistant", "user"])
+def test_init_failure_does_not_append_after_saved_reply_or_later_turn(monkeypatch, tmp_path, later_role):
+    emitted = _turn_env(monkeypatch, tmp_path)
+    path = tmp_path / "state.db"
+    db = SessionDB(path)
+    db.create_session("gw-session-key", source="desktop")
+    monkeypatch.setattr(server, "_get_db", lambda: db)
+    monkeypatch.setattr(server, "_ensure_session_db_row", lambda session: True)
+    session = _session(None, agent_error=AGENT_BUILD_ABANDONED)
+    server._persist_submit_user_row(session, "synthetic prompt", None)
+    db.append_message("gw-session-key", later_role, "already saved")
+    server._start_inflight_turn(session, "synthetic prompt")
+
+    assert server._run_prompt_submit("rid", "ui-sid", session, "synthetic prompt") is False
+    assert len([kind for kind, _, _ in emitted if kind == "message.complete"]) == 1
+    assert [(row["role"], row["content"]) for row in db.get_messages("gw-session-key")] == [
+        ("user", "synthetic prompt"), (later_role, "already saved")]
+    db.close()
