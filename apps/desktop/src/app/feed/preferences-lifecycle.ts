@@ -1,6 +1,6 @@
 import { readKey, writeKey } from '@/lib/storage'
 
-import { feedEditionLovedKey, readLovedFeedEditions } from './edition-feedback'
+import { feedEditionLovedKey, feedStoryLovedKey, readLovedFeedEditions, readLovedFeedStories } from './edition-feedback'
 import { feedLovedKey, readLovedFeedRuns } from './feedback'
 import { feedPromptKey } from './prompt'
 
@@ -25,7 +25,8 @@ export function migrateFeedPreferencesForProfile(oldProfile: string, newProfile:
 
   for (const [keyFor, readIds] of [
     [feedLovedKey, readLovedFeedRuns],
-    [feedEditionLovedKey, readLovedFeedEditions]
+    [feedEditionLovedKey, readLovedFeedEditions],
+    [feedStoryLovedKey, readLovedFeedStories]
   ] as const) {
     const source = keyFor(oldProfile, null)
     const target = keyFor(newProfile, null)
@@ -42,7 +43,7 @@ export function migrateFeedPreferencesForProfile(oldProfile: string, newProfile:
 
 /** Remove only local Feed preferences; same-named remote profiles are independent. */
 export function dropFeedPreferencesForProfile(profile: string): void {
-  for (const key of [feedPromptKey(profile, null), feedLovedKey(profile, null), feedEditionLovedKey(profile, null)]) {
+  for (const key of [feedPromptKey(profile, null), feedLovedKey(profile, null), feedEditionLovedKey(profile, null), feedStoryLovedKey(profile, null)]) {
     writeKey(key, null)
   }
 }

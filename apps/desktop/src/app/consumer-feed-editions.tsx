@@ -11,7 +11,10 @@ import { stashSessionDraft, takeSessionDraft } from '@/store/composer'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $connection } from '@/store/session'
 
-import { feedEditionLovedKey, readLovedFeedEditions, setFeedEditionLoved } from './feed/edition-feedback'
+import {
+  feedEditionLovedKey, feedStoryId, feedStoryLovedKey, readLovedFeedEditions,
+  readLovedFeedStories, setFeedEditionLoved, setFeedStoryLoved
+} from './feed/edition-feedback'
 import { type FeedEditionItem, parseFeedEditionItems } from './feed/edition-items'
 import { groupFeedEditionsByDay } from './feed/group-editions'
 import { readFeedPrompt, saveFeedPrompt } from './feed/prompt'
@@ -42,9 +45,12 @@ function feedRetrievalCopy(item: FeedEdition, url: string): string {
   return retrieved ? 'Page content retrieved; claims not verified' : 'Page content not verified as retrieved'
 }
 
-function FeedEditionContent({ content, onDiscussItem }: {
+function FeedEditionContent({ content, editionId, lovedStoryIds, onDiscussItem, onLoveItem }: {
   content: string
+  editionId: string
+  lovedStoryIds: string[]
   onDiscussItem: (item: FeedEditionItem) => void
+  onLoveItem: (index: number) => void
 }) {
   const parsed = parseFeedEditionItems(content)
 
@@ -55,13 +61,23 @@ function FeedEditionContent({ content, onDiscussItem }: {
   return <div className="mt-4 space-y-4">
     {parsed.introduction ? <div className="text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={parsed.introduction} /></div> : null}
     <p className="text-xs font-medium text-(--ui-text-tertiary)">{parsed.items.length} stories in this briefing</p>
+    <p className="text-xs text-(--ui-text-tertiary)">Story Love is saved on this Mac only; it does not guide future briefings.</p>
     <ol aria-label="Stories in this briefing" className="space-y-3">
       {parsed.items.map((story, index) => <li className="rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5" key={`${index}-${story.title}`}>
         <section aria-label={story.title}>
           <p className="text-xs font-medium text-(--ui-text-tertiary)">Story {index + 1}</p>
           <h4 className="mt-2 text-base font-semibold leading-snug text-(--ui-text-primary)">{story.title}</h4>
           <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={story.body} /></div>
-          <Button aria-label={`Discuss ${story.title}`} onClick={() => onDiscussItem(story)} size="sm" variant="textStrong">Discuss</Button>
+          <div className="mt-3 flex items-center gap-3">
+            <Button
+              aria-label={`${lovedStoryIds.includes(feedStoryId(editionId, index)) ? 'Loved' : 'Love'} ${story.title}`}
+              aria-pressed={lovedStoryIds.includes(feedStoryId(editionId, index))}
+              onClick={() => onLoveItem(index)}
+              size="sm"
+              variant="text"
+            >{lovedStoryIds.includes(feedStoryId(editionId, index)) ? 'Loved' : 'Love'}</Button>
+            <Button aria-label={`Discuss ${story.title}`} onClick={() => onDiscussItem(story)} size="sm" variant="textStrong">Discuss</Button>
+          </div>
         </section>
       </li>)}
     </ol>
@@ -83,6 +99,9 @@ export function ConsumerFeedEditions() {
   const [promptError, setPromptError] = useState('')
   const [lovedSnapshot, setLovedSnapshot] = useState(() => ({ scope, ids: readLovedFeedEditions(profile, connectionId) }))
   const lovedEditions = lovedSnapshot.scope === scope ? lovedSnapshot.ids : readLovedFeedEditions(profile, connectionId)
+  const storyScope = feedStoryLovedKey(profile, connectionId)
+  const [lovedStorySnapshot, setLovedStorySnapshot] = useState(() => ({ scope: storyScope, ids: readLovedFeedStories(profile, connectionId) }))
+  const lovedStories = lovedStorySnapshot.scope === storyScope ? lovedStorySnapshot.ids : readLovedFeedStories(profile, connectionId)
   const [feedbackError, setFeedbackError] = useState('')
   const [snapshot, setSnapshot] = useState<{ items: FeedEdition[]; scope: string }>({ items: [], scope })
   const [loading, setLoading] = useState(true)
@@ -98,10 +117,11 @@ export function ConsumerFeedEditions() {
     setPromptError('')
     setEditingPrompt(false)
     setLovedSnapshot({ scope, ids: readLovedFeedEditions(profile, connectionId) })
+    setLovedStorySnapshot({ scope: storyScope, ids: readLovedFeedStories(profile, connectionId) })
     setFeedbackError('')
     setBusy(false)
     setError(null)
-  }, [connectionId, profile, scope])
+  }, [connectionId, profile, scope, storyScope])
 
   useEffect(() => {
     let cancelled = false
@@ -196,6 +216,19 @@ export function ConsumerFeedEditions() {
     setFeedbackError('')
   }
 
+  const toggleStoryLove = (editionId: string, index: number) => {
+    const loved = !lovedStories.includes(feedStoryId(editionId, index))
+
+    if (!setFeedStoryLoved(profile, connectionId, editionId, index, loved)) {
+      setFeedbackError('Could not save that choice on this Mac. Please try again.')
+
+      return
+    }
+
+    setLovedStorySnapshot({ scope: storyScope, ids: readLovedFeedStories(profile, connectionId) })
+    setFeedbackError('')
+  }
+
   const discuss = (edition: FeedEdition, selectedItem?: FeedEditionItem) => {
     if (!edition.content) {return}
 
@@ -281,7 +314,13 @@ export function ConsumerFeedEditions() {
                   </div> : null}
                   {/* Generated prose is passive until the user chooses a listed source.
                       Rich transcript links fetch titles and embeds on mount. */}
-                  <FeedEditionContent content={item.content} onDiscussItem={selected => discuss(item, selected)} />
+                  <FeedEditionContent
+                    content={item.content}
+                    editionId={item.id}
+                    lovedStoryIds={lovedStories}
+                    onDiscussItem={selected => discuss(item, selected)}
+                    onLoveItem={index => toggleStoryLove(item.id, index)}
+                  />
                 </> : null}
                 {item.status === 'generating' ? <p className="mt-5 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}
                 {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-5 text-sm text-destructive" role="alert">{feedFailureCopy(item)}</p>}

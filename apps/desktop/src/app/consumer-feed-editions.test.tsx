@@ -8,7 +8,7 @@ import { $activeGatewayProfile, $freshSessionRequest } from '@/store/profile'
 import { $connection } from '@/store/session'
 
 import { ConsumerFeedEditions } from './consumer-feed-editions'
-import { readLovedFeedEditions } from './feed/edition-feedback'
+import { readLovedFeedEditions, readLovedFeedStories } from './feed/edition-feedback'
 import { DEFAULT_FEED_PROMPT, readFeedPrompt } from './feed/prompt'
 
 vi.mock('@/api/feed', () => ({ getFeedEditions: vi.fn(), generateFeedEdition: vi.fn() }))
@@ -371,6 +371,52 @@ it('renders only explicit complete stories as distinct cards and discusses one w
   expect(takeSessionDraft(null).text).toContain('## Second story\n\nSecond details.')
   expect(takeSessionDraft(null).text).not.toContain('First details.')
   expect(generateFeedEdition).not.toHaveBeenCalled()
+})
+
+it('saves reversible per-story Love without changing edition feedback or triggering generation', async () => {
+  const stories = {
+    ...edition,
+    content: '## First story\nFirst details.\n\n## Second story\nSecond details.'
+  }
+
+  vi.mocked(getFeedEditions).mockResolvedValue([stories])
+  vi.mocked(generateFeedEdition).mockResolvedValue({ ...edition, id: 'edition-2', feedback_applied_count: 0 })
+  const view = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+
+  expect(await screen.findByRole('button', { name: 'Love First story' })).toBeTruthy()
+  expect(screen.getByText('Story Love is saved on this Mac only; it does not guide future briefings.')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Love Second story' }))
+  expect(screen.getByRole('button', { name: 'Loved Second story' }).getAttribute('aria-pressed')).toBe('true')
+  expect(screen.getByRole('button', { name: 'Love First story' }).getAttribute('aria-pressed')).toBe('false')
+  expect(readLovedFeedStories('default', null)).toEqual(['edition-1:1'])
+  expect(readLovedFeedEditions('default', null)).toEqual([])
+  expect(generateFeedEdition).not.toHaveBeenCalled()
+
+  view.unmount()
+  render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+  expect(await screen.findByRole('button', { name: 'Loved Second story' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
+  await waitFor(() => expect(generateFeedEdition).toHaveBeenCalledWith('default', DEFAULT_FEED_PROMPT, undefined, []))
+  fireEvent.click(screen.getByRole('button', { name: 'Loved Second story' }))
+  expect(readLovedFeedStories('default', null)).toEqual([])
+})
+
+it('keeps story Love in its profile and shows failed persistence without a false pressed state', async () => {
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...edition, content: '## First story\nFirst details.\n\n## Second story\nSecond details.'
+  }])
+  render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Love First story' }))
+  act(() => { $activeGatewayProfile.set('other') })
+  expect((await screen.findByRole('button', { name: 'Love First story' })).getAttribute('aria-pressed')).toBe('false')
+  expect(readLovedFeedStories('other', null)).toEqual([])
+
+  vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new Error('storage blocked') })
+  fireEvent.click(screen.getByRole('button', { name: 'Love Second story' }))
+  expect(screen.getByRole('alert').textContent).toContain('Could not save that choice')
+  expect(screen.getByRole('button', { name: 'Love Second story' }).getAttribute('aria-pressed')).toBe('false')
+  expect(readLovedFeedStories('other', null)).toEqual([])
 })
 
 it('keeps an unstructured or incomplete generated edition in the legacy view', async () => {
