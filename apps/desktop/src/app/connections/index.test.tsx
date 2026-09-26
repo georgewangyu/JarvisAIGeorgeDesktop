@@ -30,6 +30,35 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+it('shows scoped attachment import folders, revokes a grant, and offers retry after a failed choice', async () => {
+  const chooseFolder = vi.fn().mockRejectedValueOnce(new Error('private path must stay hidden'))
+    .mockResolvedValueOnce({ allowed: ['/safe'], blocked: [] })
+
+  const revokeFolder = vi.fn().mockResolvedValue({ allowed: [], blocked: ['/safe'] })
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: {
+      jarvisFileImports: {
+        list: vi.fn().mockResolvedValue({ allowed: [], blocked: [] }),
+        chooseFolder,
+        revokeFolder
+      }
+    }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  await screen.findByText('Attachments Jarvis imports')
+  fireEvent.click(screen.getByRole('button', { name: 'Allow folder' }))
+  await screen.findByText('Could not change attachment import access. Retry from this profile.')
+  expect(screen.queryByText(/private path/)).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Allow folder' }))
+  await screen.findByText('Allowed: /safe')
+  fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+  await screen.findByText('Blocked: /safe')
+  expect(revokeFolder).toHaveBeenCalledWith('/safe')
+  expect(screen.getByText(/does not control terminal, tools, or inline file references/)).toBeTruthy()
+})
+
 it('does not treat a selected model as proof of an authenticated account', async () => {
   render(
     <MemoryRouter>

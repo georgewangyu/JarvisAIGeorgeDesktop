@@ -286,6 +286,13 @@ declare global {
         requestMicrophone: () => Promise<boolean>
         startCodexOAuth: () => Promise<{ message?: string; ok: boolean }>
       }
+      jarvisFileImports?: {
+        list: () => Promise<{ allowed: string[]; blocked: string[] }>
+        assertAllowed: (filePath: string) => Promise<boolean>
+        admitDrop: (filePath: string) => Promise<boolean>
+        chooseFolder: (mode: 'allow' | 'block') => Promise<{ allowed: string[]; blocked: string[] }>
+        revokeFolder: (folder: string) => Promise<{ allowed: string[]; blocked: string[] }>
+      }
       jarvisCalendar?: {
         status: () => Promise<JarvisCalendarStatus>
         connect: (mode?: 'read' | 'interact') => Promise<JarvisCalendarStatus>

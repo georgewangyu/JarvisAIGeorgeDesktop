@@ -2874,7 +2874,7 @@ describe('usePromptActions file attachment sync', () => {
     $connection.set({ mode: 'remote' } as never)
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl: vi.fn(async () => 'data:text/plain;base64,aGVsbG8=') }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl: vi.fn(async () => 'data:text/plain;base64,aGVsbG8=') }
     })
 
     const calls: { method: string; params?: Record<string, unknown> }[] = []
@@ -2921,7 +2921,7 @@ describe('usePromptActions file attachment sync', () => {
     const readFileDataUrl = vi.fn(async () => 'data:text/plain;base64,aGVsbG8=')
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl }
     })
 
     const attachment: ComposerAttachment = {
@@ -2973,7 +2973,7 @@ describe('usePromptActions file attachment sync', () => {
     const readFileDataUrl = vi.fn(async () => 'data:image/jpeg;base64,aGVsbG8=')
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl }
     })
 
     const requestGateway = vi.fn(async (method: string) => {
@@ -3018,7 +3018,7 @@ describe('usePromptActions file attachment sync', () => {
 
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl: vi.fn(async () => 'data:image/jpeg;base64,aGVsbG8=') }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl: vi.fn(async () => 'data:image/jpeg;base64,aGVsbG8=') }
     })
 
     $composerAttachments.set([
@@ -3087,7 +3087,7 @@ describe('usePromptActions file attachment sync', () => {
 
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl: vi.fn(async () => 'data:image/jpeg;base64,aGVsbG8=') }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl: vi.fn(async () => 'data:image/jpeg;base64,aGVsbG8=') }
     })
 
     const requestGateway = vi.fn(async (method: string) => {
@@ -3179,7 +3179,7 @@ describe('usePromptActions file attachment sync', () => {
 
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl: vi.fn(async () => 'data:text/plain;base64,aGVsbG8=') }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl: vi.fn(async () => 'data:text/plain;base64,aGVsbG8=') }
     })
 
     const requestGateway = vi.fn(async (method: string) => {
@@ -3214,7 +3214,7 @@ describe('usePromptActions file attachment sync', () => {
     const readFileDataUrl = vi.fn(async () => 'data:text/plain;base64,aGVsbG8=')
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl }
     })
 
     const calls: { method: string; params?: Record<string, unknown> }[] = []
@@ -3269,7 +3269,7 @@ describe('usePromptActions file attachment sync', () => {
     const readFileDataUrl = vi.fn(async () => 'data:application/pdf;base64,JVBERi0=')
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl }
     })
 
     const pathlessRef: ComposerAttachment = {
@@ -3308,7 +3308,7 @@ describe('usePromptActions file attachment sync', () => {
     const readFileDataUrl = vi.fn(async () => 'data:text/plain;base64,c2hvdWxkLW5vdC1iZS1yZWFk')
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl }
     })
 
     const attachment: ComposerAttachment = {
@@ -3369,7 +3369,7 @@ describe('usePromptActions eager-upload races', () => {
     $connection.set({ mode: 'remote' } as never)
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl: vi.fn(async () => 'data:application/pdf;base64,JVBERi0=') }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl: vi.fn(async () => 'data:application/pdf;base64,JVBERi0=') }
     })
 
     let releaseAttach: () => void = () => {}
@@ -4679,7 +4679,7 @@ describe('usePromptActions new-chat first-send delivery (#63078)', () => {
     $connection.set({ mode: 'remote' } as never)
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl: vi.fn(async () => 'data:text/plain;base64,aGVsbG8=') }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl: vi.fn(async () => 'data:text/plain;base64,aGVsbG8=') }
     })
 
     const createBackendSessionForSend = vi.fn(async () => {
@@ -4766,7 +4766,7 @@ describe('usePromptActions new-chat first-send delivery (#63078)', () => {
     $connection.set({ mode: 'remote' } as never)
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl: vi.fn(async () => 'data:application/pdf;base64,JVBERi0=') }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl: vi.fn(async () => 'data:application/pdf;base64,JVBERi0=') }
     })
 
     const createBackendSessionForSend = vi.fn(async () => {
@@ -5311,7 +5311,7 @@ describe('usePromptActions eager attachment upload (drop-time)', () => {
     // waiting for submit.
     $connection.set({ mode: 'remote' } as never)
     const readFileDataUrl = vi.fn(async () => 'data:application/pdf;base64,JVBERi0=')
-    Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { readFileDataUrl } })
+    Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl } })
 
     const calls: string[] = []
 
@@ -5350,7 +5350,7 @@ describe('usePromptActions eager attachment upload (drop-time)', () => {
     $connection.set({ mode: 'remote' } as never)
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl: vi.fn(async () => 'data:application/pdf;base64,JVBERi0=') }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl: vi.fn(async () => 'data:application/pdf;base64,JVBERi0=') }
     })
 
     const requestGateway = vi.fn(async (method: string) => {
@@ -5407,6 +5407,7 @@ describe('uploadComposerAttachment remote read failures', () => {
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
       value: {
+        jarvisFileImports: { assertAllowed: async () => true },
         readFileDataUrl: vi.fn(async () => {
           throw new Error('File preview failed: file is too large (20971520 bytes; limit 16777216 bytes).')
         })
@@ -5430,6 +5431,7 @@ describe('uploadComposerAttachment remote read failures', () => {
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
       value: {
+        jarvisFileImports: { assertAllowed: async () => true },
         readFileDataUrl: vi.fn(async () => {
           throw new Error('ENOENT: no such file')
         })
@@ -5445,6 +5447,50 @@ describe('uploadComposerAttachment remote read failures', () => {
   })
 })
 
+describe('Jarvis desktop attachment import permission', () => {
+  it('fails closed when an existing desktop bridge lacks the permission capability', async () => {
+    Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: {} })
+    const requestGateway = vi.fn(async () => ({}) as never)
+    await expect(uploadComposerAttachment(
+      { id: 'file:note', kind: 'file', label: 'note.txt', path: '/local/note.txt' },
+      { remote: false, requestGateway, sessionId: RUNTIME_SESSION_ID }
+    )).rejects.toThrow(/permissions are unavailable/)
+    expect(requestGateway).not.toHaveBeenCalled()
+  })
+
+  it('refuses local and remote attachments before staging, then retries after access is allowed', async () => {
+    let allowed = false
+
+    const assertAllowed = vi.fn(async () => {
+      if (!allowed) {throw new Error('Attachment import blocked for this folder.')}
+
+      return true
+    })
+
+    const readFileDataUrlForAttach = vi.fn(async () => 'data:text/plain;base64,aGk=')
+    Object.defineProperty(window, 'hermesDesktop', {
+      configurable: true,
+      value: { jarvisFileImports: { assertAllowed }, readFileDataUrlForAttach }
+    })
+    const requestGateway = vi.fn(async () => ({ attached: true, ref_text: '@file:note.txt' }) as never)
+    const attachment = { id: 'file:note', kind: 'file' as const, label: 'note.txt', path: '/local/note.txt' }
+
+    for (const remote of [false, true]) {
+      await expect(uploadComposerAttachment(attachment, { remote, requestGateway, sessionId: RUNTIME_SESSION_ID }))
+        .rejects.toThrow(/blocked/)
+    }
+
+    expect(requestGateway).not.toHaveBeenCalled()
+    expect(readFileDataUrlForAttach).not.toHaveBeenCalled()
+
+    allowed = true
+    await uploadComposerAttachment(attachment, { remote: false, requestGateway, sessionId: RUNTIME_SESSION_ID })
+    await uploadComposerAttachment(attachment, { remote: true, requestGateway, sessionId: RUNTIME_SESSION_ID })
+    expect(requestGateway).toHaveBeenCalledTimes(2)
+    expect(readFileDataUrlForAttach).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('uploadComposerAttachment preview reuse', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -5456,7 +5502,7 @@ describe('uploadComposerAttachment preview reuse', () => {
     const readFileDataUrl = vi.fn(async () => 'data:image/png;base64,ZnJvbS1kaXNr')
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl }
     })
 
     const requestGateway = vi.fn(async (method: string) => {
@@ -5493,7 +5539,7 @@ describe('uploadComposerAttachment preview reuse', () => {
     const readFileDataUrl = vi.fn(async () => 'data:image/png;base64,ZnJvbS1kaXNr')
     Object.defineProperty(window, 'hermesDesktop', {
       configurable: true,
-      value: { readFileDataUrl }
+      value: { jarvisFileImports: { assertAllowed: async () => true }, readFileDataUrl }
     })
 
     const requestGateway = vi.fn(async (method: string) => {

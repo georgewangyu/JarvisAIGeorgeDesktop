@@ -138,6 +138,14 @@ export async function uploadComposerAttachment(
   const label = attachment.label || pathLabel(path)
   const uploadBytes = remote || attachmentPathNeedsUpload(path, backendCwd, terminalBackend)
 
+  // The desktop attachment path is shared by local path staging and remote
+  // byte uploads. Check here before either route can hand the file to Jarvis.
+  if (window.hermesDesktop && !window.hermesDesktop.jarvisFileImports?.assertAllowed) {
+    throw new Error('Attachment import permissions are unavailable. Restart Jarvis and retry.')
+  }
+
+  await window.hermesDesktop?.jarvisFileImports?.assertAllowed(path)
+
   // Read bytes/paths ONCE, outside the retry. Only the session-scoped RPC is
   // replayed on recovery — re-reading a multi-MB file to retry a dead session
   // id would double the disk/IPC cost of every recovered attach. For images,

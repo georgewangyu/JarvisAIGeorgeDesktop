@@ -671,6 +671,19 @@ export function useComposerActions({
       for (const candidate of candidates) {
         const { file, isDirectory, path: knownPath } = candidate
 
+        // A native drop is a file choice, just like the picker. Admit only its
+        // exact path; the Electron policy still rechecks blocks and realpath
+        // immediately before the shared attach path stages it.
+        if (knownPath && !isDirectory) {
+          try {
+            await window.hermesDesktop?.jarvisFileImports?.admitDrop(knownPath)
+          } catch (error) {
+            lastFailure = error instanceof Error ? error.message : `Could not attach ${knownPath}`
+
+            continue
+          }
+        }
+
         // Path-only entry (in-app drag from the file browser tree, etc.).
         if (!file) {
           if (isDirectory) {
@@ -712,6 +725,17 @@ export function useComposerActions({
           !knownPath && window.hermesDesktop?.getPathForFile ? window.hermesDesktop.getPathForFile(file) : ''
 
         const filePath = knownPath || fallbackPath || ''
+
+        if (filePath && filePath !== knownPath && !isDirectory) {
+          try {
+            await window.hermesDesktop?.jarvisFileImports?.admitDrop(filePath)
+          } catch (error) {
+            lastFailure = error instanceof Error ? error.message : `Could not attach ${file.name || 'file'}`
+
+            continue
+          }
+        }
+
         const isImage = file.type.startsWith('image/') || isImagePath(file.name) || (filePath && isImagePath(filePath))
 
         if (isImage) {

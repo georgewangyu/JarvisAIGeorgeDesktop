@@ -111,6 +111,9 @@ export function ConnectionsView() {
   const currentModel = useStore($currentModel)
   const currentProvider = useStore($currentProvider)
   const [permissions, setPermissions] = useState<JarvisOnboardingPermissionSnapshot | null>(null)
+  const [fileImports, setFileImports] = useState<{ allowed: string[]; blocked: string[] } | null>(null)
+  const [fileImportBusy, setFileImportBusy] = useState(false)
+  const [fileImportError, setFileImportError] = useState<string | null>(null)
   const [permissionsCheckState, setPermissionsCheckState] = useState<'checking' | 'ready' | 'unavailable'>('checking')
   const [refreshing, setRefreshing] = useState(false)
   const [requestingMicrophone, setRequestingMicrophone] = useState(false)
@@ -147,8 +150,9 @@ export function ConnectionsView() {
     try {
       const getPermissions = window.hermesDesktop?.jarvisOnboarding?.getPermissions
 
-      const [snapshotResult, accountsResult, calendarResult] = await Promise.allSettled([
-        getPermissions?.(), listOAuthProviders(activeProfile), window.hermesDesktop?.jarvisCalendar?.status()
+      const [snapshotResult, accountsResult, calendarResult, fileImportResult] = await Promise.allSettled([
+        getPermissions?.(), listOAuthProviders(activeProfile), window.hermesDesktop?.jarvisCalendar?.status(),
+        window.hermesDesktop?.jarvisFileImports?.list()
       ])
 
       if (!isCurrent()) {return}
@@ -179,6 +183,7 @@ export function ConnectionsView() {
 
       const nextCalendar = calendarResult.status === 'fulfilled' ? calendarResult.value ?? null : null
       setCalendar(nextCalendar)
+      setFileImports(fileImportResult.status === 'fulfilled' ? fileImportResult.value ?? null : null)
       // A status refresh cannot prove that a previously read event is still authorized.
       setCalendarEvents(null)
 
@@ -196,6 +201,8 @@ export function ConnectionsView() {
     setAccountState('checking')
     setError(null)
     setCalendar(null)
+    setFileImports(null)
+    setFileImportError(null)
     setCalendarEvents(null)
     setCalendarError(null)
     setCalendarBusy(false)
@@ -219,6 +226,27 @@ export function ConnectionsView() {
   const macStatus = (status?: JarvisPermissionStatus) =>
     status ? statusLabel(status) : permissionsCheckState === 'checking' ? 'Checking' : 'Unavailable'
 
+  const changeFileImportFolder = async (mode: 'allow' | 'block', revoke?: string) => {
+    const owner = calendarScopeRef.current
+    setFileImportBusy(true)
+    setFileImportError(null)
+
+    try {
+      const api = window.hermesDesktop?.jarvisFileImports
+
+      if (!api) {throw new Error('Attachment import settings are unavailable. Update Jarvis and retry.')}
+      const next = revoke ? await api.revokeFolder(revoke) : await api.chooseFolder(mode)
+
+      if (owner === calendarScopeRef.current) {setFileImports(next)}
+    } catch {
+      if (owner === calendarScopeRef.current) {
+        setFileImportError('Could not change attachment import access. Retry from this profile.')
+      }
+    } finally {
+      if (owner === calendarScopeRef.current) {setFileImportBusy(false)}
+    }
+  }
+
   const appStatus = (detected?: boolean) =>
     detected === undefined
       ? permissionsCheckState === 'checking'
@@ -232,9 +260,10 @@ export function ConnectionsView() {
   const matches = (label: string) => label.toLocaleLowerCase().includes(search)
   const accountMatches = matches('ChatGPT / Codex')
   const filesMatch = matches('Files on this Mac')
+  const importsMatch = matches('Attachments Jarvis imports')
   const microphoneMatch = matches('Microphone')
   const computerUseMatch = matches('Computer use')
-  const macMatches = filesMatch || microphoneMatch || computerUseMatch
+  const macMatches = filesMatch || importsMatch || microphoneMatch || computerUseMatch
   const mailMatch = matches('Mail')
   const messagesMatch = matches('Messages')
   const notesMatch = matches('Notes')
@@ -533,6 +562,32 @@ export function ConnectionsView() {
                 label="Files on this Mac"
                 status={<Status active={fullDiskAllowed}>{macStatus(permissions?.fullDiskAccess)}</Status>}
               />
+            ) : null}
+            {importsMatch ? (
+              <div className="border-t border-(--ui-stroke-tertiary)">
+                <ConnectionRow
+                  action={fileImports ? (
+                    <div className="flex gap-2">
+                      <Button disabled={fileImportBusy} onClick={() => void changeFileImportFolder('allow')} size="sm" variant="secondary">Allow folder</Button>
+                      <Button disabled={fileImportBusy} onClick={() => void changeFileImportFolder('block')} size="sm" variant="secondary">Block folder</Button>
+                    </div>
+                  ) : null}
+                  detail="Selected files and allowed folders can be imported as chat attachments. A blocked folder wins over either choice. This does not control terminal, tools, or inline file references."
+                  icon={FileText}
+                  label="Attachments Jarvis imports"
+                  status={<Status>{fileImports ? 'Managed here' : 'Unavailable'}</Status>}
+                />
+                {fileImports?.allowed.map(folder => (
+                  <div className="flex items-center justify-between gap-4 border-t border-(--ui-stroke-tertiary) px-5 py-3" key={`allow:${folder}`}>
+                    <span className="min-w-0 break-all text-sm">Allowed: {folder}</span>
+                    <Button disabled={fileImportBusy} onClick={() => void changeFileImportFolder('block', folder)} size="sm" variant="secondary">Revoke</Button>
+                  </div>
+                ))}
+                {fileImports?.blocked.map(folder => (
+                  <p className="border-t border-(--ui-stroke-tertiary) px-5 py-3 text-sm" key={`block:${folder}`}>Blocked: {folder}</p>
+                ))}
+                {fileImportError ? <p className="px-5 pb-3 text-sm text-destructive" role="alert">{fileImportError}</p> : null}
+              </div>
             ) : null}
             {microphoneMatch ? (
               <ConnectionRow

@@ -198,13 +198,16 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
           onRequest: callback => {
             const channel = 'hermes:screenshot:request'
             const listener = (_event, requestId) => callback(requestId)
+
             if (ipcRenderer.listenerCount(channel) === 0) {
               ipcRenderer.send('hermes:screenshot:subscribe', true)
             }
+
             ipcRenderer.on(channel, listener)
 
             return () => {
               ipcRenderer.removeListener(channel, listener)
+
               if (ipcRenderer.listenerCount(channel) === 0) {
                 ipcRenderer.send('hermes:screenshot:subscribe', false)
               }
@@ -314,6 +317,13 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     openFullDiskAccess: () => ipcRenderer.invoke('jarvis:onboarding-permissions:open-full-disk-access'),
     requestMicrophone: () => ipcRenderer.invoke('jarvis:onboarding-permissions:request-microphone'),
     startCodexOAuth: () => ipcRenderer.invoke('jarvis:codex-oauth:start')
+  },
+  jarvisFileImports: {
+    list: () => ipcRenderer.invoke('jarvis:file-import:list'),
+    assertAllowed: filePath => ipcRenderer.invoke('jarvis:file-import:assert', filePath),
+    admitDrop: filePath => ipcRenderer.invoke('jarvis:file-import:admit-drop', filePath),
+    chooseFolder: mode => ipcRenderer.invoke('jarvis:file-import:choose-folder', mode),
+    revokeFolder: folder => ipcRenderer.invoke('jarvis:file-import:revoke-folder', folder)
   },
   jarvisCalendar: {
     status: () => ipcRenderer.invoke('jarvis:calendar:status'),

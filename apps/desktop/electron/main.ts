@@ -259,6 +259,7 @@ import { resolveHudWindowing } from './hud-windowing'
 import { createIntroRevealWindowController } from './intro-reveal-window'
 import { calendarConnectionScope, calendarRendererMatches, registerJarvisCalendar } from './jarvis-calendar'
 import { registerJarvisCodexOAuth } from './jarvis-codex-oauth'
+import { JarvisFileImportAccess } from './jarvis-file-import-access'
 import { registerJarvisOnboardingPermissions } from './jarvis-onboarding-permissions'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
 import { notifyLauncherWindowRevealed } from './linux-launcher-ready'
@@ -16340,6 +16341,47 @@ const trustedJarvisRenderer = (event: IpcMainInvokeEvent) => {
   ))
 }
 
+const fileImportAccess = new JarvisFileImportAccess(app.getPath('userData'))
+const fileImportScope = (event: IpcMainInvokeEvent): string => {
+  if (!trustedJarvisRenderer(event)) {throw new Error('Untrusted attachment import renderer')}
+  const scope = calendarConnectionScope(
+    windowConnectionRoutes.get(event.sender.id),
+    primaryProfileKey(),
+    event.sender === mainWindow?.webContents
+  )
+  if (!scope) {throw new Error('Attachment import profile is unavailable. Retry after connecting.')}
+  return scope
+}
+
+ipcMain.handle('jarvis:file-import:list', event => fileImportAccess.list(fileImportScope(event)))
+ipcMain.handle('jarvis:file-import:assert', (event, filePath) => {
+  fileImportAccess.assertAllowed(fileImportScope(event), String(filePath || ''))
+  return true
+})
+ipcMain.handle('jarvis:file-import:admit-drop', (event, filePath) => {
+  // Renderer drop admission supports native OS drops. This is a consumer
+  // interaction boundary; it is not a sandbox against a compromised renderer.
+  fileImportAccess.selectFiles(fileImportScope(event), [String(filePath || '')])
+  fileImportAccess.assertAllowed(fileImportScope(event), String(filePath || ''))
+  return true
+})
+ipcMain.handle('jarvis:file-import:choose-folder', async (event, mode) => {
+  const scope = fileImportScope(event)
+  const ownerVersion = windowConnectionRoutes.generation(event.sender.id)
+  if (mode !== 'allow' && mode !== 'block') {throw new Error('Invalid attachment import choice')}
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: mode === 'allow' ? 'Allow attachment imports from folder' : 'Block attachment imports from folder',
+    properties: ['openDirectory']
+  })
+  if (result.canceled || !result.filePaths[0]) {return fileImportAccess.list(scope)}
+  if (fileImportScope(event) !== scope || windowConnectionRoutes.generation(event.sender.id) !== ownerVersion) {
+    throw new Error('Attachment import profile changed. Retry from its Connections settings.')
+  }
+  return fileImportAccess.setFolder(scope, result.filePaths[0], mode)
+})
+ipcMain.handle('jarvis:file-import:revoke-folder', (event, folder) =>
+  fileImportAccess.revokeFolder(fileImportScope(event), String(folder || '')))
+
 registerJarvisOnboardingPermissions({
   ipcMain,
   shell,
@@ -16985,12 +17027,44 @@ ipcMain.handle('hermes:readFileDataUrl', async (_event, filePath) => {
 // Keep a finite cap so Electron + base64 memory stays bounded while archives
 // can exceed the default 16 MiB preview ceiling (and still fit the gateway
 // WebSocket frame limit after base64 expansion).
-ipcMain.handle('hermes:readFileDataUrlForAttach', async (_event, filePath) => {
-  return readFileDataUrlForIpc(filePath, {
-    maxBytes: ATTACHMENT_UPLOAD_DEFAULT_MAX_BYTES,
-    mimeType: mimeTypeForPath(resolveRequestedPathForIpc(filePath, { purpose: 'Attachment upload' })),
-    purpose: 'Attachment upload'
-  })
+ipcMain.handle('hermes:readFileDataUrlForAttach', async (event, filePath) => {
+  const scope = fileImportScope(event)
+  const ownerVersion = windowConnectionRoutes.generation(event.sender.id)
+  const source = String(filePath || '')
+  let resolved: Awaited<ReturnType<typeof resolveReadableFileForIpc>>
+  try {
+    resolved = await resolveReadableFileForIpc(source, {
+      maxBytes: ATTACHMENT_UPLOAD_DEFAULT_MAX_BYTES,
+      purpose: 'Attachment upload'
+    })
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'EFBIG') {
+      throw new Error(`Attachment upload failed: file is too large (limit ${ATTACHMENT_UPLOAD_DEFAULT_MAX_BYTES} bytes).`)
+    }
+    throw new Error('Attachment is unavailable or cannot be read. Choose it again and retry.')
+  }
+  const { realPath, stat } = resolved
+  if (fileImportAccess.assertAllowed(scope, source) !== realPath) {
+    throw new Error('Attachment changed while checking access. Choose it again and retry.')
+  }
+  let handle: fs.promises.FileHandle
+  try {handle = await fs.promises.open(realPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0))}
+  catch {throw new Error('Attachment changed while opening it. Choose it again and retry.')}
+  try {
+    const opened = await handle.stat()
+    if (opened.dev !== stat.dev || opened.ino !== stat.ino || opened.size > ATTACHMENT_UPLOAD_DEFAULT_MAX_BYTES
+      || fileImportAccess.assertAllowed(scope, source) !== realPath) {
+      throw new Error('Attachment changed or access was revoked. Choose it again and retry.')
+    }
+    const data = await handle.readFile()
+    if (fileImportScope(event) !== scope || fileImportAccess.assertAllowed(scope, source) !== realPath
+      || windowConnectionRoutes.generation(event.sender.id) !== ownerVersion) {
+      throw new Error('Attachment import profile or permission changed. Choose the file again and retry.')
+    }
+    return `data:${mimeTypeForPath(source)};base64,${data.toString('base64')}`
+  } finally {
+    await handle.close()
+  }
 })
 
 ipcMain.handle('hermes:readFileText', async (_event, filePath) => {
@@ -17042,7 +17116,12 @@ ipcMain.handle('hermes:readPluginSource', async (_event: unknown, filePath: unkn
   }
 })
 
-ipcMain.handle('hermes:selectPaths', async (_event, options: any = {}) => {
+ipcMain.handle('hermes:selectPaths', async (event, options: any = {}) => {
+  let selectionScope: string | null = null
+  if (!options?.directories && trustedJarvisRenderer(event)) {
+    try {selectionScope = fileImportScope(event)} catch { /* Picker still serves non-attachment flows. */ }
+  }
+  const ownerVersion = windowConnectionRoutes.generation(event.sender.id)
   const properties = options?.directories ? ['openDirectory'] : ['openFile']
 
   if (options?.multiple !== false) {
@@ -17074,6 +17153,13 @@ ipcMain.handle('hermes:selectPaths', async (_event, options: any = {}) => {
 
   if (result.canceled) {
     return []
+  }
+
+  if (selectionScope) {
+    if (fileImportScope(event) !== selectionScope || windowConnectionRoutes.generation(event.sender.id) !== ownerVersion) {
+      throw new Error('Attachment import profile changed. Choose the file again.')
+    }
+    fileImportAccess.selectFiles(selectionScope, result.filePaths)
   }
 
   return result.filePaths
@@ -17169,7 +17255,7 @@ ipcMain.handle('hermes:capturePreview', async (_event, payload) => {
   return capturePreviewContents(guest, payload?.rect, payload?.viewport)
 })
 
-ipcMain.handle('hermes:saveImageBuffer', async (_event, payload) => {
+ipcMain.handle('hermes:saveImageBuffer', async (event, payload) => {
   const data = payload?.data
 
   if (!data) {
@@ -17178,24 +17264,30 @@ ipcMain.handle('hermes:saveImageBuffer', async (_event, payload) => {
 
   const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data)
 
-  return writeComposerImage(buffer, payload?.ext || '.png', payload?.name)
+  const saved = await writeComposerImage(buffer, payload?.ext || '.png', payload?.name)
+  fileImportAccess.selectFiles(fileImportScope(event), [saved])
+  return saved
 })
 
-ipcMain.handle('hermes:savePastedText', async (_event, payload) => {
+ipcMain.handle('hermes:savePastedText', async (event, payload) => {
   const text = typeof payload?.text === 'string' ? payload.text : ''
 
   if (!text) {
     throw new Error('savePastedText: missing text')
   }
 
-  return writeComposerPaste(app.getPath('userData'), text)
+  const saved = await writeComposerPaste(app.getPath('userData'), text)
+  fileImportAccess.selectFiles(fileImportScope(event), [saved])
+  return saved
 })
 
-ipcMain.handle('hermes:saveClipboardImage', async () => {
+ipcMain.handle('hermes:saveClipboardImage', async event => {
   const image = clipboard.readImage()
 
   if (image && !image.isEmpty()) {
-    return writeComposerImage(image.toPNG(), '.png')
+    const saved = await writeComposerImage(image.toPNG(), '.png')
+    fileImportAccess.selectFiles(fileImportScope(event), [saved])
+    return saved
   }
 
   // WSL2/WSLg doesn't bridge clipboard *images* from the Windows host to the
@@ -17205,7 +17297,9 @@ ipcMain.handle('hermes:saveClipboardImage', async () => {
     const png = readWslWindowsClipboardImage()
 
     if (png) {
-      return writeComposerImage(png, '.png')
+      const saved = await writeComposerImage(png, '.png')
+      fileImportAccess.selectFiles(fileImportScope(event), [saved])
+      return saved
     }
   }
 
