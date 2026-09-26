@@ -138,6 +138,26 @@ it('shows safe load failure copy and recovers on explicit Retry load', async () 
   expect(screen.queryByRole('alert')).toBeNull()
 })
 
+it('retries a failed start rather than reloading editions, using the original prompt', async () => {
+  vi.mocked(getFeedEditions).mockResolvedValue([])
+  vi.mocked(generateFeedEdition)
+    .mockRejectedValueOnce(new Error('token=private-value sensitive-path'))
+    .mockResolvedValueOnce(edition)
+  render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Generate' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert.textContent).toContain('Could not start this Feed edition')
+  expect(alert.textContent).not.toContain('private-value')
+  expect(screen.queryByRole('button', { name: 'Retry load' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(await screen.findByText('A saved briefing with a real answer.')).toBeTruthy()
+  expect(generateFeedEdition).toHaveBeenCalledTimes(2)
+  expect(generateFeedEdition).toHaveBeenNthCalledWith(2, 'default', DEFAULT_FEED_PROMPT, undefined, [])
+  expect(getFeedEditions).toHaveBeenCalledTimes(1)
+})
+
 it('labels generated links as unverified on completed editions only', async () => {
   const linked = {
     ...edition,

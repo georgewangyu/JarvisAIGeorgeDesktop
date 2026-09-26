@@ -60,7 +60,7 @@ export function ConsumerFeedEditions() {
   const [snapshot, setSnapshot] = useState<{ items: FeedEdition[]; scope: string }>({ items: [], scope })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<null | string>(null)
+  const [error, setError] = useState<null | { kind: 'load' | 'generate'; message: string; prompt?: string; retry?: FeedEdition }>(null)
   const [refresh, setRefresh] = useState(0)
   const items = snapshot.scope === scope ? snapshot.items : []
   const generating = items.some(item => item.status === 'generating')
@@ -88,7 +88,7 @@ export function ConsumerFeedEditions() {
         }
       })
       .catch(() => {
-        if (!cancelled) {setError('Could not load Feed editions. Check your connection and try again.')}
+        if (!cancelled) {setError({ kind: 'load', message: 'Could not load Feed editions. Check your connection and try again.' })}
       })
       .finally(() => {
         if (!cancelled) {setLoading(false)}
@@ -107,8 +107,8 @@ export function ConsumerFeedEditions() {
     return () => window.clearTimeout(timer)
   }, [generating, loading, refresh])
 
-  const generate = async (retry?: FeedEdition) => {
-    const text = retry?.prompt ?? prompt.trim()
+  const generate = async (retry?: FeedEdition, failedPrompt?: string) => {
+    const text = retry?.prompt ?? failedPrompt ?? prompt.trim()
 
     if (!text || busy || generating) {return}
 
@@ -125,7 +125,14 @@ export function ConsumerFeedEditions() {
         scope
       }))
     } catch {
-      if (activeScope.current === scope) {setError('Could not start this Feed edition. Check your connection and try again.')}
+      if (activeScope.current === scope) {
+        setError({
+          kind: 'generate',
+          message: 'Could not start this Feed edition. Check your connection and try again.',
+          prompt: text,
+          retry
+        })
+      }
     } finally {
       if (activeScope.current === scope) {setBusy(false)}
     }
@@ -211,7 +218,17 @@ export function ConsumerFeedEditions() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {error && <div className="flex items-center gap-3 text-sm text-destructive" role="alert"><span>{error}</span><Button onClick={() => setRefresh(value => value + 1)} size="sm" variant="text">Retry load</Button></div>}
+      {error && <div className="flex items-center gap-3 text-sm text-destructive" role="alert">
+        <span>{error.message}</span>
+        <Button
+          disabled={busy || generating}
+          onClick={() => error.kind === 'load' ? setRefresh(value => value + 1) : void generate(error.retry, error.prompt)}
+          size="sm"
+          variant="text"
+        >
+          {error.kind === 'load' ? 'Retry load' : 'Try again'}
+        </Button>
+      </div>}
       {feedbackError && <p className="text-sm text-destructive" role="alert">{feedbackError}</p>}
       {loading && items.length === 0 ? <p className="text-sm text-(--ui-text-tertiary)" role="status">Loading briefings…</p> : null}
       {!loading && items.length === 0 && !error ? <p className="text-sm text-(--ui-text-tertiary)">No briefings yet. Generate one when you’re ready.</p> : null}
