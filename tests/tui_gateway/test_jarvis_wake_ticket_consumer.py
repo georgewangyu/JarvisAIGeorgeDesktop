@@ -1,6 +1,10 @@
 """One-shot wake tickets use the real profile, lease, claim and turn path."""
 
 import contextlib
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -153,3 +157,123 @@ def test_ticket_cannot_authorize_same_id_in_other_profile(tmp_path, monkeypatch)
             "a", a_event["id"], allow_headless=True, expected_profile_home=b)
     assert agents == []
     assert _ticket(a, a_event).exists()
+
+
+def test_scan_empty_queue_has_no_model_work_and_requires_exact_home(tmp_path, monkeypatch):
+    from tui_gateway.headless_owner_event import scan_one_wake_ticket
+
+    home, event = _profile(tmp_path, "a", wake=False)
+    agents = _synthetic_gateway(monkeypatch, {"a": home})
+    with pytest.raises(ValueError, match="explicit opt-in"):
+        scan_one_wake_ticket("a", expected_profile_home=home)
+    with pytest.raises(ValueError, match="exact expected profile home"):
+        scan_one_wake_ticket("a", allow_headless=True)
+    with pytest.raises(ValueError, match="exact event home"):
+        scan_one_wake_ticket("a", allow_headless=True, expected_profile_home=tmp_path / "b")
+    assert scan_one_wake_ticket("a", allow_headless=True, expected_profile_home=home) == {"status": "empty"}
+    assert event["status"] == "deferred" and agents == []
+
+
+def test_scan_quarantines_orphan_and_malformed_then_consumes_one(tmp_path, monkeypatch):
+    from tui_gateway.headless_owner_event import scan_one_wake_ticket
+
+    home, event = _profile(tmp_path, "a")
+    agents = _synthetic_gateway(monkeypatch, {"a": home})
+    queue = _ticket(home, event).parent
+    (queue / "bad-name").touch(mode=0o600)
+    (queue / ("0" * 64)).touch(mode=0o600)
+    result = scan_one_wake_ticket("a", allow_headless=True, expected_profile_home=home, wait_seconds=10)
+    assert result["status"] == "settled"
+    assert list(queue.iterdir()) == []
+    assert len(list((home / "runtime" / "jarvis_event_wake_quarantine").iterdir())) == 2
+    assert [agent.session_api_calls for agent in agents] == [1]
+    assert scan_one_wake_ticket("a", allow_headless=True, expected_profile_home=home) == {"status": "empty"}
+
+
+def test_scan_claimed_ticket_is_inert_and_no_duplicate_turn(tmp_path, monkeypatch):
+    from tools.bot_live_delivery import _locked, _read, _write
+    from tui_gateway.headless_owner_event import scan_one_wake_ticket
+
+    home, event = _profile(tmp_path, "a")
+    agents = _synthetic_gateway(monkeypatch, {"a": home})
+    with _locked(home) as root:
+        path = root / f"{event['id']}.json"
+        stored = _read(path)
+        stored["status"] = "claimed"
+        _write(path, stored)
+    assert scan_one_wake_ticket("a", allow_headless=True, expected_profile_home=home) == {"status": "empty"}
+    assert not _ticket(home, event).exists()
+    assert agents == []
+
+
+def test_scan_runs_only_one_eligible_ticket_per_process_invocation(tmp_path, monkeypatch):
+    from tui_gateway.headless_owner_event import scan_one_wake_ticket
+    from tui_gateway.owner_event_inbox import admit_jarvis_event
+
+    home, first = _profile(tmp_path, "a")
+    second = admit_jarvis_event(
+        home, source="test", event_id="second", text="Check twice", queue_os_wake=True)
+    agents = _synthetic_gateway(monkeypatch, {"a": home})
+    result = scan_one_wake_ticket(
+        "a", allow_headless=True, expected_profile_home=home, wait_seconds=10)
+    assert result["status"] == "settled"
+    assert sum(_ticket(home, event).exists() for event in (first, second)) == 1
+    assert [agent.session_api_calls for agent in agents] == [1]
+
+
+def test_scan_unclaimable_ticket_leaves_watched_queue_empty(tmp_path, monkeypatch):
+    from tui_gateway import headless_owner_event
+
+    home, event = _profile(tmp_path, "a")
+    _synthetic_gateway(monkeypatch, {"a": home})
+
+    def busy(*_args, **_kwargs):
+        raise RuntimeError("desktop lease is held")
+
+    monkeypatch.setattr(headless_owner_event, "run_one_wake_ticket", busy)
+    result = headless_owner_event.scan_one_wake_ticket(
+        "a", allow_headless=True, expected_profile_home=home)
+    assert result == {"delivery_id": event["id"], "status": "deferred_for_review"}
+    assert not _ticket(home, event).exists()
+    assert list((home / "runtime" / "jarvis_event_wake_quarantine").iterdir())
+
+
+def test_scan_preserves_unknown_claim_outcome_without_replay(tmp_path, monkeypatch):
+    from tools.bot_live_delivery import _locked, _read, _write
+    from tui_gateway import headless_owner_event
+
+    home, event = _profile(tmp_path, "a")
+    agents = _synthetic_gateway(monkeypatch, {"a": home})
+
+    def claimed_then_stopped(*_args, **_kwargs):
+        with _locked(home) as root:
+            path = root / f"{event['id']}.json"
+            stored = _read(path)
+            stored["status"] = "claimed"
+            _write(path, stored)
+        raise RuntimeError("outcome unknown")
+
+    monkeypatch.setattr(headless_owner_event, "run_one_wake_ticket", claimed_then_stopped)
+    result = headless_owner_event.scan_one_wake_ticket(
+        "a", allow_headless=True, expected_profile_home=home)
+    assert result == {"delivery_id": event["id"], "status": "unknown_for_review"}
+    assert not _ticket(home, event).exists()
+    assert agents == []
+
+
+def test_scan_cli_empty_queue_in_fresh_process(tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {key: os.environ[key] for key in ("PATH", "TMPDIR", "LANG") if key in os.environ}
+    env.update({"HERMES_HOME": str(home), "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONPATH": str(Path(__file__).resolve().parents[2])})
+    child = subprocess.run(
+        [sys.executable, "-m", "tui_gateway.headless_owner_event",
+         "--profile", "default", "--scan-wake-queue", "--allow-headless",
+         "--expected-profile-home", str(home)],
+        cwd=Path(__file__).resolve().parents[2], env=env,
+        capture_output=True, text=True, timeout=15,
+    )
+    assert child.returncode == 0, child.stderr
+    # The test isolation launcher may redirect a child process's stdout.
+    assert json.loads(child.stdout or child.stderr) == {"status": "empty"}

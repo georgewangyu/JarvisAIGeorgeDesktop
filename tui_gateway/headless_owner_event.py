@@ -11,12 +11,105 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import threading
 import uuid
 from pathlib import Path
 from typing import Any
 
 _TURN_STOP_GRACE_SECONDS = 3.0
+
+
+def _quarantine_wake_entry(home: Path, name: str) -> bool:
+    """Move one still-present queue entry outside launchd's watched directory."""
+    from tools.bot_live_delivery import _locked
+    from tui_gateway.owner_event_inbox import _checked_wake_queue
+    from utils import fsync_directory
+
+    with _locked(home):
+        queue = _checked_wake_queue(home)
+        entry = queue / name
+        try:
+            entry.lstat()
+        except FileNotFoundError:
+            return False
+        quarantine = home / "runtime" / "jarvis_event_wake_quarantine"
+        quarantine.mkdir(mode=0o700, exist_ok=True)
+        info = quarantine.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o077):
+            raise ValueError("Jarvis wake quarantine is not a private owned directory")
+        target = quarantine / f"{uuid.uuid4().hex}-{name[:120]}"
+        entry.rename(target)
+        fsync_directory(queue)
+        fsync_directory(quarantine)
+        return True
+
+
+def scan_one_wake_ticket(
+    profile: str, *, allow_headless: bool = False,
+    wait_seconds: float = 120.0, expected_profile_home: Path | str | None = None,
+) -> dict[str, Any]:
+    """Scan one profile once; run at most one valid ticket and clear inert entries.
+
+    Invalid and unclaimable entries remain recoverable outside the watched
+    directory. This one-shot command does not install or manage an OS job.
+    """
+    if not allow_headless:
+        raise ValueError("headless event consumption requires explicit opt-in")
+    if not isinstance(profile, str) or not profile.strip():
+        raise ValueError("an exact profile name is required")
+    if expected_profile_home is None:
+        raise ValueError("queue scan requires the exact expected profile home")
+
+    from tui_gateway import server
+    from tui_gateway.owner_event_inbox import _checked_wake_queue, read_jarvis_wake_ticket
+
+    resolved = server._profile_home(profile.strip())
+    home = Path(resolved or server._hermes_home).resolve()
+    if home != Path(expected_profile_home).resolve():
+        raise ValueError("resolved profile does not match the exact event home")
+    try:
+        queue = _checked_wake_queue(home)
+    except FileNotFoundError:
+        return {"status": "empty"}
+
+    # Names are opaque nominations. Revalidation happens under the mailbox
+    # lock in read_jarvis_wake_ticket and again in run_one_wake_ticket.
+    candidate = None
+    for entry in sorted(queue.iterdir(), key=lambda item: item.name):
+        try:
+            read_jarvis_wake_ticket(home, entry.name)
+        except (OSError, ValueError):
+            _quarantine_wake_entry(home, entry.name)
+            continue
+        if candidate is None:
+            candidate = entry.name
+    if candidate is None:
+        return {"status": "empty"}
+    try:
+        return run_one_wake_ticket(
+            profile, candidate, allow_headless=True,
+            wait_seconds=wait_seconds, expected_profile_home=home)
+    except Exception:
+        # A competing desktop lease, changed owner, or race cannot leave a
+        # watched ticket behind to relaunch indefinitely. Preserve for review.
+        _quarantine_wake_entry(home, candidate)
+        from tools.bot_live_delivery import read_delivery_result
+
+        try:
+            receipt = read_delivery_result(home, candidate)
+        except (OSError, ValueError):
+            receipt = None
+        state = receipt.get("status") if isinstance(receipt, dict) else None
+        if state in {"settled", "failed", "cancelled"}:
+            status = state
+        elif state == "deferred":
+            status = "deferred_for_review"
+        else:
+            # Claimed and unreadable receipts have an unknown turn outcome.
+            status = "unknown_for_review"
+        return {"delivery_id": candidate, "status": status}
 
 
 def _retire_consumed_wake_ticket(home: Path, delivery_id: str) -> bool:
@@ -263,19 +356,31 @@ def run_one_deferred_event(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Consume one exact deferred Jarvis event")
     parser.add_argument("--profile", required=True)
-    parser.add_argument("--delivery-id", required=True)
+    parser.add_argument("--delivery-id")
     parser.add_argument("--allow-headless", action="store_true")
     parser.add_argument("--wait-seconds", type=float, default=120.0)
     parser.add_argument("--expected-profile-home")
-    parser.add_argument("--wake-ticket", action="store_true",
-                        help="require one exact opted-in opaque OS wake ticket")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--wake-ticket", action="store_true",
+                      help="require one exact opted-in opaque OS wake ticket")
+    mode.add_argument("--scan-wake-queue", action="store_true",
+                      help="scan one exact profile's opaque OS wake queue once")
     args = parser.parse_args(argv)
-    consumer = run_one_wake_ticket if args.wake_ticket else run_one_deferred_event
-    receipt = consumer(
-        args.profile, args.delivery_id, allow_headless=args.allow_headless,
-        wait_seconds=args.wait_seconds, expected_profile_home=args.expected_profile_home)
-    print(json.dumps({"delivery_id": receipt["delivery_id"], "status": receipt["status"]}), flush=True)
-    return 0 if receipt["status"] in {"settled", "failed", "cancelled"} else 2
+    if args.scan_wake_queue:
+        if args.delivery_id is not None or args.expected_profile_home is None:
+            parser.error("queue scan requires --expected-profile-home and no --delivery-id")
+        receipt = scan_one_wake_ticket(
+            args.profile, allow_headless=args.allow_headless,
+            wait_seconds=args.wait_seconds, expected_profile_home=args.expected_profile_home)
+    else:
+        if args.delivery_id is None:
+            parser.error("--delivery-id is required outside queue scan mode")
+        consumer = run_one_wake_ticket if args.wake_ticket else run_one_deferred_event
+        receipt = consumer(
+            args.profile, args.delivery_id, allow_headless=args.allow_headless,
+            wait_seconds=args.wait_seconds, expected_profile_home=args.expected_profile_home)
+    print(json.dumps({key: receipt[key] for key in ("delivery_id", "status") if key in receipt}), flush=True)
+    return 0 if receipt["status"] in {"empty", "settled", "failed", "cancelled", "deferred_for_review"} else 2
 
 
 if __name__ == "__main__":
