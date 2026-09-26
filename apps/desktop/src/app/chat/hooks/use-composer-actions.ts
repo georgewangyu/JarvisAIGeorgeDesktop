@@ -419,11 +419,11 @@ export function useComposerActions({
       for (const path of paths) {
         if (kind === 'file') {
           try {await assertPickedFileImport(path)}
-          catch (error) {
+          catch {
             notify({
               kind: 'warning',
               title: 'Could not attach file',
-              message: error instanceof Error ? error.message : 'Check attachment access in Connections & permissions.'
+              message: 'This file cannot be imported. Review attachment access in Connections & permissions, then retry.'
             })
 
             continue
@@ -583,11 +583,11 @@ export function useComposerActions({
 
     for (const path of paths) {
       try {await assertPickedFileImport(path)}
-      catch (error) {
+      catch {
         notify({
           kind: 'warning',
           title: 'Could not attach image',
-          message: error instanceof Error ? error.message : 'Check attachment access in Connections & permissions.'
+          message: 'This image cannot be imported. Review attachment access in Connections & permissions, then retry.'
         })
 
         continue

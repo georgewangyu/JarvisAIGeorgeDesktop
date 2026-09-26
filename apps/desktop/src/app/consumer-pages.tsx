@@ -58,6 +58,10 @@ function EmptyState({ children, icon, title }: { children: ReactNode; icon: stri
 }
 
 function formatRelativeTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return 'Recently'
+  }
+
   const elapsed = Math.max(0, Date.now() - seconds * 1000)
   const minutes = Math.floor(elapsed / 60_000)
 

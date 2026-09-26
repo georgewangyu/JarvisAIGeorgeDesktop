@@ -48,6 +48,15 @@ it('opens a real recent conversation from Feed', () => {
   expect(screen.getByText('Opened recent chat')).toBeTruthy()
 })
 
+it('shows a neutral time when a fresh chat has no valid activity timestamp yet', () => {
+  $sessions.set([makeSessionInfo({ id: 'fresh-chat', last_active: Number.NaN, title: 'Jarvis' })])
+
+  render(<MemoryRouter><ConsumerFeedView /></MemoryRouter>)
+
+  expect(screen.getByRole('button', { name: /Jarvis.*Recently/ })).toBeTruthy()
+  expect(screen.queryByText(/NaN/)).toBeNull()
+})
+
 it('never exposes background or messaging sessions as recent chats', () => {
   $sessions.set([
     makeSessionInfo({ id: 'main', source: 'desktop', title: 'My main chat', last_active: 1 }),
