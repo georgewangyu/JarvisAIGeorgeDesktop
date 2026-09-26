@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import { I18nProvider } from '@/i18n/context'
 import { $connection } from '@/store/session'
 
 import { ConsumerChatExportSettings } from './consumer-chat-export-settings'
@@ -140,4 +141,40 @@ it('retires a previous success before a new export that the backend refuses', as
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(screen.queryByText('2 chats saved to the location you chose.')).toBeNull()
   expect(exportChats).toHaveBeenNthCalledWith(2, 'synthetic', '/synthetic/chat-history.jsonl')
+})
+
+it.each([
+  ['ja', 'あなたのデータ', 'Jarvisのローカルデータをダウンロード', '保存先を選択', '完全または復元可能なバックアップではありません', 'ローカルコピーを保存しました：チャット2件、アップロード画像1枚。'],
+  ['zh', '你的数据', '下载本地 Jarvis 数据', '选择保存位置', '不是完整或可恢复的备份', '已保存本地副本：2 个聊天和 1 张上传的图片。'],
+  ['zh-hant', '你的資料', '下載本機 Jarvis 資料', '選擇儲存位置', '不是完整或可還原的備份', '已儲存本機副本：2 個聊天及 1 張上傳的圖片。']
+] as const)('localizes the bounded local export flow in %s', async (locale, title, download, choose, disclosure, saved) => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { selectSavePath: pick }
+  pick.mockResolvedValue('/synthetic/local-data.zip')
+  exportLocalData.mockResolvedValue({ ok: true, chats: 2, images: 1 })
+  render(<I18nProvider configClient={null} initialLocale={locale}><ConsumerChatExportSettings profile="writer" /></I18nProvider>)
+
+  expect(screen.getByRole('heading', { name: title })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: download }))
+  expect(screen.getByText(new RegExp(disclosure))).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: choose }))
+  expect(await screen.findByRole('status')).toHaveProperty('textContent', saved)
+  expect(pick).toHaveBeenCalledWith(expect.objectContaining({ title: expect.not.stringContaining('Save local Jarvis data') }))
+})
+
+it('localizes Japanese chat disclosure, failure, and remote-only state', async () => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { selectSavePath: pick }
+  pick.mockResolvedValue('/synthetic/history.jsonl')
+  exportChats.mockRejectedValue(new Error('refused'))
+  const view = render(<I18nProvider configClient={null} initialLocale="ja"><ConsumerChatExportSettings profile="writer" /></I18nProvider>)
+
+  fireEvent.click(screen.getByRole('button', { name: 'チャット履歴をダウンロード' }))
+  expect(screen.getByText(/ファイルやログイン認証情報は含まれません/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: '保存先を選択' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('チャット履歴を保存できませんでした')
+  $connection.set({ mode: 'remote' } as NonNullable<ReturnType<typeof $connection.get>>)
+  view.rerender(<I18nProvider configClient={null} initialLocale="ja"><ConsumerChatExportSettings profile="writer" /></I18nProvider>)
+  expect(screen.getByText('JarvisがこのMacで実行中の場合に利用できます。')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'チャット履歴をダウンロード' }).hasAttribute('disabled')).toBe(true)
 })

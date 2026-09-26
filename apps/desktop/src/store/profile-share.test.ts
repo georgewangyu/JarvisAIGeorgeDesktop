@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { setRuntimeI18nLocale } from '@/i18n/runtime'
 import type { DesktopTheme } from '@/themes/types'
 import type { ProfileDesktopOverlay } from '@/types/hermes'
 
@@ -49,6 +50,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks()
+  setRuntimeI18nLocale('en')
 })
 
 describe('buildDesktopOverlay', () => {
@@ -145,9 +147,36 @@ describe('exportProfileBundle', () => {
       await runExportProfileFlow('glam', { consumer: true })
       expect($notifications.get()).toEqual([])
       await runExportProfileFlow('glam')
+      expect(window.hermesDesktop?.selectSavePath).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        filters: [{ extensions: ['tar.gz', 'tgz'], name: 'Hermes profile' }]
+      }))
       expect(exportConsumerSetupArchive).toHaveBeenCalledTimes(1)
       expect(exportProfileArchive).toHaveBeenCalledTimes(1)
       expect($notifications.get().some(notification => notification.message === '/tmp/out.tar.gz')).toBe(true)
+    } finally {
+      window.hermesDesktop = original
+    }
+  })
+
+  it.each([
+    ['en', 'Save assistant setup', 'Jarvis setup'],
+    ['ja', 'アシスタント設定を保存', 'Jarvisの設定'],
+    ['zh', '保存助手设置', 'Jarvis 设置'],
+    ['zh-hant', '儲存助理設定', 'Jarvis 設定']
+  ] as const)('localizes the consumer save picker in %s', async (locale, title, filterName) => {
+    const original = window.hermesDesktop
+    const selectSavePath = vi.fn(async () => null)
+    window.hermesDesktop = { ...original, selectSavePath } as typeof original
+    setRuntimeI18nLocale(locale)
+
+    try {
+      await runExportProfileFlow('default', { consumer: true })
+      expect(selectSavePath).toHaveBeenCalledWith({
+        title,
+        defaultPath: 'Jarvis-setup.tar.gz',
+        filters: [{ extensions: ['tar.gz', 'tgz'], name: filterName }]
+      })
+      expect(exportConsumerSetupArchive).not.toHaveBeenCalled()
     } finally {
       window.hermesDesktop = original
     }

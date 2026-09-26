@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
+import { I18nProvider } from '@/i18n/context'
 import { $connection } from '@/store/session'
 
 import { ConsumerBackupSettings } from './consumer-backup-settings'
@@ -87,4 +88,35 @@ it('retires an old profile save and lets the new profile start another', async (
   await waitFor(() => expect(exportFlow).toHaveBeenCalledWith('reader', expect.objectContaining({ consumer: true })))
   expect((await screen.findByRole('status')).textContent).toBe('Assistant setup saved to the location you chose.')
   finishOld()
+})
+
+it.each([
+  ['ja', 'アシスタント設定をバックアップ', '設定のバックアップを保存', 'チャット履歴、ルーチン、ログイン用ファイル、内部ワーカーデータは含まれません', 'アシスタント設定を選択した保存先に保存しました。'],
+  ['zh', '备份助手设置', '保存设置备份', '不包含聊天记录、例行任务、登录文件或内部工作进程数据', '已将助手设置保存到所选位置。'],
+  ['zh-hant', '備份助理設定', '儲存設定備份', '不包含聊天記錄、例行工作、登入檔案或內部工作程序資料', '已將助理設定儲存到所選位置。']
+] as const)('localizes the setup backup scope and success in %s', async (locale, title, save, excluded, saved) => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  exportFlow.mockResolvedValue('/synthetic/backup.tar.gz')
+  render(<I18nProvider configClient={null} initialLocale={locale}><ConsumerBackupSettings profile="writer" /></I18nProvider>)
+
+  expect(screen.getByRole('heading', { name: title })).toBeTruthy()
+  expect(screen.getByText(new RegExp(excluded))).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: save }))
+  expect((await screen.findByRole('status')).textContent).toBe(saved)
+  expect(screen.queryByText('/synthetic/backup.tar.gz')).toBeNull()
+})
+
+it('localizes Japanese disabled and retryable error states', async () => {
+  $connection.set({ mode: 'remote' } as NonNullable<ReturnType<typeof $connection.get>>)
+  const view = render(<I18nProvider configClient={null} initialLocale="ja"><ConsumerBackupSettings profile="writer" /></I18nProvider>)
+  expect(screen.getByRole('button', { name: '設定のバックアップを保存' }).hasAttribute('disabled')).toBe(true)
+  expect(screen.getByText('JarvisがこのMacで実行中の場合に利用できます。')).toBeTruthy()
+
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  exportFlow.mockRejectedValueOnce(new Error('refused')).mockResolvedValueOnce('/synthetic/backup.tar.gz')
+  view.rerender(<I18nProvider configClient={null} initialLocale="ja"><ConsumerBackupSettings profile="writer" /></I18nProvider>)
+  fireEvent.click(screen.getByRole('button', { name: '設定のバックアップを保存' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('アシスタント設定を保存できませんでした')
+  fireEvent.click(screen.getByRole('button', { name: '設定のバックアップを保存' }))
+  expect((await screen.findByRole('status')).textContent).toBe('アシスタント設定を選択した保存先に保存しました。')
 })

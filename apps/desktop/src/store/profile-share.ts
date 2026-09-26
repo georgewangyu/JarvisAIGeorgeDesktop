@@ -17,6 +17,7 @@ import { isLayoutNode, normalize } from '@/components/pane-shell/tree/model'
 import { $layoutTree, markActivePreset, persistTree } from '@/components/pane-shell/tree/store'
 import { exportConsumerSetupArchive, exportProfileArchive, importProfileArchive } from '@/hermes'
 import { translateNow } from '@/i18n'
+import { jarvisCopyNow } from '@/i18n/jarvis'
 import { modePref, skinPref, type ThemeMode } from '@/themes/context'
 import { BUILTIN_THEMES } from '@/themes/presets'
 import type { DesktopTheme } from '@/themes/types'
@@ -177,10 +178,12 @@ export async function runExportProfileFlow(profile?: string, options?: { consume
     return null
   }
 
+  const consumerCopy = options?.consumer ? jarvisCopyNow().backupExport : null
+
   const output = await pick({
-    title: options?.consumer ? 'Save assistant setup' : translateNow('profiles.exportProfile'),
+    title: consumerCopy?.dialogTitle ?? translateNow('profiles.exportProfile'),
     defaultPath: options?.consumer && target === 'default' ? 'Jarvis-setup.tar.gz' : `${target}.tar.gz`,
-    filters: ARCHIVE_FILTERS
+    filters: consumerCopy ? [{ extensions: ['tar.gz', 'tgz'], name: consumerCopy.archiveFilter }] : ARCHIVE_FILTERS
   })
 
   if (!output || options?.shouldContinue?.() === false) {

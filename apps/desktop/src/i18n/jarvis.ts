@@ -1,5 +1,7 @@
 import { useI18n } from '@/i18n'
 
+import { getRuntimeI18nLocale } from './runtime'
+
 const copy = {
   en: {
     activity: 'Jarvis activity',
@@ -21,6 +23,34 @@ const copy = {
     dataControls: {
       title: 'Data controls',
       detail: 'Save copies of the local data Jarvis can currently export. These are not a complete backup or a way to delete your data.'
+    },
+    chatExport: {
+      title: 'Your data',
+      detail: 'Save a local copy of visible chats, reviewed assistant setup, and uploaded images from those chats. It can contain personal details. Credentials, routines, generated files, and other agent data are not included.',
+      localDownload: 'Download local Jarvis data',
+      localHint: 'Need only the conversation text? Save chat history separately.',
+      chatDownload: 'Download chat history',
+      localOnly: 'Available when Jarvis is running on this Mac.',
+      chatConfirmTitle: 'Download chat history?',
+      chatConfirmDetail: 'Save a local copy of visible Jarvis chats from this profile. The file may contain sensitive conversation text. It does not include files or sign-in credentials.',
+      localConfirmTitle: 'Download local Jarvis data?',
+      localConfirmDetail: 'Save visible chats, selected setup and memory notes, and verified uploaded images from this profile. The archive may contain sensitive personal information. It excludes sign-in credentials, routines, generated files, and other agent data; it is not a complete or restorable backup.',
+      cancel: 'Cancel', choose: 'Choose save location', saving: 'Saving…',
+      chatSaveTitle: 'Save Jarvis chat history', localSaveTitle: 'Save local Jarvis data', zipArchive: 'ZIP archive',
+      saveUnavailable: 'The Mac save dialog is unavailable. Try again.',
+      chatSaveError: 'Could not save chat history. Choose another location and try again.',
+      localSaveError: 'Could not save local data. Choose another location and try again.',
+      chatSaved: (count: number) => `${count} ${count === 1 ? 'chat' : 'chats'} saved to the location you chose.`,
+      localSaved: (chats: number, images: number) => `Local copy saved: ${chats} ${chats === 1 ? 'chat' : 'chats'} and ${images} uploaded ${images === 1 ? 'image' : 'images'}.`
+    },
+    backupExport: {
+      title: 'Back up assistant setup',
+      detail: 'Save selected preferences, skill instructions, and memory notes. The file may contain personal details; chat history, routines, sign-in files, and internal worker data aren’t included.',
+      dialogTitle: 'Save assistant setup', archiveFilter: 'Jarvis setup',
+      save: 'Save setup backup', saving: 'Saving…', localOnly: 'Available when Jarvis is running on this Mac.',
+      saveUnavailable: 'The Mac save dialog is unavailable. Try again.',
+      saveError: 'Couldn’t save assistant setup. Choose another location and try again.',
+      saved: 'Assistant setup saved to the location you chose.'
     },
     storyLove: {
       love: 'Love',
@@ -104,6 +134,34 @@ const copy = {
       title: 'データ管理',
       detail: 'Jarvisが現在書き出せるローカルデータのコピーを保存できます。完全なバックアップではなく、データを削除する機能でもありません。'
     },
+    chatExport: {
+      title: 'あなたのデータ',
+      detail: '表示中のチャット、確認済みのアシスタント設定、そのチャットでアップロードした画像のローカルコピーを保存します。個人情報が含まれる場合があります。認証情報、ルーチン、生成ファイル、その他のエージェントデータは含まれません。',
+      localDownload: 'Jarvisのローカルデータをダウンロード',
+      localHint: '会話のテキストだけが必要な場合は、チャット履歴を別に保存できます。',
+      chatDownload: 'チャット履歴をダウンロード',
+      localOnly: 'JarvisがこのMacで実行中の場合に利用できます。',
+      chatConfirmTitle: 'チャット履歴をダウンロードしますか？',
+      chatConfirmDetail: 'このプロファイルの表示中のJarvisチャットをローカルに保存します。会話の機密情報が含まれる場合があります。ファイルやログイン認証情報は含まれません。',
+      localConfirmTitle: 'Jarvisのローカルデータをダウンロードしますか？',
+      localConfirmDetail: 'このプロファイルの表示中のチャット、選択された設定とメモリーノート、確認済みのアップロード画像を保存します。アーカイブには個人情報が含まれる場合があります。ログイン認証情報、ルーチン、生成ファイル、その他のエージェントデータは含まれず、完全または復元可能なバックアップではありません。',
+      cancel: 'キャンセル', choose: '保存先を選択', saving: '保存中…',
+      chatSaveTitle: 'Jarvisのチャット履歴を保存', localSaveTitle: 'Jarvisのローカルデータを保存', zipArchive: 'ZIPアーカイブ',
+      saveUnavailable: 'Macの保存ダイアログを開けません。もう一度お試しください。',
+      chatSaveError: 'チャット履歴を保存できませんでした。別の保存先を選んで再試行してください。',
+      localSaveError: 'ローカルデータを保存できませんでした。別の保存先を選んで再試行してください。',
+      chatSaved: (count: number) => `${count}件のチャットを選択した保存先に保存しました。`,
+      localSaved: (chats: number, images: number) => `ローカルコピーを保存しました：チャット${chats}件、アップロード画像${images}枚。`
+    },
+    backupExport: {
+      title: 'アシスタント設定をバックアップ',
+      detail: '選択した設定、スキルの指示、メモリーノートを保存します。個人情報が含まれる場合があります。チャット履歴、ルーチン、ログイン用ファイル、内部ワーカーデータは含まれません。',
+      dialogTitle: 'アシスタント設定を保存', archiveFilter: 'Jarvisの設定',
+      save: '設定のバックアップを保存', saving: '保存中…', localOnly: 'JarvisがこのMacで実行中の場合に利用できます。',
+      saveUnavailable: 'Macの保存ダイアログを開けません。もう一度お試しください。',
+      saveError: 'アシスタント設定を保存できませんでした。別の保存先を選んで再試行してください。',
+      saved: 'アシスタント設定を選択した保存先に保存しました。'
+    },
     storyLove: {
       love: 'お気に入り',
       loved: 'お気に入り済み',
@@ -183,6 +241,34 @@ const copy = {
     dataControls: {
       title: '数据管理',
       detail: '保存 Jarvis 目前可导出的本地数据副本。这不是完整备份，也不能用来删除你的数据。'
+    },
+    chatExport: {
+      title: '你的数据',
+      detail: '保存可见聊天、已审核的助手设置以及这些聊天中上传的图片的本地副本。内容可能包含个人信息。不包含凭据、例行任务、生成的文件及其他代理数据。',
+      localDownload: '下载本地 Jarvis 数据',
+      localHint: '只需要对话文本？可单独保存聊天记录。',
+      chatDownload: '下载聊天记录',
+      localOnly: '仅在 Jarvis 于这台 Mac 上运行时可用。',
+      chatConfirmTitle: '下载聊天记录？',
+      chatConfirmDetail: '保存此配置文件中可见的 Jarvis 聊天的本地副本。文件可能包含敏感对话内容。不包含文件或登录凭据。',
+      localConfirmTitle: '下载本地 Jarvis 数据？',
+      localConfirmDetail: '保存此配置文件中可见的聊天、选定的设置与记忆笔记，以及经过核实的上传图片。压缩包可能包含敏感个人信息。不包含登录凭据、例行任务、生成的文件及其他代理数据；它不是完整或可恢复的备份。',
+      cancel: '取消', choose: '选择保存位置', saving: '正在保存…',
+      chatSaveTitle: '保存 Jarvis 聊天记录', localSaveTitle: '保存本地 Jarvis 数据', zipArchive: 'ZIP 压缩包',
+      saveUnavailable: '无法打开 Mac 保存对话框，请重试。',
+      chatSaveError: '无法保存聊天记录。请选择其他位置后重试。',
+      localSaveError: '无法保存本地数据。请选择其他位置后重试。',
+      chatSaved: (count: number) => `已将 ${count} 个聊天保存到所选位置。`,
+      localSaved: (chats: number, images: number) => `已保存本地副本：${chats} 个聊天和 ${images} 张上传的图片。`
+    },
+    backupExport: {
+      title: '备份助手设置',
+      detail: '保存选定的偏好设置、技能指令和记忆笔记。文件可能包含个人信息；不包含聊天记录、例行任务、登录文件或内部工作进程数据。',
+      dialogTitle: '保存助手设置', archiveFilter: 'Jarvis 设置',
+      save: '保存设置备份', saving: '正在保存…', localOnly: '仅在 Jarvis 于这台 Mac 上运行时可用。',
+      saveUnavailable: '无法打开 Mac 保存对话框，请重试。',
+      saveError: '无法保存助手设置。请选择其他位置后重试。',
+      saved: '已将助手设置保存到所选位置。'
     },
     storyLove: {
       love: '喜欢',
@@ -264,6 +350,34 @@ const copy = {
       title: '資料管理',
       detail: '儲存 Jarvis 目前可匯出的本機資料副本。這不是完整備份，也無法用來刪除你的資料。'
     },
+    chatExport: {
+      title: '你的資料',
+      detail: '儲存可見聊天、已檢視的助理設定，以及這些聊天中上傳圖片的本機副本。內容可能包含個人資料。不包含憑證、例行工作、產生的檔案及其他代理程式資料。',
+      localDownload: '下載本機 Jarvis 資料',
+      localHint: '只需要對話文字？可以另外儲存聊天記錄。',
+      chatDownload: '下載聊天記錄',
+      localOnly: '僅在 Jarvis 於這台 Mac 上執行時可用。',
+      chatConfirmTitle: '下載聊天記錄？',
+      chatConfirmDetail: '儲存此設定檔中可見 Jarvis 聊天的本機副本。檔案可能包含敏感對話內容。不包含檔案或登入憑證。',
+      localConfirmTitle: '下載本機 Jarvis 資料？',
+      localConfirmDetail: '儲存此設定檔中可見的聊天、選定的設定與記憶筆記，以及經過確認的上傳圖片。壓縮檔可能包含敏感個人資料。不包含登入憑證、例行工作、產生的檔案及其他代理程式資料；它不是完整或可還原的備份。',
+      cancel: '取消', choose: '選擇儲存位置', saving: '正在儲存…',
+      chatSaveTitle: '儲存 Jarvis 聊天記錄', localSaveTitle: '儲存本機 Jarvis 資料', zipArchive: 'ZIP 壓縮檔',
+      saveUnavailable: '無法開啟 Mac 儲存對話框，請重試。',
+      chatSaveError: '無法儲存聊天記錄。請選擇其他位置後重試。',
+      localSaveError: '無法儲存本機資料。請選擇其他位置後重試。',
+      chatSaved: (count: number) => `已將 ${count} 個聊天儲存到所選位置。`,
+      localSaved: (chats: number, images: number) => `已儲存本機副本：${chats} 個聊天及 ${images} 張上傳的圖片。`
+    },
+    backupExport: {
+      title: '備份助理設定',
+      detail: '儲存選定的偏好設定、技能指示和記憶筆記。檔案可能包含個人資料；不包含聊天記錄、例行工作、登入檔案或內部工作程序資料。',
+      dialogTitle: '儲存助理設定', archiveFilter: 'Jarvis 設定',
+      save: '儲存設定備份', saving: '正在儲存…', localOnly: '僅在 Jarvis 於這台 Mac 上執行時可用。',
+      saveUnavailable: '無法開啟 Mac 儲存對話框，請重試。',
+      saveError: '無法儲存助理設定。請選擇其他位置後重試。',
+      saved: '已將助理設定儲存到所選位置。'
+    },
     storyLove: {
       love: '喜歡',
       loved: '已喜歡',
@@ -327,6 +441,12 @@ const copy = {
 
 export function useJarvisCopy() {
   const { locale } = useI18n()
+
+  return copy[locale as keyof typeof copy] ?? copy.en
+}
+
+export function jarvisCopyNow() {
+  const locale = getRuntimeI18nLocale()
 
   return copy[locale as keyof typeof copy] ?? copy.en
 }

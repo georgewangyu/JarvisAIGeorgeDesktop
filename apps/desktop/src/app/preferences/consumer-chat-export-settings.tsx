@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { exportConsumerChatHistory, exportConsumerLocalData } from '@/hermes'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { $connection } from '@/store/session'
 
 export function ConsumerChatExportSettings({ profile }: { profile: string }) {
+  const s = useJarvisCopy().chatExport
   const connection = useStore($connection)
   const local = connection?.mode === 'local'
   const request = useRef(0)
@@ -41,7 +43,7 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
     const pick = window.hermesDesktop?.selectSavePath
 
     if (!pick) {
-      setError('The Mac save dialog is unavailable. Try again.')
+      setError(s.saveUnavailable)
 
       return
     }
@@ -55,7 +57,7 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
       const output = await pick({
         defaultPath: 'Jarvis-chat-history.jsonl',
         filters: [{ extensions: ['jsonl'], name: 'JSON Lines' }],
-        title: 'Save Jarvis chat history'
+        title: s.chatSaveTitle
       })
 
       if (!output || request.current !== current) {return}
@@ -64,10 +66,10 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
       if (request.current !== current) {return}
 
       if (!saved.ok) {throw new Error('Export was not completed')}
-      setResult(`${saved.chats} ${saved.chats === 1 ? 'chat' : 'chats'} saved to the location you chose.`)
+      setResult(s.chatSaved(saved.chats))
       setOpen(false)
     } catch {
-      if (request.current === current) {setError('Could not save chat history. Choose another location and try again.')}
+      if (request.current === current) {setError(s.chatSaveError)}
     } finally {
       if (request.current === current) {setBusy(false)}
     }
@@ -78,7 +80,7 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
     const pick = window.hermesDesktop?.selectSavePath
 
     if (!pick) {
-      setLocalError('The Mac save dialog is unavailable. Try again.')
+      setLocalError(s.saveUnavailable)
 
       return
     }
@@ -91,8 +93,8 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
     try {
       const output = await pick({
         defaultPath: 'Jarvis-local-data.zip',
-        filters: [{ extensions: ['zip'], name: 'ZIP archive' }],
-        title: 'Save local Jarvis data'
+        filters: [{ extensions: ['zip'], name: s.zipArchive }],
+        title: s.localSaveTitle
       })
 
       if (!output || request.current !== current) {return}
@@ -101,10 +103,10 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
       if (request.current !== current) {return}
 
       if (!saved.ok) {throw new Error('Export was not completed')}
-      setLocalResult(`Local copy saved: ${saved.chats} ${saved.chats === 1 ? 'chat' : 'chats'} and ${saved.images} uploaded ${saved.images === 1 ? 'image' : 'images'}.`)
+      setLocalResult(s.localSaved(saved.chats, saved.images))
       setLocalOpen(false)
     } catch {
-      if (request.current === current) {setLocalError('Could not save local data. Choose another location and try again.')}
+      if (request.current === current) {setLocalError(s.localSaveError)}
     } finally {
       if (request.current === current) {setLocalBusy(false)}
     }
@@ -112,45 +114,43 @@ export function ConsumerChatExportSettings({ profile }: { profile: string }) {
 
   return (
     <section className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
-      <h2 className="text-base font-semibold">Your data</h2>
+      <h2 className="text-base font-semibold">{s.title}</h2>
       <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-        Save a local copy of visible chats, reviewed assistant setup, and uploaded images from those chats. It can contain personal details. Credentials, routines, generated files, and other agent data are not included.
+        {s.detail}
       </p>
       <Button className="mt-4" disabled={!local} onClick={() => {setLocalError(''); setLocalResult(''); setLocalOpen(true)}} variant="secondary">
-        Download local Jarvis data
+        {s.localDownload}
       </Button>
       {localResult && <p className="mt-2 text-sm" role="status">{localResult}</p>}
-      <p className="mt-5 max-w-xl text-sm text-muted-foreground">Need only the conversation text? Save chat history separately.</p>
+      <p className="mt-5 max-w-xl text-sm text-muted-foreground">{s.localHint}</p>
       <Button className="mt-4" disabled={!local} onClick={() => {setError(''); setResult(''); setOpen(true)}} variant="secondary">
-        Download chat history
+        {s.chatDownload}
       </Button>
-      {!local && <p className="mt-2 text-xs text-muted-foreground">Available when Jarvis is running on this Mac.</p>}
+      {!local && <p className="mt-2 text-xs text-muted-foreground">{s.localOnly}</p>}
       {result && <p className="mt-2 text-sm" role="status">{result}</p>}
       <Dialog onOpenChange={setOpen} open={open}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Download chat history?</DialogTitle>
-            <DialogDescription>Save a local copy of visible Jarvis chats from this profile. The file may contain sensitive conversation text. It does not include files or sign-in credentials.</DialogDescription>
+            <DialogTitle>{s.chatConfirmTitle}</DialogTitle>
+            <DialogDescription>{s.chatConfirmDetail}</DialogDescription>
           </DialogHeader>
           {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
           <DialogFooter>
-            <Button disabled={busy} onClick={() => setOpen(false)} variant="outline">Cancel</Button>
-            <Button disabled={busy} onClick={() => void download()}>{busy ? 'Saving…' : 'Choose save location'}</Button>
+            <Button disabled={busy} onClick={() => setOpen(false)} variant="outline">{s.cancel}</Button>
+            <Button disabled={busy} onClick={() => void download()}>{busy ? s.saving : s.choose}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog onOpenChange={setLocalOpen} open={localOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Download local Jarvis data?</DialogTitle>
-            <DialogDescription>
-              Save visible chats, selected setup and memory notes, and verified uploaded images from this profile. The archive may contain sensitive personal information. It excludes sign-in credentials, routines, generated files, and other agent data; it is not a complete or restorable backup.
-            </DialogDescription>
+            <DialogTitle>{s.localConfirmTitle}</DialogTitle>
+            <DialogDescription>{s.localConfirmDetail}</DialogDescription>
           </DialogHeader>
           {localError && <p className="text-sm text-destructive" role="alert">{localError}</p>}
           <DialogFooter>
-            <Button disabled={localBusy} onClick={() => setLocalOpen(false)} variant="outline">Cancel</Button>
-            <Button disabled={localBusy} onClick={() => void downloadLocalData()}>{localBusy ? 'Saving…' : 'Choose save location'}</Button>
+            <Button disabled={localBusy} onClick={() => setLocalOpen(false)} variant="outline">{s.cancel}</Button>
+            <Button disabled={localBusy} onClick={() => void downloadLocalData()}>{localBusy ? s.saving : s.choose}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

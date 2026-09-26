@@ -2,10 +2,12 @@ import { useStore } from '@nanostores/react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { runExportProfileFlow } from '@/store/profile-share'
 import { $connection } from '@/store/session'
 
 export function ConsumerBackupSettings({ profile }: { profile: string }) {
+  const s = useJarvisCopy().backupExport
   const connection = useStore($connection)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -31,7 +33,7 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
     }
 
     if (!window.hermesDesktop?.selectSavePath) {
-      setError('The Mac save dialog is unavailable. Try again.')
+      setError(s.saveUnavailable)
 
       return
     }
@@ -46,10 +48,10 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
       const archive = await runExportProfileFlow(profile, { consumer: true, shouldContinue: () => request.current === current })
 
       if (archive && request.current === current) {
-        setResult('Assistant setup saved to the location you chose.')
+        setResult(s.saved)
       }
     } catch {
-      if (request.current === current) {setError('Couldn’t save assistant setup. Choose another location and try again.')}
+      if (request.current === current) {setError(s.saveError)}
     } finally {
       if (request.current === current) {setSaving(false)}
     }
@@ -57,14 +59,14 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
 
   return (
     <section className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
-      <h2 className="text-base font-semibold">Back up assistant setup</h2>
+      <h2 className="text-base font-semibold">{s.title}</h2>
       <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-        Save selected preferences, skill instructions, and memory notes. The file may contain personal details; chat history, routines, sign-in files, and internal worker data aren’t included.
+        {s.detail}
       </p>
       <Button className="mt-4" disabled={!local || saving} onClick={() => void save()} variant="secondary">
-        {saving ? 'Saving…' : 'Save setup backup'}
+        {saving ? s.saving : s.save}
       </Button>
-      {!local && <p className="mt-2 text-xs text-muted-foreground">Available when Jarvis is running on this Mac.</p>}
+      {!local && <p className="mt-2 text-xs text-muted-foreground">{s.localOnly}</p>}
       {error && <p className="mt-2 text-sm text-destructive" role="alert">{error}</p>}
       {result && <p className="mt-2 text-sm" role="status">{result}</p>}
     </section>
