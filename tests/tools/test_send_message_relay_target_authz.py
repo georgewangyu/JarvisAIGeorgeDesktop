@@ -180,6 +180,49 @@ def test_live_native_adapter_takes_precedence_over_the_relay_guard(
     assert sent == [ARBITRARY_CHAT]
 
 
+def test_relay_target_guard_uses_active_profile_adapter_a_b_a(tmp_path, monkeypatch):
+    """A native bot in the launch profile cannot authorize a secondary relay send."""
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from gateway.run import GatewayRunner, _profile_runtime_scope
+    import gateway.run as gateway_run
+
+    home = tmp_path / ".hermes"
+    secondary = home / "profiles" / "secondary"
+    secondary.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("GATEWAY_RELAY_PLATFORMS", "discord")
+    monkeypatch.setenv("GATEWAY_RELAY_BOT_IDS", json.dumps({"discord": {"botId": "b1"}}))
+
+    primary_relay = SimpleNamespace(fronts_platform=lambda _platform: False)
+    secondary_relay = SimpleNamespace(fronts_platform=lambda platform: platform == Platform.DISCORD)
+    runner = object.__new__(GatewayRunner)
+    runner.adapters = {Platform.DISCORD: object(), Platform.RELAY: primary_relay}
+    runner._profile_adapters = {"secondary": {Platform.RELAY: secondary_relay}}
+    runner._primary_profile_name = "default"
+    runner.config = SimpleNamespace(multiplex_profiles=True)
+    monkeypatch.setattr(gateway_run, "_gateway_runner_ref", lambda: runner)
+
+    sent: list[str] = []
+    assert _send(f"discord:{ARBITRARY_CHAT}", sent)["success"] is True
+    with _profile_runtime_scope(secondary, {}):
+        result = _send(f"discord:{ARBITRARY_CHAT}", sent)
+        assert "Refusing to send to unattested relay target" in result["error"]
+        directory = secondary / "channel_directory.json"
+        directory.write_text(json.dumps({"platforms": {"discord": [
+            {"id": ATTESTED_CHAT, "name": "synthetic", "type": "channel"}
+        ]}}), encoding="utf-8")
+        assert _send(f"discord:{ATTESTED_CHAT}", sent)["success"] is True
+        directory.write_text(json.dumps({"platforms": {"discord": []}}), encoding="utf-8")
+        revoked = _send(f"discord:{ATTESTED_CHAT}", sent)
+        assert "Refusing to send to unattested relay target" in revoked["error"]
+    assert sent == [ARBITRARY_CHAT, ATTESTED_CHAT]
+    assert _send(f"discord:{ARBITRARY_CHAT}", sent)["success"] is True
+    assert sent == [ARBITRARY_CHAT, ATTESTED_CHAT, ARBITRARY_CHAT]
+
+
 def test_react_refuses_an_arbitrary_relay_target(relay_env):
     """Reactions are outbound acts too — same floor, same refusal."""
     result = json.loads(

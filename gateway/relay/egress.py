@@ -150,6 +150,16 @@ class RelayRouteUnknown(RuntimeError):
     """
 
 
+def _active_adapter_map(runner: Any) -> Dict[Any, Any]:
+    """Use the same profile's adapters that outbound tool delivery uses."""
+    resolve = getattr(runner, "_adapters_for_profile", None)
+    if callable(resolve):
+        from hermes_cli.profiles import get_active_profile_name
+        return resolve(get_active_profile_name())
+    # Standalone/test runners without multiplex support have one adapter map.
+    return getattr(runner, "adapters", None) or {}
+
+
 def _is_missing_gateway_relay(exc: ImportError) -> bool:
     """True only when the gateway relay package ITSELF is absent.
 
@@ -208,7 +218,7 @@ def _live_relay_fronted() -> Optional[Set[str]]:
         if runner is None:
             return None  # no gateway runner in this process (CLI, cron)
 
-        registry = getattr(runner, "adapters", None)
+        registry = _active_adapter_map(runner)
         if not registry:
             return None  # a runner with no adapters at all
 
@@ -294,7 +304,7 @@ def _has_live_native_adapter(platform_name: str) -> bool:
         runner = _gateway_runner_ref()
         if runner is None:
             return False
-        adapters = getattr(runner, "adapters", None) or {}
+        adapters = _active_adapter_map(runner)
         platform = Platform(platform_name)
         if adapters.get(platform) is None:
             return False
@@ -325,8 +335,10 @@ def _has_live_native_adapter(platform_name: str) -> bool:
         # path on a guess. Propagate; authorize_relay_target turns it into a
         # refusal.
         raise
-    except Exception:  # noqa: BLE001 - no runner (cron/CLI) ⇒ no native adapter
-        return False
+    except Exception as exc:  # noqa: BLE001 - uncertain routing cannot grant a send
+        raise RelayRouteUnknown(
+            f"native-adapter lookup failed for {platform_name}: {exc}"
+        ) from exc
 
 
 def relay_routed_platform(platform_name: str) -> bool:
