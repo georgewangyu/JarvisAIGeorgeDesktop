@@ -47,6 +47,7 @@ it('links a clarified chat to a passive saved goal and opens Goals', async () =>
 })
 
 it('keeps the same chat and editable name after a save refusal, then retries', async () => {
+  const privateError = 'Provider failed at /Users/example/private/keychain with token sk-test-secret'
   let saveAttempts = 0
 
   const request = vi.fn(async (method: string) => {
@@ -57,7 +58,7 @@ it('keeps the same chat and editable name after a save refusal, then retries', a
     saveAttempts += 1
 
     if (saveAttempts === 1) {
-      throw new Error('offline')
+      throw new Error(privateError)
     }
 
     return { goal: { session_id: 'clarified-chat' } }
@@ -71,6 +72,7 @@ it('keeps the same chat and editable name after a save refusal, then retries', a
   fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
 
   expect(await screen.findByRole('alert')).toBeTruthy()
+  expect(globalThis.document.body.textContent).not.toContain(privateError)
   expect(screen.getByRole('textbox', { name: 'Goal name' }).getAttribute('value')).toBe('Walk three times a week')
   fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
 

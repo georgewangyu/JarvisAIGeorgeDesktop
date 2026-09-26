@@ -369,6 +369,18 @@ export function ConsumerIdeasView() {
 
 type SavedGoalRow = SessionGoalsListResult['goals'][number]
 
+function goalStatusLabel(status: string, passive?: boolean): string {
+  if (status === 'paused' && passive) {
+    return 'Tracking'
+  }
+
+  if (status === 'active' || status === 'paused' || status === 'waiting' || status === 'done') {
+    return status
+  }
+
+  return 'Unknown'
+}
+
 const GOAL_STARTERS = [
   ['Health', 'Help me clarify a health-related goal. Ask what outcome I want and what constraints matter before making a plan.'],
   ['Relationships', 'Help me clarify a relationship goal. Ask what outcome I want and what matters to the people involved.'],
@@ -633,7 +645,7 @@ export function ConsumerGoalsView() {
                   </span>
                 </button>
                 <span className="rounded-full bg-(--ui-bg-tertiary) px-2.5 py-1 text-xs capitalize text-(--ui-text-secondary)">
-                  {goal.status === 'paused' && goal.passive ? 'Tracking' : goal.status}
+                  {goalStatusLabel(goal.status, goal.passive)}
                 </span>
               </div>
             )

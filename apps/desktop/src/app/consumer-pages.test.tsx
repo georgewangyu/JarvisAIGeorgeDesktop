@@ -360,12 +360,14 @@ it('saves a passive goal and shows it in Tracking without sending a prompt', asy
 })
 
 it('keeps the goal form open when saving fails', async () => {
+  const privateError = 'Provider failed at /Users/example/private/keychain with token sk-test-secret'
+
   const request = vi.fn(async (method: string) => {
     if (method === 'session.goals.list') {
       return { goals: [] }
     }
 
-    throw new Error('offline')
+    throw new Error(privateError)
   })
 
   $gateway.set({ request } as never)
@@ -376,6 +378,7 @@ it('keeps the goal form open when saving fails', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save goal' }))
 
   expect((await screen.findByRole('alert')).textContent).toContain('could not be saved')
+  expect(globalThis.document.body.textContent).not.toContain(privateError)
   expect(screen.getByRole('textbox', { name: 'Already have a name for it? (optional)' })).toHaveProperty('value', 'Keep in touch')
   expect(screen.queryByRole('button', { name: /Keep in touch/ })).toBeNull()
 })
@@ -465,17 +468,37 @@ it('lists persisted goals without opening a session or spending a model turn', a
 })
 
 it('shows a retry instead of an empty state when persisted goals fail to load', async () => {
+  const privateError = 'Provider failed at /Users/example/private/keychain with token sk-test-secret'
+
   const request = vi.fn()
-    .mockRejectedValueOnce(new Error('offline'))
+    .mockRejectedValueOnce(new Error(privateError))
     .mockResolvedValueOnce({ goals: [] })
 
   $gateway.set({ request } as never)
 
   render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
 
+  expect(await screen.findByRole('heading', { name: "Goals couldn't load" })).toBeTruthy()
+  expect(globalThis.document.body.textContent).not.toContain(privateError)
   fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Create a goal' })).toBeTruthy())
   expect(request).toHaveBeenCalledTimes(2)
+})
+
+it('does not render an unrecognized backend goal status as user-facing text', async () => {
+  const privateStatus = 'Provider failed at /Users/example/private/keychain with token sk-test-secret'
+
+  $gateway.set({ request: async () => ({ goals: [{
+    session_id: 'saved-chat',
+    session_title: 'Move plans',
+    goal: { status: privateStatus, title: 'Find a new place', updated_at: 100 }
+  }] }) } as never)
+
+  render(<MemoryRouter><ConsumerGoalsView /></MemoryRouter>)
+
+  expect(await screen.findByText('Find a new place')).toBeTruthy()
+  expect(screen.getByText('Unknown')).toBeTruthy()
+  expect(globalThis.document.body.textContent).not.toContain(privateStatus)
 })
 
 it('persists completion and reopening from the goal checkbox without opening a chat', async () => {
@@ -520,6 +543,7 @@ it('reopens a consumer tracking goal without showing an autonomous active loop',
 })
 
 it('keeps the goal unchecked and reports a failed completion write', async () => {
+  const privateError = 'Provider failed at /Users/example/private/keychain with token sk-test-secret'
   const goal = { session_id: 'saved-chat', session_title: 'Move plans', goal: { status: 'active', title: 'Find a new place' } }
 
   const request = vi.fn(async (method: string) => {
@@ -527,7 +551,7 @@ it('keeps the goal unchecked and reports a failed completion write', async () =>
       return { goals: [goal] }
     }
 
-    throw new Error('write failed')
+    throw new Error(privateError)
   })
 
   $gateway.set({ request } as never)
@@ -536,5 +560,6 @@ it('keeps the goal unchecked and reports a failed completion write', async () =>
 
   fireEvent.click(await screen.findByRole('checkbox', { name: 'Complete Find a new place' }))
   expect((await screen.findByRole('alert')).textContent).toContain('could not be updated')
+  expect(globalThis.document.body.textContent).not.toContain(privateError)
   expect(screen.getByRole('checkbox', { name: 'Complete Find a new place' }).getAttribute('aria-checked')).toBe('false')
 })
