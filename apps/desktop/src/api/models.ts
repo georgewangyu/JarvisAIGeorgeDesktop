@@ -83,10 +83,11 @@ export function getRecommendedDefaultModel(
 
 export function setGlobalModel(
   provider: string,
-  model: string
+  model: string,
+  profile?: null | string
 ): Promise<{ ok: boolean; provider: string; model: string }> {
   return hermesApi<{ ok: boolean; provider: string; model: string }>({
-    ...profileScoped(),
+    ...profileScoped(profile),
     path: '/api/model/set',
     method: 'POST',
     body: {

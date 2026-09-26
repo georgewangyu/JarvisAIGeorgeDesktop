@@ -114,7 +114,7 @@ export function ConnectionsView() {
   const [permissionsCheckState, setPermissionsCheckState] = useState<'checking' | 'ready' | 'unavailable'>('checking')
   const [refreshing, setRefreshing] = useState(false)
   const [requestingMicrophone, setRequestingMicrophone] = useState(false)
-  const [signingIn, setSigningIn] = useState(false)
+  const [signingInOwner, setSigningInOwner] = useState<{ key: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [calendar, setCalendar] = useState<JarvisCalendarStatus | null>(null)
@@ -136,6 +136,8 @@ export function ConnectionsView() {
     'checking'
   )
 
+  const signingIn = signingInOwner === calendarScopeRef.current
+
   const refresh = useCallback(async () => {
     const owner = calendarScopeRef.current
     const generation = ++refreshGeneration.current
@@ -146,7 +148,7 @@ export function ConnectionsView() {
       const getPermissions = window.hermesDesktop?.jarvisOnboarding?.getPermissions
 
       const [snapshotResult, accountsResult, calendarResult] = await Promise.allSettled([
-        getPermissions?.(), listOAuthProviders(), window.hermesDesktop?.jarvisCalendar?.status()
+        getPermissions?.(), listOAuthProviders(activeProfile), window.hermesDesktop?.jarvisCalendar?.status()
       ])
 
       if (!isCurrent()) {return}
@@ -185,7 +187,7 @@ export function ConnectionsView() {
     } finally {
       if (isCurrent()) {setRefreshing(false)}
     }
-  }, [clearCalendarDraft])
+  }, [activeProfile, clearCalendarDraft])
 
   useEffect(() => {
     setAccountState('checking')
@@ -423,7 +425,10 @@ export function ConnectionsView() {
                     disabled={signingIn}
                     loading={signingIn}
                     onClick={async () => {
-                      setSigningIn(true)
+                      const owner = calendarScopeRef.current
+                      const profile = activeProfile
+                      const isCurrent = () => owner === calendarScopeRef.current
+                      setSigningInOwner(owner)
                       setError(null)
                       let signedIn = false
 
@@ -434,22 +439,33 @@ export function ConnectionsView() {
                           throw new Error(result?.message || 'ChatGPT sign-in did not finish.')
                         }
 
+                        // The browser can stay open while this window changes
+                        // profile or connection. Do not select a model or paint
+                        // account state in a different workspace on return.
+                        if (!isCurrent()) {return}
                         signedIn = true
                         await refresh()
-                        await setGlobalModel('openai-codex', 'gpt-5.6-sol')
-                        const model = await getGlobalModelInfo()
+
+                        if (!isCurrent()) {return}
+                        await setGlobalModel('openai-codex', 'gpt-5.6-sol', profile)
+
+                        if (!isCurrent()) {return}
+                        const model = await getGlobalModelInfo(profile)
+
+                        if (!isCurrent()) {return}
 
                         $currentProvider.set(model.provider)
                         $currentModel.set(model.model)
                         await refresh()
                       } catch {
+                        if (!isCurrent()) {return}
                         // OAuth errors can include callback codes, credential
                         // paths or provider diagnostics; keep them out of UI.
                         setError(signedIn
                           ? 'ChatGPT connected, but Jarvis could not select a model. Refresh and try again.'
                           : 'ChatGPT sign-in did not finish. Please try again.')
                       } finally {
-                        setSigningIn(false)
+                        setSigningInOwner(current => current === owner ? null : current)
                       }
                     }}
                     size="sm"

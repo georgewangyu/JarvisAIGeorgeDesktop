@@ -128,6 +128,7 @@ it('does not revive an old account refresh after A to B to A or a newer refresh'
   await waitFor(() => expect(listOAuthProviders).toHaveBeenCalledTimes(2))
   act(() => $activeGatewayProfile.set('alpha'))
   await waitFor(() => expect(listOAuthProviders).toHaveBeenCalledTimes(3))
+  expect(vi.mocked(listOAuthProviders).mock.calls.map(([profile]) => profile)).toEqual(['alpha', 'beta', 'alpha'])
   expect(await screen.findByText('Not connected')).toBeTruthy()
 
   await act(async () => finishOld({ providers: [connected] }))
@@ -174,8 +175,54 @@ it('refreshes account and model state immediately after successful sign-in', asy
   fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
   await screen.findByText('Connected')
   expect(screen.getByText('connected-model')).toBeTruthy()
-  expect(setGlobalModel).toHaveBeenCalled()
+  expect(setGlobalModel).toHaveBeenCalledWith('openai-codex', 'gpt-5.6-sol', 'default')
+  expect(getGlobalModelInfo).toHaveBeenCalledWith('default')
   expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
+})
+
+it('does not apply an earlier browser sign-in to a different profile after A to B to A', async () => {
+  $activeGatewayProfile.set('alpha')
+  let finishSignIn!: (value: { ok: boolean }) => void
+  const pendingSignIn = new Promise<{ ok: boolean }>(resolve => {finishSignIn = resolve})
+  const startCodexOAuth = vi.fn().mockReturnValue(pendingSignIn)
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisOnboarding: { startCodexOAuth } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+  expect(startCodexOAuth).toHaveBeenCalledOnce()
+
+  act(() => $activeGatewayProfile.set('beta'))
+  expect(await screen.findByRole('button', { name: 'Connect' })).toHaveProperty('disabled', false)
+  act(() => $activeGatewayProfile.set('alpha'))
+  await act(async () => finishSignIn({ ok: true }))
+
+  expect(setGlobalModel).not.toHaveBeenCalled()
+  expect(getGlobalModelInfo).not.toHaveBeenCalled()
+  expect(screen.getByText('Not connected')).toBeTruthy()
+})
+
+it('keeps a model write bound to its original profile if the window switches while it finishes', async () => {
+  $activeGatewayProfile.set('alpha')
+  const connected = makeOAuthProvider('openai-codex')
+  connected.status.logged_in = true
+  vi.mocked(listOAuthProviders)
+    .mockResolvedValueOnce({ providers: [makeOAuthProvider('openai-codex')] })
+    .mockResolvedValue({ providers: [connected] })
+  let finishModelWrite!: (value: { ok: boolean; provider: string; model: string }) => void
+  vi.mocked(setGlobalModel).mockReturnValue(new Promise(resolve => {finishModelWrite = resolve}))
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
+  await waitFor(() => expect(setGlobalModel).toHaveBeenCalledWith('openai-codex', 'gpt-5.6-sol', 'alpha'))
+
+  act(() => $activeGatewayProfile.set('beta'))
+  await act(async () => finishModelWrite({ ok: true, provider: 'openai-codex', model: 'gpt-5.6-sol' }))
+
+  expect(getGlobalModelInfo).not.toHaveBeenCalled()
+  expect($currentModel.get()).toBe('test-model')
 })
 
 it('keeps OAuth callback diagnostics out of Connections and permits retry', async () => {
