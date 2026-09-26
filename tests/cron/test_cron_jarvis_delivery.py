@@ -1,7 +1,16 @@
 """Explicit scheduled delivery goes only to the permanent desktop chat."""
 
+import http.server
+import json
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
 from unittest.mock import Mock
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 
@@ -251,3 +260,146 @@ def test_due_script_occurrence_produces_one_jarvis_event(tmp_path, monkeypatch, 
             lease.release()
         db.close()
         scheduler._shutdown_parallel_pool()
+
+
+def test_due_cron_event_settles_headlessly_with_desktop_closed(tmp_path, monkeypatch):
+    """A running cron producer can settle one event without an Electron owner."""
+    from cron import executions, jobs, scheduler
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import find_jarvis_live_owner
+    from tui_gateway import owner_event_inbox
+    from tui_gateway.owner_event_inbox import owner_event_receipt
+
+    home = tmp_path / "home"
+    (home / "cron" / "output").mkdir(parents=True)
+    (home / "scripts").mkdir()
+    script = home / "scripts" / "brief.sh"
+    script.write_text("#!/bin/sh\necho one-test-owned-brief\n", encoding="utf-8")
+    script.chmod(0o755)
+    db = SessionDB(db_path=home / "state.db")
+    try:
+        db.create_session(session_id="main", source="desktop")
+        db.set_session_title("main", "Jarvis")
+    finally:
+        db.close()
+
+    calls = []
+
+    class Provider(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            calls.append(request)
+            answer = {
+                "id": "cron-headless-test", "object": "chat.completion.chunk",
+                "model": "test-model", "choices": [{"index": 0,
+                "delta": {"role": "assistant", "content": "ONE_CRON_EVENT_SETTLED"},
+                "finish_reason": "stop"}],
+            }
+            raw = ("data: " + json.dumps(answer) + "\n\ndata: [DONE]\n\n").encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, _format, *_args):
+            pass
+
+    provider = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+    provider_thread = threading.Thread(target=provider.serve_forever, daemon=True)
+    provider_thread.start()
+    base_url = f"http://127.0.0.1:{provider.server_port}/v1"
+    (home / "config.yaml").write_text(
+        "model:\n  provider: custom\n  default: test-model\n"
+        f"  base_url: {base_url}\n  api_mode: chat_completions\n"
+        "memory:\n  memory_enabled: false\n  user_profile_enabled: false\n"
+        "terminal:\n  env: local\n"
+        "desktop:\n  jarvis_headless_event_activation: true\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("HERMES_SHARED_AUTH_DIR", str(tmp_path / "shared-auth"))
+    monkeypatch.setenv("HERMES_MANAGED_DIR", str(tmp_path / "managed"))
+    monkeypatch.setenv("TERMINAL_CWD", str(tmp_path))
+    monkeypatch.setenv("OPENAI_BASE_URL", base_url)
+    monkeypatch.setenv("OPENAI_API_KEY", "local-test-only")
+    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).resolve().parents[2]))
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    monkeypatch.delenv("_HERMES_CRON_EXTERNAL_WORKER", raising=False)
+    monkeypatch.setattr(jobs, "HERMES_DIR", home)
+    monkeypatch.setattr(jobs, "CRON_DIR", home / "cron")
+    monkeypatch.setattr(jobs, "JOBS_FILE", home / "cron" / "jobs.json")
+    monkeypatch.setattr(jobs, "OUTPUT_DIR", home / "cron" / "output")
+    monkeypatch.setattr(executions, "EXECUTIONS_FILE", home / "cron" / "executions.db")
+    monkeypatch.setattr(scheduler, "_hermes_home", home)
+
+    spawned = []
+    original_popen = subprocess.Popen
+
+    def capture_headless_child(argv, **kwargs):
+        child = original_popen(argv, **kwargs)
+        if isinstance(argv, list) and argv[1:3] == ["-m", "tui_gateway.headless_owner_event"]:
+            assert kwargs.get("start_new_session") is True
+            spawned.append(child)
+        return child
+
+    monkeypatch.setattr(owner_event_inbox.subprocess, "Popen", capture_headless_child)
+    try:
+        assert find_jarvis_live_owner(home) is None
+        job = jobs.create_job(
+            prompt=None, schedule="every 1h", name="brief", script="brief.sh",
+            no_agent=True, deliver="jarvis-main")
+        stored = jobs.load_jobs()
+        next(row for row in stored if row["id"] == job["id"])["next_run_at"] = (
+            jobs._hermes_now() - timedelta(minutes=1)).isoformat()
+        jobs.save_jobs(stored)
+        assert scheduler.tick(verbose=False, sync=True) == 1
+        run = executions.latest_execution(job["id"])
+        assert run and run["status"] == "completed"
+        event_id = f"{job['id']}:{run['id']}"
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            receipt = owner_event_receipt(home, source="cron", event_id=event_id)
+            if receipt and receipt["status"] == "settled":
+                break
+            time.sleep(0.05)
+        else:
+            pytest.fail(f"headless cron event did not settle: {receipt}")
+        assert receipt["claimed_at"]
+        assert "one-test-owned-brief" in receipt["message"]
+        assert receipt["reply"] == "ONE_CRON_EVENT_SETTLED"
+        assert len(spawned) == 1
+        assert spawned[0].wait(timeout=5) == 0
+        assert len([call for call in calls if "messages" in call]) == 1
+        assert find_jarvis_live_owner(home) is None
+        assert scheduler.tick(verbose=False, sync=True) == 0
+        assert executions.latest_execution(job["id"])["id"] == run["id"]
+        assert len([call for call in calls if "messages" in call]) == 1
+        assert len(list((home / "runtime" / "bot_live_delivery").glob("*.json"))) == 1
+    finally:
+        try:
+            for child in spawned:
+                if child.poll() is None:
+                    try:
+                        if os.name == "posix":
+                            os.killpg(child.pid, signal.SIGTERM)
+                        else:
+                            child.terminate()
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        child.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        try:
+                            if os.name == "posix":
+                                os.killpg(child.pid, signal.SIGKILL)
+                            else:
+                                child.kill()
+                        except ProcessLookupError:
+                            pass
+                child.wait(timeout=5)
+        finally:
+            provider.shutdown()
+            provider.server_close()
+            provider_thread.join(timeout=5)
+            scheduler._shutdown_parallel_pool()
