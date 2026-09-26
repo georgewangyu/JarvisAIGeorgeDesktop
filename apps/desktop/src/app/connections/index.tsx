@@ -170,7 +170,10 @@ export function ConnectionsView() {
         setPermissions(snapshotResult.value)
         setPermissionsCheckState('ready')
       } else {
-        setPermissionsCheckState(current => (current === 'ready' ? current : 'unavailable'))
+        // An old grant is not proof of current access after the OS probe
+        // fails; revocation may be exactly why the check failed.
+        setPermissions(null)
+        setPermissionsCheckState('unavailable')
         failures.push('Could not check Mac permissions.')
       }
 

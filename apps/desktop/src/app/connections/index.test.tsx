@@ -89,6 +89,36 @@ it('keeps Mac permission results when the AI account check fails', async () => {
   expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
 })
 
+it('does not keep claiming a Mac grant after its status check fails, and recovers on retry', async () => {
+  const snapshot = {
+    apps: { mail: true, messages: false, notes: false, whatsapp: false },
+    fullDiskAccess: 'granted' as const,
+    microphone: 'not-determined' as const,
+    platform: 'darwin' as const
+  }
+
+  const getPermissions = vi.fn()
+    .mockResolvedValueOnce(snapshot)
+    .mockRejectedValueOnce(new Error('Mac status unavailable'))
+    .mockResolvedValue(snapshot)
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisOnboarding: { getPermissions } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  await screen.findByText('Allowed')
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+  await screen.findByText('Could not check Mac permissions.')
+  expect(screen.queryByText('Allowed')).toBeNull()
+  expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+  await screen.findByText('Allowed')
+  expect(screen.queryByText('Could not check Mac permissions.')).toBeNull()
+})
+
 it('recovers the account state after a failed check and refresh', async () => {
   const connected = makeOAuthProvider('openai-codex')
   connected.status.logged_in = true
