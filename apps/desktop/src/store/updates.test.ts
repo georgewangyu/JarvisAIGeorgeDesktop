@@ -105,6 +105,7 @@ const {
 } = await import('./updates')
 
 const { setConnection } = await import('./session')
+const { setOnboardingSurfaceActive } = await import('./onboarding-presence')
 
 const registryOf = (ids: string[]) => ({
   version: 2,
@@ -137,9 +138,23 @@ const setRemote = (on: boolean) =>
 
 describe('maybeNotifyUpdateAvailable', () => {
   beforeEach(() => {
+    setOnboardingSurfaceActive('setup', false)
     storage.clear()
     notifySpy.mockClear()
+    dismissSpy.mockClear()
     vi.useRealTimers()
+  })
+
+  it('removes an update toast that raced ahead of the setup overlay', () => {
+    maybeNotifyUpdateAvailable(status())
+    expect(notifySpy).toHaveBeenCalledTimes(1)
+
+    setOnboardingSurfaceActive('setup', true)
+    expect(dismissSpy).toHaveBeenCalledWith('desktop-update-available')
+    notifySpy.mockClear()
+    maybeNotifyUpdateAvailable(status({ targetSha: 'sha-b' }))
+    expect(notifySpy).not.toHaveBeenCalled()
+    setOnboardingSurfaceActive('setup', false)
   })
 
   it('shows when an update is available and not snoozed', () => {

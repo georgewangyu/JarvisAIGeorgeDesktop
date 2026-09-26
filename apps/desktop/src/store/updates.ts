@@ -20,7 +20,7 @@ import { persistString, storedString } from '@/lib/storage'
 import { $connectionsRegistry, refreshConnectionsRegistry } from '@/store/connections'
 import { reconnectGateway } from '@/store/gateway-reconnect'
 import { dismissNotification, notify } from '@/store/notifications'
-import { onboardingSurfaceActive } from '@/store/onboarding-presence'
+import { $onboardingSurfaces, onboardingSurfaceActive } from '@/store/onboarding-presence'
 import { $connection } from '@/store/session'
 import type { BackendUpdateCheckResponse } from '@/types/hermes'
 
@@ -76,6 +76,14 @@ export const resetUpdateApplyState = () => {
 }
 
 const UPDATE_TOAST_ID = 'desktop-update-available'
+// The first update check can finish before the setup overlay's effect marks
+// onboarding active. If that happens, remove the premature toast as soon as
+// the surface appears; the status remains available in Settings.
+$onboardingSurfaces.subscribe(surfaces => {
+  if (surfaces.size > 0) {
+    dismissNotification(UPDATE_TOAST_ID)
+  }
+})
 // Time-based snooze instead of per-sha dismissal: this repo lands ~100 commits
 // a day, so a "don't show this exact sha again" guard re-popped the toast on
 // every new commit. We instead suppress the toast for a cooldown window that
