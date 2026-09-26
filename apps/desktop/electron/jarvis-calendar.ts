@@ -178,6 +178,7 @@ interface CalendarBridgeDeps {
 
 export function registerJarvisCalendar({ appPath, ipcMain, platform = process.platform, run = runCalendarHelper, scopeForSender, ownerVersionForSender = () => 0, trustedSender, userData }: CalendarBridgeDeps): void {
   const helper = calendarHelperPath(appPath)
+  const pendingConnects = new Map<string, Set<{ cancelled: boolean }>>()
 
   const call = (input: Record<string, unknown>) => platform === 'darwin'
     ? run(helper, input)
@@ -237,29 +238,42 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
 
     const configPath = configForScope(userData, scope)
-    const before = await status(configPath)
+    const attempt = { cancelled: false }
+    const pending = pendingConnects.get(configPath) ?? new Set<{ cancelled: boolean }>()
+    pending.add(attempt)
+    pendingConnects.set(configPath, pending)
 
-    if (!sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, supported: false }}
+    try {
+      const before = await status(configPath)
 
-    if (!before.supported) {return before}
+      if (attempt.cancelled || !sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, supported: false }}
 
-    if (before.authorization !== 'fullAccess') {
-      const request = await call({ command: 'request-full-access' })
+      if (!before.supported) {return before}
 
-      if (!request.ok || request.authorization !== 'fullAccess') {
-        return sameOwner(event, scope, version)
-          ? status(configPath)
-          : { authorization: 'unknown', connected: false, supported: false }
+      if (before.authorization !== 'fullAccess') {
+        const request = await call({ command: 'request-full-access' })
+
+        if (!request.ok || request.authorization !== 'fullAccess') {
+          return !attempt.cancelled && sameOwner(event, scope, version)
+            ? status(configPath)
+            : { authorization: 'unknown', connected: false, supported: false }
+        }
       }
+
+      if (attempt.cancelled || !sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, supported: false }}
+
+      saveEnabled(configPath, true)
+
+      const result = await status(configPath)
+
+      return !attempt.cancelled && sameOwner(event, scope, version)
+        ? result
+        : { authorization: 'unknown', connected: false, supported: false }
+    } finally {
+      pending.delete(attempt)
+
+      if (pending.size === 0) {pendingConnects.delete(configPath)}
     }
-
-    if (!sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, supported: false }}
-
-    saveEnabled(configPath, true)
-
-    const result = await status(configPath)
-
-    return sameOwner(event, scope, version) ? result : { authorization: 'unknown', connected: false, supported: false }
   })
   ipcMain.handle('jarvis:calendar:disconnect', async (event): Promise<CalendarStatus> => {
     const scope = requireTrustedScope(event)
@@ -268,6 +282,8 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     if (!scope) {return { authorization: 'unknown', connected: false, supported: false }}
 
     const configPath = configForScope(userData, scope)
+
+    for (const attempt of pendingConnects.get(configPath) ?? []) {attempt.cancelled = true}
     saveEnabled(configPath, false)
 
     const result = await status(configPath)

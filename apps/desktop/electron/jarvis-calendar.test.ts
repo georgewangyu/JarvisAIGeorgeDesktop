@@ -235,6 +235,37 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(await call('status')).toMatchObject({ connected: false })
   })
 
+  it('does not restore app access when a pending Connect finishes after Disconnect', async () => {
+    const userData = testHome()
+    let osGrant = false
+    let finishPermission!: (value: { ok: true; command: string; authorization: string }) => void
+
+    const pendingPermission = new Promise<{ ok: true; command: string; authorization: string }>(resolve => {
+      finishPermission = resolve
+    })
+
+    const spy = vi.fn(async (_executable, input) => {
+      if (input.command === 'request-full-access') {return pendingPermission}
+
+      return { ok: true, command: input.command, authorization: osGrant ? 'fullAccess' : 'notDetermined' }
+    })
+
+    const call = bridge(spy as typeof runCalendarHelper, userData)
+    const connecting = call('connect')
+
+    await vi.waitFor(() => expect(spy.mock.calls.some(([, input]) => input.command === 'request-full-access')).toBe(true))
+    expect(await call('disconnect')).toMatchObject({ connected: false })
+    osGrant = true
+    finishPermission({ ok: true, command: 'request-full-access', authorization: 'fullAccess' })
+
+    expect(await connecting).toMatchObject({ connected: false })
+    expect(await bridge(spy as typeof runCalendarHelper, userData)('status')).toMatchObject({ connected: false })
+    expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
+      .toEqual({ ok: false, code: 'not_connected' })
+    expect(spy.mock.calls.some(([, input]) => input.command === 'list-events')).toBe(false)
+    expect(await call('connect')).toMatchObject({ connected: true })
+  })
+
   it('does not request permission when the owner changes during its status check', async () => {
     const userData = testHome()
     let scope = '[null,"alpha"]'
