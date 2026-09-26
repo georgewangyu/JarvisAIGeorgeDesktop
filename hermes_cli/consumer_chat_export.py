@@ -13,7 +13,9 @@ from pathlib import Path
 
 
 def export_consumer_chats(db, profile_home: Path | str, output: Path | str) -> dict:
-    """Atomically write JSON Lines to a user-picked local path, mode 0600."""
+    """Atomically write JSON Lines to a new user-picked local path, mode 0600."""
+    from hermes_constants import get_default_hermes_root
+
     home = Path(profile_home).resolve()
     target = Path(output).expanduser()
     if not target.is_absolute() or target.suffix.lower() != ".jsonl":
@@ -21,10 +23,14 @@ def export_consumer_chats(db, profile_home: Path | str, output: Path | str) -> d
     if target.is_symlink():
         raise ValueError("choose a regular file, not a symbolic link")
     target = target.resolve(strict=False)
-    if target == home or home in target.parents:
+    private_root = home.parent.parent if home.parent.name == "profiles" else home
+    private_roots = {private_root, Path(get_default_hermes_root()).resolve(strict=False)}
+    if any(target == root or root in target.parents for root in private_roots):
         raise ValueError("choose a location outside Jarvis's private data directory")
     if not target.parent.is_dir():
         raise ValueError("the export folder does not exist")
+    if target.exists():
+        raise ValueError("choose a new export filename; existing files are preserved")
 
     temp_path = None
     chats = messages = 0
@@ -65,7 +71,13 @@ def export_consumer_chats(db, profile_home: Path | str, output: Path | str) -> d
                             messages += 1
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temp_path, target)
+        # Publish exclusively so a file created after preflight cannot be
+        # replaced. The temporary file and final path share one directory.
+        try:
+            os.link(temp_path, target)
+        except FileExistsError as exc:
+            raise ValueError("choose a new export filename; existing files are preserved") from exc
+        temp_path.unlink()
         temp_path = None
         return {"output": str(target), "chats": chats, "messages": messages}
     finally:

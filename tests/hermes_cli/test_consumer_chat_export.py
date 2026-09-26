@@ -42,6 +42,43 @@ def test_consumer_chat_export_is_private_scoped_and_atomic(tmp_path):
         linked.symlink_to(output)
         with pytest.raises(ValueError, match="symbolic link"):
             export_consumer_chats(db, home, linked)
+        original = output.read_bytes()
+        with pytest.raises(ValueError, match="existing files are preserved"):
+            export_consumer_chats(db, home, output)
+        assert output.read_bytes() == original
+        assert not list(tmp_path.glob(".jarvis-chat-export-*.tmp"))
+    finally:
+        db.close()
+
+
+def test_chat_export_refuses_sibling_private_profile_and_publish_race(tmp_path, monkeypatch):
+    from hermes_cli import consumer_chat_export
+    from hermes_state import SessionDB
+
+    private_root = tmp_path / ".hermes"
+    home = private_root / "profiles" / "alpha"
+    sibling = private_root / "profiles" / "beta"
+    home.mkdir(parents=True)
+    sibling.mkdir(parents=True)
+    db = SessionDB(db_path=home / "state.db")
+    try:
+        db.create_session("visible", source="desktop")
+        db.append_message("visible", "user", "Synthetic export race")
+        with pytest.raises(ValueError, match="outside Jarvis"):
+            consumer_chat_export.export_consumer_chats(db, home, sibling / "bad.jsonl")
+        assert not (sibling / "bad.jsonl").exists()
+
+        output = tmp_path / "chosen.jsonl"
+        real_link = consumer_chat_export.os.link
+
+        def competing_create(source, destination):
+            output.write_text("another file won the race")
+            return real_link(source, destination)
+
+        monkeypatch.setattr(consumer_chat_export.os, "link", competing_create)
+        with pytest.raises(ValueError, match="existing files are preserved"):
+            consumer_chat_export.export_consumer_chats(db, home, output)
+        assert output.read_text() == "another file won the race"
         assert not list(tmp_path.glob(".jarvis-chat-export-*.tmp"))
     finally:
         db.close()
