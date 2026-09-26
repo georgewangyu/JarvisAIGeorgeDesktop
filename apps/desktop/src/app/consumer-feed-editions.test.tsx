@@ -151,6 +151,8 @@ it('labels generated links as unverified on completed editions only', async () =
 
   expect(await screen.findByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeTruthy()
   expect(screen.getByRole('link', { name: 'release notes' }).getAttribute('href')).toBe('https://example.test/release')
+  expect(screen.getByRole('list', { name: 'Generated briefing links and retrieval status' }).textContent)
+    .toContain('https://example.test/release — Retrieval status unavailable')
 
   vi.mocked(getFeedEditions).mockResolvedValue([{
     ...linked,

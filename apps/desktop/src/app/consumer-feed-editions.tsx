@@ -31,6 +31,16 @@ function feedFailureCopy(item: FeedEdition): string {
   return 'This briefing did not finish. Check your connection and try again.'
 }
 
+function feedRetrievalCopy(item: FeedEdition, url: string): string {
+  if (!Array.isArray(item.retrieved_source_urls)) {
+    return 'Retrieval status unavailable'
+  }
+
+  return item.retrieved_source_urls.includes(url)
+    ? 'Page content retrieved; claims not verified'
+    : 'Page content not retrieved'
+}
+
 export function ConsumerFeedEditions() {
   const navigate = useNavigate()
   const profile = useStore($activeGatewayProfile)
@@ -222,7 +232,7 @@ export function ConsumerFeedEditions() {
                   {item.source_urls.length > 0 ? <div className="mt-2 text-xs text-(--ui-text-tertiary)">
                     <p>Links mentioned in this generated briefing:</p>
                     <ul aria-label="Generated briefing links and retrieval status" className="mt-1 list-inside list-disc break-all">
-                      {item.source_urls.map(url => <li key={url}>{url} — {item.retrieved_source_urls?.includes(url) ? 'Page content retrieved; claims not verified' : 'Page content not retrieved'}</li>)}
+                      {item.source_urls.map(url => <li key={url}>{url} — {feedRetrievalCopy(item, url)}</li>)}
                     </ul>
                   </div> : null}
                   <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} text={item.content} /></div>
