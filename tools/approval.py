@@ -50,8 +50,10 @@ _YOLO_MODE_FROZEN: bool = is_truthy_value(os.getenv("HERMES_YOLO_MODE", ""))
 
 _lock = threading.Lock()
 _pending: dict[str, dict] = {}
-_session_approved: dict[str, set] = {}
-_session_yolo: set[str] = set()
+# A multiplexed process can serve identical session IDs from different profiles.
+# Keep their in-memory grants separate; unscoped keys retain their legacy shape.
+_session_approved: dict[str | tuple[str, str], set] = {}
+_session_yolo: set[str | tuple[str, str]] = set()
 _permanent_approved: set = set()
 # Routed multiplex profiles: one permanent allowlist per profile home (see ``_permanent_set``).
 _permanent_approved_by_home: dict[str, set] = {}
@@ -280,10 +282,18 @@ def submit_pending(session_key: str, approval: dict):
         _pending[session_key] = approval
 
 
+def _session_grant_key(session_key: str) -> str | tuple[str, str]:
+    """Identity for grants in the active profile, separate from transport session IDs."""
+    from hermes_constants import get_hermes_home_override, hermes_home_key
+    if get_hermes_home_override() is None:
+        return session_key
+    return (hermes_home_key(), session_key)
+
+
 def approve_session(session_key: str, pattern_key: str):
     """Approve a pattern for this session only."""
     with _lock:
-        _session_approved.setdefault(session_key, set()).add(pattern_key)
+        _session_approved.setdefault(_session_grant_key(session_key), set()).add(pattern_key)
 
 
 def _release_permission_mode_dependents(session_key: str) -> None:
@@ -302,7 +312,7 @@ def _set_session_yolo(session_key: str, enabled: bool) -> None:
     if not session_key:
         return
     with _lock:
-        (_session_yolo.add if enabled else _session_yolo.discard)(session_key)
+        (_session_yolo.add if enabled else _session_yolo.discard)(_session_grant_key(session_key))
     _release_permission_mode_dependents(session_key)
 
 
@@ -321,8 +331,9 @@ def clear_session(session_key: str) -> None:
     if not session_key:
         return
     with _lock:
-        _session_approved.pop(session_key, None)
-        _session_yolo.discard(session_key)
+        grant_key = _session_grant_key(session_key)
+        _session_approved.pop(grant_key, None)
+        _session_yolo.discard(grant_key)
         _pending.pop(session_key, None)
         for entry in _gateway_queues.pop(session_key, []):
             # Cancel blocked waits now so the old run unwinds instead of idling until timeout;
@@ -345,7 +356,7 @@ def is_session_yolo_enabled(session_key: str) -> bool:
     if not session_key:
         return False
     with _lock:
-        return session_key in _session_yolo
+        return _session_grant_key(session_key) in _session_yolo
 
 
 def is_current_session_yolo_enabled() -> bool:
@@ -386,7 +397,7 @@ def is_approved(session_key: str, pattern_key: str) -> bool:
     regex-derived key so existing command_allowlist entries survive key migrations."""
     aliases = _approval_key_aliases(pattern_key)
     with _lock:
-        approved = _permanent_set() | _session_approved.get(session_key, set())
+        approved = _permanent_set() | _session_approved.get(_session_grant_key(session_key), set())
     return any(alias in approved for alias in aliases)
 
 

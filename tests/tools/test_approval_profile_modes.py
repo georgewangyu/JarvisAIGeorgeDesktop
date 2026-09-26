@@ -56,3 +56,48 @@ def test_fewer_prompts_does_not_bypass_hard_safety_floor(tmp_path):
         reset_hermes_home_override(home_token)
 
     assert decision["approved"] is False
+
+
+def test_session_grants_do_not_cross_profiles_with_same_session_id(tmp_path):
+    homes = (tmp_path / "profile-a", tmp_path / "profile-b")
+    for home in homes:
+        home.mkdir()
+        (home / "config.yaml").write_text("approvals:\n  mode: manual\n", encoding="utf-8")
+
+    session_key = "shared-session-id"
+    rule_key = "consequential-action"
+    pattern_key = f"plugin_rule:{len('synthetic_tool')}:synthetic_tool:{rule_key}"
+    asked = []
+
+    def deny(*_args, **_kwargs):
+        asked.append(True)
+        return "deny"
+
+    interactive = set_hermes_interactive_context(True)
+    session_token = set_current_session_key(session_key)
+    try:
+        for index, home in enumerate((homes[0], homes[1], homes[0])):
+            home_token = set_hermes_home_override(home)
+            try:
+                if index == 0:
+                    approval.approve_session(session_key, pattern_key)
+                    approval.enable_session_yolo(session_key)
+                assert approval.is_approved(session_key, pattern_key) is (home == homes[0])
+                assert approval.is_session_yolo_enabled(session_key) is (home == homes[0])
+                if index == 1:
+                    decision = approval.request_tool_approval(
+                        "synthetic_tool", "Synthetic consequential action", rule_key=rule_key,
+                        approval_callback=deny,
+                    )
+                    assert decision["approved"] is False
+                # The unconditional floor remains active even while profile A has YOLO.
+                assert approval.check_dangerous_command("rm -rf /", "local")["approved"] is False
+            finally:
+                if index == 2:
+                    approval.clear_session(session_key)
+                reset_hermes_home_override(home_token)
+    finally:
+        reset_current_session_key(session_token)
+        reset_hermes_interactive_context(interactive)
+
+    assert asked == [True]
