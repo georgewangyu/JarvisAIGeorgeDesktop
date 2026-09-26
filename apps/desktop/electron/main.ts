@@ -364,7 +364,7 @@ import {
 } from './profile-session-routing'
 import { createQuickEntryShortcut, quickEntryWindowBounds, sanitizeQuickEntrySettings } from './quick-entry'
 import { type ActiveWork, mergeActiveWork, normalizeActiveWork, quitPromptFor } from './quit-guard'
-import { backendQuitNeedsWait, createQuitTeardownCoordinator } from './quit-teardown'
+import { backendQuitNeedsWait, createQuitTeardownCoordinator, requestFinalQuitWithWindowGrace } from './quit-teardown'
 import * as remoteLifecycle from './remote-lifecycle'
 import {
   attachPowerResumeRemoteRevalidation,
@@ -12729,7 +12729,23 @@ const backendShutdown = createBackendShutdownCoordinator(async () => {
   await waitForTeardown([localShutdown, waitForBackendExit(primary), pooledStops], 7_000)
 })
 
-const quitTeardown = createQuitTeardownCoordinator(() => app.quit())
+let deferredQuitInProgress = false
+
+const quitTeardown = createQuitTeardownCoordinator(
+  () => requestFinalQuitWithWindowGrace(() => app.quit(), BrowserWindow.getAllWindows()),
+  () => {
+    deferredQuitInProgress = true
+
+    // A deferred before-quit leaves renderers mounted. Hide, rather than
+    // destroy, their windows until the owned backend and SSH teardown drains;
+    // a cancellation rejection must not look like a startup failure.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.hide()
+      }
+    }
+  }
+)
 
 async function teardownSshForQuit() {
   const scopes = [...sshConnections.keys()]
@@ -18109,7 +18125,7 @@ function _extractDeepLink(argv) {
 }
 
 function handleDeepLink(url) {
-  if (!url || typeof url !== 'string') {
+  if (deferredQuitInProgress || !url || typeof url !== 'string') {
     return
   }
 
@@ -18216,6 +18232,10 @@ if (!isPrimaryInstance) {
   app.exit(0)
 } else {
   app.on('second-instance', (_event, argv) => {
+    if (deferredQuitInProgress) {
+      return
+    }
+
     const url = _extractDeepLink(argv)
 
     if (url) {
@@ -18326,6 +18346,10 @@ app.whenReady().then(() => {
   }
 
   app.on('activate', () => {
+    if (deferredQuitInProgress) {
+      return
+    }
+
     // Recreate the primary window if it's gone. Guard on mainWindow directly
     // (not just total window count) so a dock click still restores the main
     // window when only secondary session windows remain open.
@@ -18368,7 +18392,12 @@ function heldQuitForActiveWork(event: Electron.Event): boolean {
     return false
   }
 
-  const prompt = quitPromptFor(mergeActiveWork(activeWorkByWebContents.values()), isQuittingForHandoff)
+  const prompt = quitPromptFor(
+    mergeActiveWork(activeWorkByWebContents.values()),
+    isQuittingForHandoff,
+    deferredQuitInProgress
+  )
+
   const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
 
   if (!prompt || !parent || parent.isDestroyed()) {

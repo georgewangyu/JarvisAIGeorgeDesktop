@@ -34,6 +34,13 @@ test('quitPromptFor stays out of the way during an update handoff', () => {
   assert.equal(quitPromptFor({ count: 2, titles: ['Fix login'] }, true), null)
 })
 
+test('a newly requested quit asks about active work, but an accepted deferred quit cannot reprompt', () => {
+  const work = { count: 1, titles: ['Fix login'] }
+
+  assert.ok(quitPromptFor(work, false, false))
+  assert.equal(quitPromptFor(work, false, true), null)
+})
+
 test('quitPromptFor names the running chats', () => {
   const prompt = quitPromptFor({ count: 2, titles: ['Fix login', 'Ship docs'] }, false)
 

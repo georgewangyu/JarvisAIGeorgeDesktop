@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test, vi } from 'vitest'
 
-import { backendQuitNeedsWait, createQuitTeardownCoordinator } from './quit-teardown'
+import { backendQuitNeedsWait, createQuitTeardownCoordinator, requestFinalQuitWithWindowGrace } from './quit-teardown'
 
 function deferred() {
   let resolve!: () => void
@@ -17,12 +17,14 @@ function deferred() {
 test('remote-only cleanup does not cancel the original quit', () => {
   const cleanup = vi.fn()
   const requestFinalQuit = vi.fn()
-  const coordinator = createQuitTeardownCoordinator(requestFinalQuit)
+  const concealWindows = vi.fn()
+  const coordinator = createQuitTeardownCoordinator(requestFinalQuit, concealWindows)
 
   const shouldPrevent = coordinator.begin([{ run: cleanup, waitForCompletion: false }])
 
   assert.equal(shouldPrevent, false)
   assert.equal(cleanup.mock.calls.length, 1)
+  assert.equal(concealWindows.mock.calls.length, 0, 'an immediate quit lets Electron close the windows')
   assert.equal(requestFinalQuit.mock.calls.length, 0)
 })
 
@@ -56,9 +58,20 @@ test('one final quit waits for every required teardown branch', async () => {
   const backend = deferred()
   const ssh = deferred()
   const requestFinalQuit = vi.fn()
-  const backendRun = vi.fn(() => backend.promise)
+  let rendererVisible = true
+
+  const concealWindows = vi.fn(() => {
+    rendererVisible = false
+  })
+
+  const backendRun = vi.fn(() => {
+    assert.equal(rendererVisible, false, 'renderer is concealed before connection teardown rejects')
+
+    return backend.promise
+  })
+
   const sshRun = vi.fn(() => ssh.promise)
-  const coordinator = createQuitTeardownCoordinator(requestFinalQuit)
+  const coordinator = createQuitTeardownCoordinator(requestFinalQuit, concealWindows)
 
   const tasks = [
     { run: backendRun, waitForCompletion: true },
@@ -67,6 +80,7 @@ test('one final quit waits for every required teardown branch', async () => {
 
   assert.equal(coordinator.begin(tasks), true)
   assert.equal(coordinator.begin(tasks), true, 'a re-entrant quit stays deferred while teardown is pending')
+  assert.equal(concealWindows.mock.calls.length, 1, 'the first deferred quit owns the UI transition')
   assert.equal(backendRun.mock.calls.length, 1)
   assert.equal(sshRun.mock.calls.length, 1)
 
@@ -80,6 +94,7 @@ test('one final quit waits for every required teardown branch', async () => {
   assert.equal(requestFinalQuit.mock.calls.length, 1)
 
   assert.equal(coordinator.begin(tasks), false, 'the coordinator must not cancel its own final quit')
+  assert.equal(concealWindows.mock.calls.length, 1)
   assert.equal(backendRun.mock.calls.length, 1)
   assert.equal(sshRun.mock.calls.length, 1)
 })
@@ -124,4 +139,84 @@ test('a synchronous reentrant quit cannot start a second teardown', async () => 
   await Promise.resolve()
   assert.equal(duplicate.mock.calls.length, 0)
   assert.equal(finalQuit.mock.calls.length, 1)
+})
+
+test('a responsive window gets its renderer close round-trip without being destroyed', async () => {
+  vi.useFakeTimers()
+
+  try {
+    let closed: () => void = () => {}
+    let destroyed = false
+
+    const destroy = vi.fn(() => {
+      destroyed = true
+      closed()
+    })
+
+    const quit = vi.fn()
+
+    requestFinalQuitWithWindowGrace(
+      quit,
+      [
+        {
+          destroy,
+          isDestroyed: () => destroyed,
+          once: (_event, listener) => {
+            closed = listener
+          }
+        }
+      ],
+      20
+    )
+
+    assert.equal(quit.mock.calls.length, 1)
+    destroyed = true
+    closed()
+    await Promise.resolve()
+    await vi.advanceTimersByTimeAsync(20)
+    assert.equal(destroy.mock.calls.length, 0)
+    assert.equal(quit.mock.calls.length, 2, 'macOS receives one more quit after the last window closes')
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('an unresponsive hidden window is destroyed after grace, then macOS receives a final quit', async () => {
+  vi.useFakeTimers()
+
+  try {
+    let closed: () => void = () => {}
+    let destroyed = false
+
+    const destroy = vi.fn(() => {
+      destroyed = true
+      closed()
+    })
+
+    const quit = vi.fn()
+
+    requestFinalQuitWithWindowGrace(
+      quit,
+      [
+        {
+          destroy,
+          isDestroyed: () => destroyed,
+          once: (_event, listener) => {
+            closed = listener
+          }
+        }
+      ],
+      20
+    )
+
+    assert.equal(quit.mock.calls.length, 1)
+    await vi.advanceTimersByTimeAsync(19)
+    assert.equal(destroy.mock.calls.length, 0)
+    await vi.advanceTimersByTimeAsync(1)
+    assert.equal(destroy.mock.calls.length, 1)
+    assert.equal(quit.mock.calls.length, 2)
+    assert.equal(destroyed, true)
+  } finally {
+    vi.useRealTimers()
+  }
 })

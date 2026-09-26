@@ -65,8 +65,8 @@ export interface QuitPrompt {
  * are the app replacing itself, not the user walking away, and a modal there
  * would strand the detached script waiting on a PID that never exits.
  */
-export function quitPromptFor(work: ActiveWork, quittingForHandoff: boolean): null | QuitPrompt {
-  if (quittingForHandoff || work.count < 1) {
+export function quitPromptFor(work: ActiveWork, quittingForHandoff: boolean, quitAlreadyAccepted = false): null | QuitPrompt {
+  if (quittingForHandoff || quitAlreadyAccepted || work.count < 1) {
     return null
   }
 
