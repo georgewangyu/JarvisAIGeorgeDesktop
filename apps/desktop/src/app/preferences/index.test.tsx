@@ -53,6 +53,25 @@ it('opens connections without confusing the settings route with a chat', () => {
   expect(screen.getByText('Connection destination')).toBeTruthy()
 })
 
+it('keeps supported local exports in a distinct Data controls page', () => {
+  render(
+    <MemoryRouter initialEntries={['/preferences']}>
+      <Routes><Route element={<PreferencesView />} path="/preferences" /></Routes>
+    </MemoryRouter>
+  )
+
+  expect(screen.queryByRole('button', { name: 'Download chat history' })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Data controls' }))
+  expect(screen.getByRole('heading', { name: 'Data controls' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Data controls' }).getAttribute('aria-current')).toBe('page')
+  expect(screen.getByRole('button', { name: 'Download chat history' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Save setup backup' })).toBeTruthy()
+  expect(screen.getByText(/not a complete backup or a way to delete your data/i)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'General' }))
+  expect(screen.getByRole('heading', { name: 'Language' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Download chat history' })).toBeNull()
+})
+
 it('reopens setup for review without resetting app state', () => {
   render(<MemoryRouter><PreferencesView /></MemoryRouter>)
   expect($consumerSetupReview.get()).toBe(false)

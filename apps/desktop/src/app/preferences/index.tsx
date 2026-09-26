@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { Button } from '@/components/ui/button'
@@ -30,10 +30,28 @@ export function PreferencesView() {
   const { mode, setMode, setTheme, themeName } = useTheme()
   const version = useStore($desktopVersion)
   const profile = useStore($activeGatewayProfile)
+  const [searchParams] = useSearchParams()
+  const dataControls = searchParams.get('section') === 'data-controls'
 
   useEffect(() => {
     void refreshDesktopVersion()
   }, [])
+
+  if (dataControls) {
+    return (
+      <ConsumerSettingsLayout section="data-controls">
+        <header className="border-b border-(--ui-stroke-tertiary) pb-8">
+          <h1 className="text-3xl font-semibold tracking-tight">Data controls</h1>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+            Save copies of the local data Jarvis can currently export. These are not a complete backup or a way to delete your data.
+          </p>
+        </header>
+        <ConsumerChatExportSettings key={`chat-export-${profile}`} profile={profile} />
+        <ConsumerImageExportSettings key={`image-export-${profile}`} profile={profile} />
+        <ConsumerBackupSettings key={`backup-${profile}`} profile={profile} />
+      </ConsumerSettingsLayout>
+    )
+  }
 
   return (
     <ConsumerSettingsLayout section="general">
@@ -93,9 +111,6 @@ export function PreferencesView() {
         <Button onClick={openConsumerSetupReview} variant="secondary">Review setup steps</Button>
       </section>
       <ConsumerApprovalSettings key={profile} profile={profile} />
-      <ConsumerChatExportSettings key={`chat-export-${profile}`} profile={profile} />
-      <ConsumerImageExportSettings key={`image-export-${profile}`} profile={profile} />
-      <ConsumerBackupSettings key={`backup-${profile}`} profile={profile} />
       <details className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
         <summary className="cursor-pointer text-base font-semibold">{t.settings.sections.advanced}</summary>
         <p className="mb-4 mt-3 text-sm text-muted-foreground">{s.advancedDetail}</p>

@@ -9,7 +9,7 @@ import { PAGE_INSET_X } from '../layout-constants'
 import { CONNECTIONS_ROUTE, PREFERENCES_ROUTE } from '../routes'
 
 interface ConsumerSettingsLayoutProps {
-  section: 'general' | 'connections'
+  section: 'general' | 'connections' | 'data-controls'
   children: ReactNode
 }
 
@@ -39,6 +39,14 @@ export function ConsumerSettingsLayout({ section, children }: ConsumerSettingsLa
           variant={section === 'connections' ? 'secondary' : 'ghost'}
         >
           <Codicon name="plug" /> {s.connectionsNav}
+        </Button>
+        <Button
+          aria-current={section === 'data-controls' ? 'page' : undefined}
+          className="justify-start"
+          onClick={() => navigate(`${PREFERENCES_ROUTE}?section=data-controls`)}
+          variant={section === 'data-controls' ? 'secondary' : 'ghost'}
+        >
+          <Codicon name="archive" /> Data controls
         </Button>
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto">
