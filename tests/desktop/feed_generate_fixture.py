@@ -20,7 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 
 def serve(root: Path, port: int, *, fail_start_once: bool = False,
-          mixed_sources: bool = False) -> None:
+          mixed_sources: bool = False, multi_story: bool = False) -> None:
     if root.exists() and any(root.iterdir()):
         raise ValueError("Fixture root must be empty")
     root.mkdir(parents=True, exist_ok=True)
@@ -42,6 +42,10 @@ def serve(root: Path, port: int, *, fail_start_once: bool = False,
             mentioned = "https://example.test/mentioned"
             return (f"Synthetic briefing for: {prompt}. Read {retrieved}; also mentioned {mentioned}.",
                     [retrieved])
+        if multi_story:
+            return ("Two independent synthetic stories.\n\n"
+                    "## First synthetic story\nFirst story details for packaged UI proof.\n\n"
+                    "## Second synthetic story\nSecond story details for packaged UI proof.", None)
         return f"Synthetic briefing for: {prompt}", None
 
     feed_editions._run_real_agent = synthetic_agent
@@ -80,6 +84,11 @@ if __name__ == "__main__":
         "--mixed-sources", action="store_true",
         help="Return a synthetic briefing with one retrieved and one mentioned-only URL",
     )
+    parser.add_argument(
+        "--multi-story", action="store_true",
+        help="Return two explicit synthetic story sections for packaged Feed UI proof",
+    )
     args = parser.parse_args()
     serve(args.root.resolve(strict=False), args.port,
-          fail_start_once=args.fail_start_once, mixed_sources=args.mixed_sources)
+          fail_start_once=args.fail_start_once, mixed_sources=args.mixed_sources,
+          multi_story=args.multi_story)

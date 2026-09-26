@@ -12,6 +12,7 @@ import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $connection } from '@/store/session'
 
 import { feedEditionLovedKey, readLovedFeedEditions, setFeedEditionLoved } from './feed/edition-feedback'
+import { type FeedEditionItem, parseFeedEditionItems } from './feed/edition-items'
 import { groupFeedEditionsByDay } from './feed/group-editions'
 import { readFeedPrompt, saveFeedPrompt } from './feed/prompt'
 import { CONNECTIONS_ROUTE, NEW_CHAT_ROUTE } from './routes'
@@ -39,6 +40,32 @@ function feedRetrievalCopy(item: FeedEdition, url: string): string {
   )
 
   return retrieved ? 'Page content retrieved; claims not verified' : 'Page content not verified as retrieved'
+}
+
+function FeedEditionContent({ content, onDiscussItem }: {
+  content: string
+  onDiscussItem: (item: FeedEditionItem) => void
+}) {
+  const parsed = parseFeedEditionItems(content)
+
+  if (!parsed) {
+    return <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={content} /></div>
+  }
+
+  return <div className="mt-4 space-y-4">
+    {parsed.introduction ? <div className="text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={parsed.introduction} /></div> : null}
+    <p className="text-xs font-medium text-(--ui-text-tertiary)">{parsed.items.length} stories in this briefing</p>
+    <ol aria-label="Stories in this briefing" className="space-y-3">
+      {parsed.items.map((story, index) => <li className="rounded-2xl border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-5" key={`${index}-${story.title}`}>
+        <section aria-label={story.title}>
+          <p className="text-xs font-medium text-(--ui-text-tertiary)">Story {index + 1}</p>
+          <h4 className="mt-2 text-base font-semibold leading-snug text-(--ui-text-primary)">{story.title}</h4>
+          <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={story.body} /></div>
+          <Button aria-label={`Discuss ${story.title}`} onClick={() => onDiscussItem(story)} size="sm" variant="textStrong">Discuss</Button>
+        </section>
+      </li>)}
+    </ol>
+  </div>
 }
 
 export function ConsumerFeedEditions() {
@@ -169,12 +196,12 @@ export function ConsumerFeedEditions() {
     setFeedbackError('')
   }
 
-  const discuss = (edition: FeedEdition) => {
+  const discuss = (edition: FeedEdition, selectedItem?: FeedEditionItem) => {
     if (!edition.content) {return}
 
     const current = takeSessionDraft(null)
-    const context = edition.content.slice(0, 4000)
-    const next = `Help me think through this Feed edition:\n\n${context}`
+    const context = selectedItem ? `## ${selectedItem.title}\n\n${selectedItem.body}` : edition.content
+    const next = `Help me think through this Feed ${selectedItem ? 'item' : 'edition'}:\n\n${context.slice(0, 4000)}`
 
     stashSessionDraft(null, current.text.trim() ? `${current.text.trimEnd()}\n\n${next}` : next, current.attachments)
     requestFreshSession()
@@ -254,7 +281,7 @@ export function ConsumerFeedEditions() {
                   </div> : null}
                   {/* Generated prose is passive until the user chooses a listed source.
                       Rich transcript links fetch titles and embeds on mount. */}
-                  <div className="mt-3 text-sm leading-7"><MarkdownTextContent isRunning={false} previewOnly text={item.content} /></div>
+                  <FeedEditionContent content={item.content} onDiscussItem={selected => discuss(item, selected)} />
                 </> : null}
                 {item.status === 'generating' ? <p className="mt-5 text-sm text-(--ui-text-secondary)" role="status">Jarvis is preparing this briefing…</p> : null}
                 {(item.status === 'failed' || item.status === 'interrupted' || item.status === 'denied') && <p className="mt-5 text-sm text-destructive" role="alert">{feedFailureCopy(item)}</p>}

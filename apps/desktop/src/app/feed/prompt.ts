@@ -1,6 +1,6 @@
 import { readKey, writeKey } from '@/lib/storage'
 
-export const DEFAULT_FEED_PROMPT = 'Give me a concise briefing about what matters today. Use only information and sources you can actually access. Identify sources when available; if there is not enough information, say so.'
+export const DEFAULT_FEED_PROMPT = 'Give me a concise briefing about what matters today. Use only information and sources you can actually access. Identify sources when available; if there is not enough information, say so. When there are multiple distinct stories, separate them with short level-two Markdown headings (## Story title). Do not split one story into artificial items.'
 
 const STORAGE_PREFIX = 'jarvis.desktop.feedPrompt.v1'
 const MAX_PROMPT_LENGTH = 8000

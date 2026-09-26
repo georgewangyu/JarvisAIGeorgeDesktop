@@ -345,3 +345,42 @@ it('Discuss prepares an editable unsent draft instead of sending another model c
   expect($freshSessionRequest.get()).toBe(1)
   await waitFor(() => expect(generateFeedEdition).not.toHaveBeenCalled())
 })
+
+it('renders only explicit complete stories as distinct cards and discusses one without sending', async () => {
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...edition,
+    content: 'An introduction.\n\n## First story\nFirst details.\n\n## Second story\nSecond details.'
+  }])
+  render(
+    <MemoryRouter initialEntries={['/feed']}>
+      <Routes>
+        <Route element={<ConsumerFeedEditions />} path="/feed" />
+        <Route element={<p>Editable draft</p>} path="/" />
+      </Routes>
+    </MemoryRouter>
+  )
+
+  expect(await screen.findByRole('list', { name: 'Stories in this briefing' })).toBeTruthy()
+  expect(screen.getAllByRole('listitem')).toHaveLength(2)
+  expect(screen.getByRole('region', { name: 'First story' }).textContent).toContain('First details.')
+  expect(screen.getByRole('region', { name: 'Second story' }).textContent).toContain('Second details.')
+  expect(screen.getByRole('button', { name: 'Love' })).toBeTruthy()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Discuss Second story' }))
+  expect(screen.getByText('Editable draft')).toBeTruthy()
+  expect(takeSessionDraft(null).text).toContain('## Second story\n\nSecond details.')
+  expect(takeSessionDraft(null).text).not.toContain('First details.')
+  expect(generateFeedEdition).not.toHaveBeenCalled()
+})
+
+it('keeps an unstructured or incomplete generated edition in the legacy view', async () => {
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...edition,
+    content: '## First story\nDetails.\n\n## Empty second story'
+  }])
+  render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+
+  expect(await screen.findByText('Details.')).toBeTruthy()
+  expect(screen.queryByRole('list', { name: 'Stories in this briefing' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Discuss' })).toBeTruthy()
+})

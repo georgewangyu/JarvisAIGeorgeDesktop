@@ -7,6 +7,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+it('requests distinct headings without requiring artificial stories or unverified sourcing', () => {
+  expect(DEFAULT_FEED_PROMPT).toContain('level-two Markdown headings')
+  expect(DEFAULT_FEED_PROMPT).toContain('Do not split one story into artificial items')
+  expect(DEFAULT_FEED_PROMPT).toContain('sources you can actually access')
+})
+
 it('keeps saved instructions separate by profile and connection', () => {
   expect(saveFeedPrompt('alpha', null, '  Local briefing  ')).toBe(true)
   expect(readFeedPrompt('alpha', null)).toBe('Local briefing')
