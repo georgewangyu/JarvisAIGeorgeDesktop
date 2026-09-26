@@ -19,7 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def serve(root: Path, port: int) -> None:
+def serve(root: Path, port: int, *, fail_start_once: bool = False) -> None:
     if root.exists() and any(root.iterdir()):
         raise ValueError("Fixture root must be empty")
     root.mkdir(parents=True, exist_ok=True)
@@ -42,6 +42,22 @@ def serve(root: Path, port: int) -> None:
     from hermes_cli.web_server import app
     import uvicorn
 
+    if fail_start_once:
+        from fastapi.responses import JSONResponse
+
+        pending_failure = True
+
+        @app.middleware("http")
+        async def fail_one_feed_start(request, call_next):
+            nonlocal pending_failure
+            if (pending_failure and request.method == "POST"
+                    and request.url.path == "/api/feed/editions"):
+                pending_failure = False
+                return JSONResponse(
+                    {"detail": "Synthetic Feed start interruption"}, status_code=503,
+                )
+            return await call_next(request)
+
     print(json.dumps({"url": f"http://127.0.0.1:{port}", "session_token": token}), flush=True)
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
@@ -50,5 +66,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument(
+        "--fail-start-once", action="store_true",
+        help="Return one synthetic HTTP 503 from POST /api/feed/editions, then recover",
+    )
     args = parser.parse_args()
-    serve(args.root.resolve(strict=False), args.port)
+    serve(args.root.resolve(strict=False), args.port, fail_start_once=args.fail_start_once)
