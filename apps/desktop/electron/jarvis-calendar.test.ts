@@ -295,6 +295,35 @@ describe('Jarvis Calendar connection boundary', () => {
     expect(await restarted('connect')).toMatchObject({ connected: true, authorization: 'fullAccess' })
   })
 
+  it('does not let an older denied status revoke a newer successful Connect', async () => {
+    const userData = testHome()
+    let finishOldStatus!: (value: { ok: true; command: string; authorization: string }) => void
+
+    const oldStatus = new Promise<{ ok: true; command: string; authorization: string }>(resolve => {
+      finishOldStatus = resolve
+    })
+
+    let statusCalls = 0
+
+    const spy = vi.fn(async (_executable, input) => {
+      if (input.command === 'status' && ++statusCalls === 1) {return oldStatus}
+
+      return { ok: true, command: input.command, authorization: 'fullAccess' }
+    })
+
+    const call = bridge(spy as typeof runCalendarHelper, userData)
+
+    const stale = call('status')
+    await vi.waitFor(() => expect(statusCalls).toBe(1))
+    expect(await call('connect', 'read')).toMatchObject({ connected: true, mode: 'read' })
+    finishOldStatus({ ok: true, command: 'status', authorization: 'denied' })
+    await stale
+
+    expect(await call('status')).toMatchObject({ connected: true, mode: 'read' })
+    expect(await call('list', '2026-09-23T00:00:00Z', '2026-09-24T00:00:00Z'))
+      .toMatchObject({ ok: true, command: 'list-events' })
+  })
+
   it('keeps app opt-in separate across profiles, restarts and the old global config', async () => {
     const userData = testHome()
     fs.writeFileSync(path.join(userData, 'jarvis-calendar-connection.json'), '{"enabled":true}')

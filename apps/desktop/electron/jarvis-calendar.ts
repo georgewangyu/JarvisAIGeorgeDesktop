@@ -190,12 +190,23 @@ interface CalendarBridgeDeps {
 export function registerJarvisCalendar({ appPath, ipcMain, platform = process.platform, run = runCalendarHelper, scopeForSender, ownerVersionForSender = () => 0, trustedSender, userData }: CalendarBridgeDeps): void {
   const helper = calendarHelperPath(appPath)
   const pendingConnects = new Map<string, Set<{ cancelled: boolean }>>()
+  const modeRevisions = new Map<string, number>()
+
+  const bumpModeRevision = (configPath: string) => {
+    modeRevisions.set(configPath, (modeRevisions.get(configPath) ?? 0) + 1)
+  }
+
+  const writeMode = (configPath: string, mode: CalendarMode) => {
+    saveMode(configPath, mode)
+    bumpModeRevision(configPath)
+  }
 
   const call = (input: Record<string, unknown>) => platform === 'darwin'
     ? run(helper, input)
     : Promise.resolve<CalendarResponse>({ ok: false, code: 'unavailable' })
 
   const status = async (configPath: string): Promise<CalendarStatus> => {
+    const revision = modeRevisions.get(configPath) ?? 0
     const response = await call({ command: 'status' })
     const raw = response.ok ? response.authorization : undefined
 
@@ -205,8 +216,9 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
 
     // An observed OS revocation ends the app grant too. A later macOS regrant
     // must still require the user's explicit Connect action.
-    if (connectionMode(configPath) !== 'off' && authorization !== 'fullAccess' && authorization !== 'unknown') {
-      saveMode(configPath, 'off')
+    if (revision === (modeRevisions.get(configPath) ?? 0)
+      && connectionMode(configPath) !== 'off' && authorization !== 'fullAccess' && authorization !== 'unknown') {
+      writeMode(configPath, 'off')
     }
 
     // A helper response without a recognized macOS authorization is not proof
@@ -260,12 +272,13 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     for (const earlier of pending) {earlier.cancelled = true}
     pending.add(attempt)
     pendingConnects.set(configPath, pending)
+    bumpModeRevision(configPath)
 
     try {
       // Apply a downgrade before awaiting OS status. A slow/unknown permission
       // check must not leave the previous write grant usable in the meantime.
       if (requestedMode === 'read' && connectionMode(configPath) === 'interact') {
-        saveMode(configPath, 'read')
+        writeMode(configPath, 'read')
       }
 
       const before = await status(configPath)
@@ -286,7 +299,7 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
 
       if (attempt.cancelled || !sameOwner(event, scope, version)) {return { authorization: 'unknown', connected: false, mode: 'off', supported: false }}
 
-      saveMode(configPath, requestedMode)
+      writeMode(configPath, requestedMode)
 
       const result = await status(configPath)
 
@@ -308,7 +321,7 @@ export function registerJarvisCalendar({ appPath, ipcMain, platform = process.pl
     const configPath = configForScope(userData, scope)
 
     for (const attempt of pendingConnects.get(configPath) ?? []) {attempt.cancelled = true}
-    saveMode(configPath, 'off')
+    writeMode(configPath, 'off')
 
     const result = await status(configPath)
 
