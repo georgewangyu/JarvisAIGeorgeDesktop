@@ -122,7 +122,8 @@ def test_mailbox_poll_skips_owner_lookup_without_a_mailbox(monkeypatch, tmp_path
 def test_desktop_jarvis_owner_claims_its_event_at_idle_boundary(monkeypatch, tmp_path):
     import tools.bot_live_delivery as mailbox
 
-    owner = {"lease_id": "jarvis-lease", "live_session_id": "jarvis-live", "session_id": "main"}
+    owner = {"profile_home": str(tmp_path.resolve()), "lease_id": "jarvis-lease",
+             "live_session_id": "jarvis-live", "session_id": "main"}
     monkeypatch.setattr(mailbox, "find_canonical_live_owner", lambda home: None)
     monkeypatch.setattr(mailbox, "find_jarvis_live_owner", lambda home: owner)
     pending = [{"id": "event-receipt", "message": "[Event from calendar; id one]\nReview today"}]

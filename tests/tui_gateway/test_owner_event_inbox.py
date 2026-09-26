@@ -50,6 +50,105 @@ def test_settled_child_exit_hands_off_only_opted_in_deferred_event(tmp_path, mon
     assert activated == [receipts[1]["id"]]
 
 
+def test_preclaim_child_failure_marks_exact_attempt_and_advances_one_sibling(tmp_path, monkeypatch):
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import _locked, _read, _write
+    from tui_gateway import owner_event_inbox as inbox
+
+    (tmp_path / "config.yaml").write_text(
+        "desktop:\n  jarvis_headless_event_activation: true\n", encoding="utf-8")
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+    db.close()
+    first, second = [inbox.admit_jarvis_event(
+        tmp_path, source="test", event_id=name, text=name) for name in ("first", "second")]
+    with _locked(tmp_path) as root:
+        for receipt in (first, second):
+            path = root / f"{receipt['id']}.json"
+            record = _read(path)
+            record.update(headless_activation_requested=True, headless_activation_attempt=receipt["id"])
+            _write(path, record)
+
+    activated = []
+    monkeypatch.setattr(inbox, "activate_deferred_jarvis_event",
+                        lambda _home, key, **_kwargs: activated.append(key))
+
+    class FailedChild:
+        def wait(self):
+            return 7
+
+    inbox._reap_and_activate_next(tmp_path, first["id"], FailedChild(), first["id"])
+    assert activated == [second["id"]]
+    assert inbox._next_opted_in_deferred_event(tmp_path) == second["id"]
+    with _locked(tmp_path) as root:
+        failed = _read(root / f"{first['id']}.json")
+    assert failed["status"] == "deferred"
+    assert failed["headless_activation_failed_exit_code"] == 7
+    assert failed["headless_activation_failed_count"] == 1
+
+    # A duplicate or a stale reaper cannot launch another sibling or overwrite
+    # a newer attempt; claimed/unknown and missing receipts remain untouched.
+    inbox._reap_and_activate_next(tmp_path, first["id"], FailedChild(), first["id"])
+    assert activated == [second["id"]]
+    with _locked(tmp_path) as root:
+        path = root / f"{first['id']}.json"
+        failed = _read(path)
+        failed.pop("headless_activation_failed_exit_code")
+        failed["headless_activation_attempt"] = "new-attempt"
+        _write(path, failed)
+    inbox._reap_and_activate_next(tmp_path, first["id"], FailedChild(), first["id"])
+    assert activated == [second["id"]]
+    with _locked(tmp_path) as root:
+        claimed = _read(path)
+        claimed["status"] = "claimed"
+        _write(path, claimed)
+    inbox._reap_and_activate_next(tmp_path, first["id"], FailedChild(), "new-attempt")
+    inbox._reap_and_activate_next(tmp_path, "missing", FailedChild(), "missing")
+    assert activated == [second["id"]]
+
+
+def test_settled_sibling_retries_one_preclaim_failure_but_not_two(tmp_path, monkeypatch):
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import _locked, _read, _write
+    from tui_gateway import owner_event_inbox as inbox
+
+    (tmp_path / "config.yaml").write_text(
+        "desktop:\n  jarvis_headless_event_activation: true\n", encoding="utf-8")
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session(session_id="main", source="desktop")
+    db.set_session_title("main", "Jarvis")
+    db.close()
+    settled, raced = [inbox.admit_jarvis_event(
+        tmp_path, source="test", event_id=name, text=name) for name in ("settled", "raced")]
+    with _locked(tmp_path) as root:
+        first = _read(root / f"{settled['id']}.json")
+        first["status"] = "settled"
+        _write(root / f"{settled['id']}.json", first)
+        second = _read(root / f"{raced['id']}.json")
+        second.update(headless_activation_requested=True,
+                      headless_activation_failed_exit_code=1,
+                      headless_activation_failed_count=1)
+        _write(root / f"{raced['id']}.json", second)
+    activated = []
+    monkeypatch.setattr(inbox, "activate_deferred_jarvis_event",
+                        lambda _home, key, **_kwargs: activated.append(key))
+
+    class SettledChild:
+        def wait(self):
+            return 0
+
+    assert inbox._next_opted_in_deferred_event(tmp_path) is None
+    inbox._reap_and_activate_next(tmp_path, settled["id"], SettledChild())
+    assert activated == [raced["id"]]
+    with _locked(tmp_path) as root:
+        second = _read(root / f"{raced['id']}.json")
+        second["headless_activation_failed_count"] = 2
+        _write(root / f"{raced['id']}.json", second)
+    inbox._reap_and_activate_next(tmp_path, settled["id"], SettledChild())
+    assert activated == [raced["id"]]
+
+
 def test_owner_event_admission_is_durable_and_exact(tmp_path):
     from tui_gateway.owner_event_inbox import admit_owner_event, owner_event_receipt
     from tools.bot_live_delivery import claim_pending_delivery, complete_delivery

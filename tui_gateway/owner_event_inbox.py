@@ -15,6 +15,7 @@ import logging
 import subprocess
 import sys
 import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -218,7 +219,9 @@ def jarvis_headless_activation_enabled(profile_home: Path | str) -> bool:
     return isinstance(desktop, dict) and desktop.get("jarvis_headless_event_activation") is True
 
 
-def _next_opted_in_deferred_event(home: Path) -> str | None:
+def _next_opted_in_deferred_event(
+    home: Path, *, retry_failed_once: bool = False,
+) -> str | None:
     from tools.bot_live_delivery import _locked, _scan_read
 
     session_id = find_jarvis_main_session_id(home)
@@ -233,6 +236,10 @@ def _next_opted_in_deferred_event(home: Path) -> str | None:
                     or record.get("profile_home") != str(home)
                     or record.get("target_session_id") != session_id):
                 continue
+            if ("headless_activation_failed_exit_code" in record
+                    and (not retry_failed_once
+                         or record.get("headless_activation_failed_count") != 1)):
+                continue
             sequence = record.get("sequence")
             key = record.get("delivery_id")
             if isinstance(sequence, int) and isinstance(key, str):
@@ -240,19 +247,45 @@ def _next_opted_in_deferred_event(home: Path) -> str | None:
     return min(candidates)[1] if candidates else None
 
 
-def _reap_and_activate_next(home: Path, delivery_id: str, process) -> None:
-    """On a settled child exit, hand one pending receipt to a new one-shot child."""
-    from tools.bot_live_delivery import read_delivery_result
+def _reap_and_activate_next(
+    home: Path, delivery_id: str, process, attempt_id: str | None = None,
+) -> None:
+    """Advance after a terminal turn or a proven, unclaimed child failure."""
+    from tools.bot_live_delivery import _locked, _read, _write, read_delivery_result
 
-    if process.wait() != 0:
-        return
+    exit_code = process.wait()
     try:
-        completed = read_delivery_result(home, delivery_id)
-        if not completed or completed.get("status") not in {"settled", "failed", "cancelled"}:
-            return
+        if exit_code != 0:
+            # A claimed turn may have acted before the child died. Only a still-
+            # deferred receipt from this exact launch proves there was no claim.
+            if not attempt_id:
+                return
+            with _locked(home) as root:
+                path = root / f"{delivery_id}.json"
+                receipt = _read(path)
+                if (receipt is None or receipt.get("status") != "deferred"
+                        or receipt.get("profile_home") != str(home)
+                        or receipt.get("headless_activation_attempt") != attempt_id
+                        or "headless_activation_failed_exit_code" in receipt
+                        or receipt.get("headless_activation_requested") is not True):
+                    return
+                receipt["headless_activation_failed_exit_code"] = exit_code
+                prior_failures = receipt.get("headless_activation_failed_count", 0)
+                receipt["headless_activation_failed_count"] = (
+                    prior_failures + 1 if isinstance(prior_failures, int)
+                    and not isinstance(prior_failures, bool) and prior_failures >= 0 else 2
+                )
+                _write(path, receipt)
+        else:
+            completed = read_delivery_result(home, delivery_id)
+            if not completed or completed.get("status") not in {"settled", "failed", "cancelled"}:
+                return
         if not jarvis_headless_activation_enabled(home):
             return
-        next_id = _next_opted_in_deferred_event(home)
+        # A sibling that raced a still-live lease gets one retry only after
+        # another child has settled. Failed-child reapers never retry failures.
+        next_id = _next_opted_in_deferred_event(
+            home, retry_failed_once=exit_code == 0)
         if next_id is not None:
             activate_deferred_jarvis_event(home, next_id, allow_headless=True)
     except (OSError, ValueError, RuntimeError) as exc:
@@ -295,7 +328,10 @@ def activate_deferred_jarvis_event(
                 or receipt.get("profile_home") != str(home)
                 or receipt.get("target_session_id") != session_id):
             raise ValueError("event is not deferred for the exact Jarvis profile")
+        attempt_id = uuid.uuid4().hex
         receipt["headless_activation_requested"] = True
+        receipt["headless_activation_attempt"] = attempt_id
+        receipt.pop("headless_activation_failed_exit_code", None)
         _write(path, receipt)
     process = subprocess.Popen(
         [sys.executable, "-m", "tui_gateway.headless_owner_event",
@@ -306,7 +342,7 @@ def activate_deferred_jarvis_event(
     )
     try:
         threading.Thread(
-            target=_reap_and_activate_next, args=(home, key, process),
+            target=_reap_and_activate_next, args=(home, key, process, attempt_id),
             name="jarvis-event-child-reaper", daemon=True).start()
     except RuntimeError:
         log.warning("Jarvis event child started but its wait thread could not start")
