@@ -414,6 +414,55 @@ def _(rid, params: dict) -> dict:
                  "profile_name": _response_profile_name(profile)}})
 
 
+@method("session.ensure_jarvis_main")
+def _(rid, params: dict) -> dict:
+    """Give completed consumer setup a durable owner before the first prompt.
+
+    Ordinary empty drafts stay lazy. The profile is explicit so a setup window
+    cannot accidentally write into whichever backend happens to be active.
+    """
+    from hermes_cli.active_sessions import _FileLock
+
+    profile = _str_param(params, "profile")
+    if not profile:
+        return _err(rid, 4004, "profile required")
+    # _profile_home raises for an unknown explicit profile; None is permitted
+    # only when that name resolves to this backend's launch home.
+    resolved_home = _profile_home(profile)
+    home = Path(resolved_home) if resolved_home is not None else _launch_state_db_path().parent
+    lock_dir = home / "runtime"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    with _FileLock(lock_dir / ".jarvis-main-create.lock"):
+        with _profile_db(params, writer=True) as db:
+            if db is None:
+                return _db_unavailable_error(rid, code=5036)
+            if Path(db.db_path).resolve() != (home / "state.db").resolve():
+                return _err(rid, 4090, "The selected Jarvis profile changed. Retry setup.")
+            title = "Jarvis"
+            existing = db.get_session_by_title(title)
+            if existing:
+                if existing.get("archived") or (existing.get("source") or "").lower() != "desktop":
+                    return _err(rid, 4090, "The Jarvis main chat needs review before setup can finish")
+                return _ok(rid, {"stored_session_id": db.get_compression_tip(existing["id"]), "created": False})
+
+            candidate = uuid.uuid4().hex
+            try:
+                db.create_session(candidate, source="desktop", profile_name=_response_profile_name(profile))
+                if not db.set_session_title(candidate, title):
+                    raise RuntimeError("Jarvis title write was not accepted")
+            except Exception:
+                # A concurrent first user prompt may win the unique title. The
+                # candidate has no content and must not survive as an untitled
+                # sidebar row; the winner is safe to adopt only if desktop-owned.
+                with contextlib.suppress(Exception):
+                    db.delete_session_if_empty(candidate, sessions_dir=home / "sessions")
+                winner = db.get_session_by_title(title)
+                if winner and not winner.get("archived") and (winner.get("source") or "").lower() == "desktop":
+                    return _ok(rid, {"stored_session_id": db.get_compression_tip(winner["id"]), "created": False})
+                return _err(rid, 5036, "Could not save the Jarvis main chat. Retry setup.")
+            return _ok(rid, {"stored_session_id": candidate, "created": True})
+
+
 def _unarchive_recoverable(db, session_id: str) -> bool:
     """``unarchive_recoverable_session`` that works on a read-only listing handle (foreign profile):
     the rare write escalates to a short-lived registry writer instead of writing on the reader."""

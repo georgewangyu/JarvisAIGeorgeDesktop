@@ -2887,6 +2887,24 @@
       }
     },
     {
+      "name": "session.ensure_jarvis_main",
+      "summary": "Persist or resolve the permanent empty Jarvis desktop chat after consumer setup completes.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SessionEnsureJarvisMainParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SessionEnsureJarvisMainResult"
+        }
+      }
+    },
+    {
       "name": "session.events.since",
       "summary": "Replay events after a seq watermark on WS reconnect; truncated means refetch state.",
       "params": [
@@ -25788,6 +25806,39 @@
           "deleted"
         ],
         "title": "SessionDeleteResult",
+        "type": "object"
+      },
+      "SessionEnsureJarvisMainParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "title": "SessionEnsureJarvisMainParams",
+        "type": "object"
+      },
+      "SessionEnsureJarvisMainResult": {
+        "additionalProperties": false,
+        "properties": {
+          "stored_session_id": {
+            "title": "Stored Session Id",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stored_session_id",
+          "created"
+        ],
+        "title": "SessionEnsureJarvisMainResult",
         "type": "object"
       },
       "SessionEventsSinceParams": {

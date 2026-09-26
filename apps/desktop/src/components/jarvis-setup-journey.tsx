@@ -19,7 +19,7 @@ interface JarvisSetupJourneyProps {
   onBeginSetup: () => Promise<void>
   onConnectOther: () => void
   onFinish: () => Promise<void>
-  onSkip?: () => void
+  onSkip?: () => Promise<void> | void
   onShowInstallDetails: () => void
 }
 
@@ -129,12 +129,33 @@ export function JarvisSetupJourney({
   const [startError, setStartError] = useState<string | null>(null)
   const [signingIn, setSigningIn] = useState(false)
   const [signInError, setSignInError] = useState<string | null>(null)
+  const [skipPending, setSkipPending] = useState(false)
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const [permissionActionPending, setPermissionActionPending] = useState(false)
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS)
 
   const stepIndex = STEPS.indexOf(step)
   const back = stepIndex > 0 && !(connectedGateway && step === 'files') ? () => setStep(STEPS[stepIndex - 1]) : undefined
+
+  const skip = async () => {
+    setSkipPending(true)
+    setStartError(null)
+    setSignInError(null)
+
+    try {
+      await onSkip?.()
+    } catch {
+      const message = 'Jarvis could not save your main chat. Try again.'
+
+      if (step === 'connect') {
+        setStartError(message)
+      } else {
+        setSignInError(message)
+      }
+    } finally {
+      setSkipPending(false)
+    }
+  }
 
   useEffect(() => setPermissionError(null), [step])
 
@@ -203,7 +224,7 @@ export function JarvisSetupJourney({
               Connect another Jarvis setup
             </Button>
             {onSkip && !reviewMode ? (
-              <Button onClick={onSkip} size="sm" variant="text">
+              <Button disabled={skipPending} onClick={() => void skip()} size="sm" variant="text">
                 I'll choose a provider later
               </Button>
             ) : null}
@@ -459,7 +480,7 @@ export function JarvisSetupJourney({
           )}
           {signingIn ? <p className="text-sm text-(--ui-text-secondary)" role="status">Finish sign-in in your browser. Jarvis will continue when it completes.</p> : null}
           {onSkip && !connectedGateway && !reviewMode && bootstrapComplete && !signingIn ? (
-            <Button onClick={onSkip} size="sm" variant="text">
+            <Button disabled={skipPending} onClick={() => void skip()} size="sm" variant="text">
               I'll choose a provider later
             </Button>
           ) : null}

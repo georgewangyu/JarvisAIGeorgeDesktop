@@ -2554,6 +2554,13 @@ export interface TranscriptMessage {
   reasoning?: string | null
   [key: string]: unknown
 }
+export interface SessionEnsureJarvisMainParams {
+  profile: string
+}
+export interface SessionEnsureJarvisMainResult {
+  stored_session_id: string
+  created: boolean
+}
 /** ``session_id`` is the STORED id (or an exact title); the reply's ``session_id`` is the runtime id. */
 export interface SessionResumeParams {
   session_id: string
@@ -4571,6 +4578,8 @@ export interface RpcMethods {
   'session.cwd.set': { params: SessionCwdSetParams; result: SessionCwdSetResult }
   /** Delete a stored session + transcripts; refused while it is live here. */
   'session.delete': { params: SessionDeleteParams; result: SessionDeleteResult }
+  /** Persist or resolve the permanent empty Jarvis desktop chat after consumer setup completes. */
+  'session.ensure_jarvis_main': { params: SessionEnsureJarvisMainParams; result: SessionEnsureJarvisMainResult }
   /** Replay events after a seq watermark on WS reconnect; truncated means refetch state. */
   'session.events.since': { params: SessionEventsSinceParams; result: SessionEventsSinceResult }
   /** Replay-buffer occupancy telemetry (ops/debug). */
@@ -4862,6 +4871,7 @@ export const RPC_METHODS = [
   'session.create',
   'session.cwd.set',
   'session.delete',
+  'session.ensure_jarvis_main',
   'session.events.since',
   'session.events.stats',
   'session.foreign.import',

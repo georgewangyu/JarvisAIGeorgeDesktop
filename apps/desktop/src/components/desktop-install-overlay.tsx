@@ -1,6 +1,8 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { sessionRoute } from '@/app/routes'
+import { defaultNewSessionTarget } from '@/app/session/new-session-route'
 import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -20,8 +22,10 @@ import { ChevronDown, ChevronRight, Globe, iconSize } from '@/lib/icons'
 import { capitalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
 import { $consumerSetupReview, closeConsumerSetupReview } from '@/store/consumer-setup-review'
+import { requestGatewayForAgent, requestGatewayForProfile } from '@/store/gateway'
 import { $desktopOnboarding, completeDesktopOnboarding, dismissFirstRunOnboarding, startManualOnboarding } from '@/store/onboarding'
 import { setOnboardingSurfaceActive } from '@/store/onboarding-presence'
+import { $activeGatewayProfile, $newChatProfile, resolveNewChatOwnerRoute } from '@/store/profile'
 
 import { FirstRunRemoteForm } from './first-run-remote-form'
 import { JarvisSetupJourney } from './jarvis-setup-journey'
@@ -55,6 +59,36 @@ interface DesktopInstallOverlayProps {
   /** When false, the overlay never renders -- useful for dev when we want
    * to suppress it entirely. */
   enabled?: boolean
+}
+
+/** Setup owns one durable main chat before the first prompt or scheduled event.
+ * The explicit route/profile keeps this write off an unrelated active backend. */
+async function ensureFirstUseMainChat(): Promise<void> {
+  const preferred = defaultNewSessionTarget()
+  const route = preferred ? preferred.route : resolveNewChatOwnerRoute()
+  const profile = preferred?.profile ?? route?.profile ?? $newChatProfile.get() ?? $activeGatewayProfile.get()
+
+  if (!profile) {
+    throw new Error('The Jarvis profile is not selected. Try again after reconnecting.')
+  }
+
+  const params = { profile }
+
+  const result = route
+    ? await requestGatewayForAgent<{ stored_session_id: string }>(
+        route.connectionId, route.profile, 'session.ensure_jarvis_main', params,
+        undefined, undefined, { spawnPriority: 'foreground' }
+      )
+    : await requestGatewayForProfile<{ stored_session_id: string }>(
+        profile, 'session.ensure_jarvis_main', params,
+        undefined, undefined, { spawnPriority: 'foreground' }
+      )
+
+  if (!result.stored_session_id) {
+    throw new Error('Jarvis could not save your main chat. Try again.')
+  }
+
+  window.location.hash = `#${sessionRoute(result.stored_session_id)}`
 }
 
 interface StageRowProps {
@@ -311,6 +345,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   // finished. Keep the first-run journey mounted until the OAuth command
   // actually settles, rather than dropping the user into an unconnected chat.
   const [oauthHandoffStarted, setOauthHandoffStarted] = useState(false)
+  const [oauthAuthenticated, setOauthAuthenticated] = useState(false)
   const [now, setNow] = useState(() => Date.now())
   const logEndRef = useRef<HTMLDivElement | null>(null)
 
@@ -503,6 +538,12 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
             // Connecting another Jarvis setup is a completed first-run path,
             // even if that setup has not configured a model yet. Do not open
             // the local provider picker or falsely mark Codex as connected.
+            try {
+              await ensureFirstUseMainChat()
+            } catch {
+              throw new Error('Jarvis could not save your main chat. Try again.')
+            }
+
             dismissFirstRunOnboarding()
             setRemoteConnected(false)
             setGuidedSetup(false)
@@ -516,34 +557,52 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
             return
           }
 
-          let result: { message?: string; ok: boolean } | undefined
-
           setOauthHandoffStarted(true)
 
-          try {
-            result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
-          } catch {
-            // An IPC rejection can carry a local path or auth callback detail.
-            throw new Error('ChatGPT sign-in could not start. Please try again.')
+          if (!oauthAuthenticated) {
+            let result: { message?: string; ok: boolean } | undefined
+
+            try {
+              result = await window.hermesDesktop?.jarvisOnboarding?.startCodexOAuth?.()
+            } catch {
+              // An IPC rejection can carry a local path or auth callback detail.
+              throw new Error('ChatGPT sign-in could not start. Please try again.')
+            }
+
+            if (!result?.ok) {
+              throw new Error(result?.message || 'ChatGPT sign-in could not start.')
+            }
+
+            setOauthAuthenticated(true)
           }
 
-          if (!result?.ok) {
-            throw new Error(result?.message || 'ChatGPT sign-in could not start.')
+          try {
+            await ensureFirstUseMainChat()
+          } catch {
+            throw new Error('Jarvis could not save your main chat. Try again.')
           }
 
           completeDesktopOnboarding()
           closeConsumerSetupReview()
           setGuidedSetup(false)
           setOauthHandoffStarted(false)
+          setOauthAuthenticated(false)
         }}
         onShowInstallDetails={() => {
           closeConsumerSetupReview()
           setGuidedSetup(false)
         }}
-        onSkip={reviewReady ? closeConsumerSetupReview : canDeferProvider ? () => {
+        onSkip={reviewReady ? closeConsumerSetupReview : canDeferProvider ? async () => {
+          try {
+            await ensureFirstUseMainChat()
+          } catch {
+            throw new Error('Jarvis could not save your main chat. Try again.')
+          }
+
           dismissFirstRunOnboarding()
           setGuidedSetup(false)
           setOauthHandoffStarted(false)
+          setOauthAuthenticated(false)
         } : undefined}
         reviewMode={reviewReady}
       />

@@ -121,6 +121,48 @@ def _save_goal(key, **overrides):
     return state
 
 
+def test_first_use_jarvis_main_is_durable_idempotent_and_has_no_model_turn(server, hermes_home):
+    from hermes_state import SessionDB
+    from tools.bot_live_delivery import find_jarvis_main_session_id
+
+    assert find_jarvis_main_session_id(hermes_home) is None
+    assert not server._sessions
+
+    first = _call(server, "session.ensure_jarvis_main", profile="default")
+    assert first["result"]["created"] is True
+    stored_id = first["result"]["stored_session_id"]
+    assert find_jarvis_main_session_id(hermes_home) == stored_id
+    assert not server._sessions
+
+    second = _call(server, "session.ensure_jarvis_main", profile="default")
+    assert second["result"] == {"stored_session_id": stored_id, "created": False}
+    with SessionDB(hermes_home / "state.db", read_only=True) as db:
+        rows = db.list_sessions_rich(include_hidden=True, limit=20)
+        assert [(row["id"], row["title"], row["source"]) for row in rows] == [
+            (stored_id, "Jarvis", "desktop")]
+
+    other_home = hermes_home / "profiles" / "other"
+    other_home.mkdir(parents=True)
+    other = _call(server, "session.ensure_jarvis_main", profile="other")
+    assert other["result"]["stored_session_id"] != stored_id
+    assert find_jarvis_main_session_id(other_home) == other["result"]["stored_session_id"]
+    assert _call(server, "session.ensure_jarvis_main", profile="default")["result"]["stored_session_id"] == stored_id
+
+
+def test_first_use_jarvis_main_rejects_ambiguous_or_foreign_owner(server):
+    assert _call(server, "session.ensure_jarvis_main")["error"]["code"] == 4004
+    with pytest.raises(server.ProfileUnavailableError):
+        _call(server, "session.ensure_jarvis_main", profile="not-a-profile")
+    db = server._get_db()
+    db.create_session("foreign-jarvis", source="cli")
+    db.set_session_title("foreign-jarvis", "Jarvis")
+
+    refused = _call(server, "session.ensure_jarvis_main", profile="default")
+    assert refused["error"]["code"] == 4090
+    assert db.get_session_by_title("Jarvis")["id"] == "foreign-jarvis"
+    assert len(db.list_sessions_rich(include_hidden=True, limit=20)) == 1
+
+
 def test_goals_list_reads_saved_visible_sessions_without_resuming_them(server):
     from hermes_cli.goals import GoalState
 

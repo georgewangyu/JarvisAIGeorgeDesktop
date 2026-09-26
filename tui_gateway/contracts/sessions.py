@@ -144,6 +144,19 @@ method("session.create", params=SessionCreateParams, result=SessionCreateResult,
        doc="Mint a live session (agent builds after the reply); a DB row appears on the first prompt unless seeded.")
 
 
+class SessionEnsureJarvisMainParams(ProfileParams):
+    profile: str
+
+
+class SessionEnsureJarvisMainResult(Result):
+    stored_session_id: str
+    created: bool
+
+
+method("session.ensure_jarvis_main", params=SessionEnsureJarvisMainParams, result=SessionEnsureJarvisMainResult,
+       doc="Persist or resolve the permanent empty Jarvis desktop chat after consumer setup completes.")
+
+
 # ── session.resume / activate ─────────────────────────────────────────────────────────────────
 
 

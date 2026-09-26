@@ -4,10 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DesktopBootstrapEvent, DesktopBootstrapState, DesktopConnectionProbeResult } from '@/global'
 import { $consumerSetupReview, closeConsumerSetupReview, openConsumerSetupReview } from '@/store/consumer-setup-review'
+import { requestGatewayForAgent, requestGatewayForProfile } from '@/store/gateway'
 import { $desktopOnboarding } from '@/store/onboarding'
 import { onboardingSurfaceActive, resetOnboardingPresenceForTests } from '@/store/onboarding-presence'
+import { $newChatProfile } from '@/store/profile'
 
 import { DesktopInstallOverlay } from './desktop-install-overlay'
+
+vi.mock('@/store/gateway', async original => ({
+  ...(await original<Record<string, unknown>>()),
+  requestGatewayForAgent: vi.fn(),
+  requestGatewayForProfile: vi.fn()
+}))
 
 function bootstrapState(overrides: Partial<DesktopBootstrapState> = {}): DesktopBootstrapState {
   return {
@@ -84,6 +92,10 @@ function whenPresent(text: string): Promise<HTMLElement> {
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  vi.mocked(requestGatewayForAgent).mockReset().mockResolvedValue({ stored_session_id: 'jarvis-main' })
+  vi.mocked(requestGatewayForProfile).mockReset().mockResolvedValue({ stored_session_id: 'jarvis-main' })
+  $newChatProfile.set('default')
+  window.location.hash = '#/'
   $desktopOnboarding.set({
     configured: null,
     flow: { status: 'idle' },
@@ -106,6 +118,7 @@ afterEach(() => {
   Reflect.deleteProperty(window, 'hermesDesktop')
   resetOnboardingPresenceForTests()
   closeConsumerSetupReview()
+  $newChatProfile.set(null)
 })
 
 describe('DesktopInstallOverlay first-run setup', () => {
@@ -278,6 +291,7 @@ describe('DesktopInstallOverlay first-run setup', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Continue without access' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    expect(requestGatewayForProfile).not.toHaveBeenCalled()
     fireEvent.click(await screen.findByRole('button', { name: "I'll choose a provider later" }))
 
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Finish connecting Jarvis' })).toBeNull())
@@ -285,6 +299,63 @@ describe('DesktopInstallOverlay first-run setup', () => {
     expect($desktopOnboarding.get().configured).toBe(false)
     expect(startCodexOAuth).not.toHaveBeenCalled()
     await waitFor(() => expect(onboardingSurfaceActive()).toBe(false))
+    expect(requestGatewayForProfile).toHaveBeenCalledWith(
+      'default', 'session.ensure_jarvis_main', { profile: 'default' },
+      undefined, undefined, { spawnPriority: 'foreground' }
+    )
+    expect(window.location.hash).toBe('#/jarvis-main')
+  })
+
+  it('keeps first-use setup open and retries when the main chat cannot be saved', async () => {
+    $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
+    const desktop = installDesktopMock(bootstrapState())
+    Object.assign(desktop, { jarvisOnboarding: { startCodexOAuth: vi.fn() } })
+    vi.mocked(requestGatewayForProfile)
+      .mockRejectedValueOnce(new Error('private machine path /Users/example/state.db'))
+      .mockResolvedValueOnce({ stored_session_id: 'jarvis-after-retry' })
+    render(<DesktopInstallOverlay />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Get started' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue without access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    fireEvent.click(await screen.findByRole('button', { name: "I'll choose a provider later" }))
+
+    expect(await screen.findByText('Jarvis could not save your main chat. Try again.')).toBeTruthy()
+    expect(screen.queryByText(/private machine path|state\.db/)).toBeNull()
+    expect($desktopOnboarding.get().firstRunSkipped).toBe(false)
+    expect(screen.getByRole('heading', { name: 'Finish connecting Jarvis' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: "I'll choose a provider later" }))
+    await waitFor(() => expect($desktopOnboarding.get().firstRunSkipped).toBe(true))
+    expect(requestGatewayForProfile).toHaveBeenCalledTimes(2)
+    expect(window.location.hash).toBe('#/jarvis-after-retry')
+  })
+
+  it('retries main-chat persistence after OAuth without reopening consent', async () => {
+    $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
+    const desktop = installDesktopMock(bootstrapState())
+    const startCodexOAuth = vi.fn().mockResolvedValue({ ok: true })
+    Object.assign(desktop, { jarvisOnboarding: { startCodexOAuth } })
+    vi.mocked(requestGatewayForProfile)
+      .mockRejectedValueOnce(new Error('temporary backend failure'))
+      .mockResolvedValueOnce({ stored_session_id: 'jarvis-after-oauth' })
+    render(<DesktopInstallOverlay />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Get started' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue without access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue with ChatGPT / Codex' }))
+
+    expect(await screen.findByText('Jarvis could not save your main chat. Try again.')).toBeTruthy()
+    expect(startCodexOAuth).toHaveBeenCalledTimes(1)
+    expect($desktopOnboarding.get().configured).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with ChatGPT / Codex' }))
+    await waitFor(() => expect($desktopOnboarding.get().configured).toBe(true))
+    expect(startCodexOAuth).toHaveBeenCalledTimes(1)
+    expect(window.location.hash).toBe('#/jarvis-after-oauth')
   })
 
   it('keeps defer available when install finishes before provider discovery', async () => {
