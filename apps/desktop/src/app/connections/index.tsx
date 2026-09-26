@@ -493,6 +493,11 @@ export function ConnectionsView() {
                 </Status>
               }
             />
+            {signingIn ? (
+              <p className="border-t border-(--ui-stroke-tertiary) px-5 py-3 text-sm text-(--ui-text-secondary)" role="status">
+                Finish sign-in in your browser. Jarvis will update this connection when it completes.
+              </p>
+            ) : null}
           </div>
         </section>
       ) : null}

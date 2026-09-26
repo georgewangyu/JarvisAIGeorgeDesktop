@@ -193,8 +193,10 @@ it('does not apply an earlier browser sign-in to a different profile after A to 
   render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
   fireEvent.click(await screen.findByRole('button', { name: 'Connect' }))
   expect(startCodexOAuth).toHaveBeenCalledOnce()
+  expect(screen.getByRole('status').textContent).toContain('Finish sign-in in your browser')
 
   act(() => $activeGatewayProfile.set('beta'))
+  expect(screen.queryByRole('status')).toBeNull()
   expect(await screen.findByRole('button', { name: 'Connect' })).toHaveProperty('disabled', false)
   act(() => $activeGatewayProfile.set('alpha'))
   await act(async () => finishSignIn({ ok: true }))
