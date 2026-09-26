@@ -5,6 +5,7 @@
 // where retrying reproduces the failure.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createClientSessionState } from '@/lib/chat-runtime'
 import { dispatchNativeNotification } from '@/store/native-notifications'
 import { $notifications } from '@/store/notifications'
 import { requestDesktopOnboarding } from '@/store/onboarding'
@@ -32,7 +33,7 @@ function errorContext(message: string) {
       flushQueuedDeltas: vi.fn(),
       hydrateFromStoredSession: vi.fn(),
       queryClient: { invalidateQueries: vi.fn() },
-      sessionStateByRuntimeIdRef: { current: new Map() },
+      sessionStateByRuntimeIdRef: { current: new Map([['sess-1', { ...createClientSessionState('stored-1'), awaitingResponse: true }]]) },
       updateSessionState: vi.fn()
     } as unknown as GatewayEventContext['deps'],
     event: { payload, session_id: 'sess-1', type: 'error' },
@@ -53,6 +54,19 @@ afterEach(() => {
 })
 
 describe('gateway `error` event → error card + toast', () => {
+  it('keeps an empty provider-deferred chat clean when its idle agent build fails', () => {
+    const raw = 'Hermes is not connected to any AI provider yet.'
+    const { ctx, failAssistantMessage } = errorContext(raw)
+
+    ctx.deps.sessionStateByRuntimeIdRef.current.set('sess-1', createClientSessionState('stored-1'))
+
+    expect(handleStatusEvent(ctx)).toBe(true)
+    expect(failAssistantMessage).not.toHaveBeenCalled()
+    expect($notifications.get()).toEqual([])
+    expect(requestDesktopOnboarding).not.toHaveBeenCalled()
+    expect(dispatchNativeNotification).not.toHaveBeenCalled()
+  })
+
   it('stamps SESSION_NOT_OWNED on a live-owner refusal so the card drops Retry', () => {
     const { ctx, failAssistantMessage } = errorContext(OWNED_REFUSAL)
 

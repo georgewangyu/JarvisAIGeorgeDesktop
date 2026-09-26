@@ -175,6 +175,16 @@ export function handleStatusEvent(ctx: GatewayEventContext): boolean {
     const errorMessage = payload?.message || 'Hermes reported an error'
     const looksLikeProviderSetup = isProviderSetupErrorMessage(errorMessage)
 
+    // A cold session.resume pre-warms the agent even for the empty main chat.
+    // With no provider, that build emits `error` before anyone has submitted a
+    // prompt. It is a setup diagnostic, not a failed assistant turn.
+    const state = sessionId ? sessionStateByRuntimeIdRef.current.get(sessionId) : undefined
+    const hasTurn = Boolean(state?.awaitingResponse || state?.busy || state?.turnLive || state?.streamId)
+
+    if (looksLikeProviderSetup && !hasTurn) {
+      return true
+    }
+
     // The gateway's `error` event carries no error_surface (prompt_turn.py
     // emits it for pre-turn refusals). Recover the two codes it CAN mean from
     // the text so the card and toast get the same plain copy + button gating
