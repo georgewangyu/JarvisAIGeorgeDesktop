@@ -399,6 +399,12 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     setupReviewRequested && stateLoaded && !state.active && !state.error && !state.unsupportedPlatform && !state.setupChoice
   )
 
+  // The installer can finish before provider discovery resolves to an explicit
+  // `configured: false`. Keep the defer choice available on that path too.
+  const canDeferProvider = installedFirstRun || Boolean(
+    guidedSetup && state.completedAt && !state.active && !state.error && !reviewReady
+  )
+
   useEffect(() => {
     setOnboardingSurfaceActive('setup', Boolean(enabled && (state.setupChoice || guidedSetup || installedFirstRun || reviewReady)))
 
@@ -506,7 +512,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           closeConsumerSetupReview()
           setGuidedSetup(false)
         }}
-        onSkip={reviewReady ? closeConsumerSetupReview : installedFirstRun ? () => {
+        onSkip={reviewReady ? closeConsumerSetupReview : canDeferProvider ? () => {
           dismissFirstRunOnboarding()
           setGuidedSetup(false)
         } : undefined}

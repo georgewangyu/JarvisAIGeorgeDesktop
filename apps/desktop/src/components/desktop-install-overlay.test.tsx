@@ -252,6 +252,30 @@ describe('DesktopInstallOverlay first-run setup', () => {
     await waitFor(() => expect(onboardingSurfaceActive()).toBe(false))
   })
 
+  it('keeps defer available when install finishes before provider discovery', async () => {
+    const desktop = installDesktopMock(bootstrapState({
+      setupChoice: { platform: 'darwin', activeRoot: '/synthetic-test-engine' }
+    }))
+
+    Object.assign(desktop, { jarvisOnboarding: { startCodexOAuth: vi.fn() } })
+    render(<DesktopInstallOverlay />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Get started' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue without access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Skip for now' }))
+    act(() => {
+      desktop.emitBootstrapEvent({ type: 'manifest', protocolVersion: 1, stages: [] })
+      desktop.emitBootstrapEvent({ type: 'complete', marker: {} })
+    })
+
+    expect(await screen.findByRole('button', { name: "I'll choose a provider later" })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: "I'll choose a provider later" }))
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Finish connecting Jarvis' })).toBeNull())
+    expect($desktopOnboarding.get().firstRunSkipped).toBe(true)
+    expect($desktopOnboarding.get().configured).not.toBe(true)
+  })
+
   it('closes the guided setup after bootstrap when the user goes back and chooses a provider later', async () => {
     $desktopOnboarding.set({ ...$desktopOnboarding.get(), configured: false })
 
