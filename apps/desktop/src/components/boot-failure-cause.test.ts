@@ -29,17 +29,18 @@ describe('local boot failure classification', () => {
 
   it('keeps the raw output out of the headline and behind details', () => {
     const raw = 'Hermes backend exited before it became ready (1).\nRecent backend output:\nTraceback (most recent call last):'
-    const copy = localBootFailureCopy(raw, CAUSES)
+    const copy = localBootFailureCopy(raw, CAUSES, 'Could not start Jarvis.')
 
     expect(copy.headline).toBe(CAUSES.exitedEarly)
     expect(copy.headline).not.toMatch(/\(1\)|Traceback|ms\b/)
     expect(copy.rawDetail).toBe(raw)
   })
 
-  it('falls back to the first raw line for an unknown failure, never a dump', () => {
-    const copy = localBootFailureCopy('Something odd happened\nline 2\nline 3', CAUSES)
+  it('uses safe generic copy for an unknown failure, keeping raw details collapsed', () => {
+    const copy = localBootFailureCopy('Error invoking remote method: token=secret\n/private/path', CAUSES, 'Could not start Jarvis.')
 
-    expect(copy.headline).toBe('Something odd happened')
-    expect(copy.rawDetail).toContain('line 3')
+    expect(copy.headline).toBe('Could not start Jarvis.')
+    expect(copy.headline).not.toContain('secret')
+    expect(copy.rawDetail).toContain('/private/path')
   })
 })

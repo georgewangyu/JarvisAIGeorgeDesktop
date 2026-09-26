@@ -37,16 +37,16 @@ export function classifyLocalBootFailure(error: string | null | undefined): Loca
 export interface LocalBootFailureCopy {
   /** The one classified sentence shown in the red box. */
   headline: string
-  /** Raw error text worth keeping for the collapsed details — null when the
-   *  raw text is short enough that the headline already carries it. */
+  /** Raw error text for an explicit collapsed details disclosure. */
   rawDetail: string | null
 }
 
 /** Copy for the overlay's red box: a classified cause when one is known,
- *  otherwise the raw error's FIRST line (never a traceback dump). */
+ *  otherwise a safe generic explanation. Raw diagnostics stay collapsed. */
 export function localBootFailureCopy(
   error: string | null | undefined,
-  causes: Record<LocalBootCause, string>
+  causes: Record<LocalBootCause, string>,
+  fallback: string
 ): LocalBootFailureCopy {
   const raw = String(error || '').trim()
   const cause = classifyLocalBootFailure(raw)
@@ -55,7 +55,5 @@ export function localBootFailureCopy(
     return { headline: causes[cause], rawDetail: raw || null }
   }
 
-  const firstLine = raw.split('\n')[0]?.trim() ?? ''
-
-  return { headline: firstLine, rawDetail: firstLine === raw ? null : raw }
+  return { headline: fallback, rawDetail: raw || null }
 }
