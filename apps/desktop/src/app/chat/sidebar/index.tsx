@@ -501,7 +501,8 @@ export function ChatSidebar({
   }, [])
 
   useEffect(() => {
-    const onOpenChats = () => {
+    const onOpenChats = (event?: Event) => {
+      event?.preventDefault()
       consumeConsumerChatsRequest()
       setDrawerMode('chats')
       setChatsOpen(true)

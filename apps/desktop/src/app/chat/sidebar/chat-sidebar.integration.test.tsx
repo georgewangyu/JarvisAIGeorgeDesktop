@@ -115,6 +115,13 @@ describe('consumer chat navigation', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chats' })).toBeNull())
   })
 
+  it('opens Chats from the mounted rail without a pane remount', async () => {
+    renderSidebar()
+
+    act(() => requestConsumerChats())
+    expect(await screen.findByRole('dialog', { name: 'Chats' })).toBeTruthy()
+  })
+
   it('honors a Chats request made while the sidebar pane was unmounted', async () => {
     requestConsumerChats()
     renderSidebar()

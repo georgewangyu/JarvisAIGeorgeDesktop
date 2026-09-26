@@ -9,11 +9,20 @@ let pendingChatsRequest = false
 let restoreCollapsedSidebar = false
 
 export function requestConsumerChats(): void {
+  // The Jarvis rail often already owns the drawer. Let that mounted owner
+  // handle the request before changing the pane tree, which can unmount it.
+  const event = new Event(OPEN_CONSUMER_CHATS_EVENT, { cancelable: true })
+
+  window.dispatchEvent(event)
+
+  if (event.defaultPrevented) {
+    return
+  }
+
   pendingChatsRequest = true
   restoreCollapsedSidebar = !isPaneVisible('sessions')
   setSidebarOpen(true)
   revealTreePane('sessions')
-  window.dispatchEvent(new Event(OPEN_CONSUMER_CHATS_EVENT))
 }
 
 export function consumeConsumerChatsRequest(): boolean {
