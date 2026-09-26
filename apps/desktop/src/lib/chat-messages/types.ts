@@ -27,6 +27,8 @@ export type ChatMessage = {
   asyncResult?: string
   asyncResultKind?: 'delegation' | 'process'
   asyncResultNeedsAttention?: boolean
+  /** This delegation row repeats an attention signal already shown for the same event identity. */
+  asyncResultAttentionAlreadyShown?: boolean
   timestamp?: number
   completedAt?: number
   pending?: boolean

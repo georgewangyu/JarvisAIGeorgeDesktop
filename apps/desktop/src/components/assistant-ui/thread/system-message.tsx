@@ -67,6 +67,7 @@ export const SystemMessage: FC = () => {
   const processResult = useAuiState(s => s.message.metadata.custom?.asyncResultKind === 'process')
   const delegationResult = useAuiState(s => s.message.metadata.custom?.asyncResultKind === 'delegation')
   const needsAttention = useAuiState(s => s.message.metadata.custom?.asyncResultNeedsAttention)
+  const attentionAlreadyShown = useAuiState(s => s.message.metadata.custom?.asyncResultAttentionAlreadyShown)
   const { themeName } = useTheme()
 
   if (!text) {
@@ -76,7 +77,7 @@ export const SystemMessage: FC = () => {
   if (themeName === 'jarvis' && delegationResult) {
     // The parent answer carries the useful result. A separate completion row
     // would reveal child goals and transcript details in the consumer chat.
-    if (needsAttention === false) {
+    if (needsAttention === false || attentionAlreadyShown) {
       return null
     }
 

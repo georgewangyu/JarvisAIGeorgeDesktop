@@ -384,6 +384,9 @@ export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
           ...(message.asyncResultKind ? { asyncResultKind: message.asyncResultKind } : {}),
           ...(message.asyncResultNeedsAttention !== undefined
             ? { asyncResultNeedsAttention: message.asyncResultNeedsAttention }
+            : {}),
+          ...(message.asyncResultAttentionAlreadyShown
+            ? { asyncResultAttentionAlreadyShown: true }
             : {})
         }
       }

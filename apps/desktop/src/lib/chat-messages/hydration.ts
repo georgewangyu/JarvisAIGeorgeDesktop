@@ -186,6 +186,32 @@ function delegationNeedsAttention(metadata: SessionMessage['display_metadata']):
   return typeof count === 'number' && typeof completed === 'number' ? false : undefined
 }
 
+function delegationAttentionIdentity(metadata: SessionMessage['display_metadata']): {
+  delegationId: string
+  isNotice: boolean
+  failureIndexes: number[]
+  failedCount: number | undefined
+  allOutcomesKnown: boolean
+} | null {
+  const details = parseDisplayMetadata(metadata)
+  const delegationId = details?.delegation_id
+
+  if (typeof delegationId !== 'string' || !delegationId) {
+    return null
+  }
+
+  return {
+    delegationId,
+    isNotice: details?.task_failure_notice === true,
+    failureIndexes: Array.isArray(details?.failure_task_indexes)
+      ? details.failure_task_indexes.filter((value): value is number =>
+          typeof value === 'number' && Number.isInteger(value) && value >= 0)
+      : [],
+    failedCount: typeof details?.failed_count === 'number' ? details.failed_count : undefined,
+    allOutcomesKnown: details?.all_task_outcomes_known === true
+  }
+}
+
 function messageReactions(metadata: SessionMessage['display_metadata']): MessageReaction[] {
   const reactions = parseDisplayMetadata(metadata)?.reactions
 
@@ -265,6 +291,8 @@ function timelineDisplayContent(message: SessionMessage, content: string): strin
 
 export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
   const result: ChatMessage[] = []
+  const announcedFailures = new Map<string, Set<number>>()
+  const seenFinalOutcomes = new Set<string>()
   let pendingToolParts: ChatMessagePart[] = []
   let pendingToolTimestamp: number | undefined
   let activeAssistantIndex: null | number = null
@@ -464,6 +492,38 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
     // reactions address this exact row later.
     const rowId = message.row_id ?? (typeof message.id === 'number' ? message.id : undefined)
 
+    let attentionAlreadyShown = false
+
+    if (message.display_kind === 'async_delegation_complete') {
+      const identity = delegationAttentionIdentity(message.display_metadata)
+
+      if (identity) {
+        const announced = announcedFailures.get(identity.delegationId) ?? new Set<number>()
+
+        if (identity.isNotice && identity.failureIndexes.length) {
+          attentionAlreadyShown = identity.failureIndexes.every(index => announced.has(index))
+          identity.failureIndexes.forEach(index => announced.add(index))
+          announcedFailures.set(identity.delegationId, announced)
+        } else if (!identity.isNotice) {
+          const outcomeKey = JSON.stringify([
+            identity.delegationId,
+            [...identity.failureIndexes].sort((a, b) => a - b),
+            identity.failedCount,
+            identity.allOutcomesKnown
+          ])
+
+          attentionAlreadyShown = seenFinalOutcomes.has(outcomeKey) || (
+            identity.allOutcomesKnown && identity.failureIndexes.length > 0 &&
+            identity.failedCount === identity.failureIndexes.length &&
+            identity.failureIndexes.every(index => announced.has(index))
+          )
+          seenFinalOutcomes.add(outcomeKey)
+          identity.failureIndexes.forEach(index => announced.add(index))
+          announcedFailures.set(identity.delegationId, announced)
+        }
+      }
+    }
+
     result.push({
       id: `${message.timestamp || Date.now()}-${index}-${displayRole}`,
       role: displayRole,
@@ -474,7 +534,8 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
       ...(message.display_kind === 'process_complete' ? { asyncResultKind: 'process' as const } : {}),
       ...(message.display_kind === 'async_delegation_complete'
         ? { asyncResultKind: 'delegation' as const,
-            asyncResultNeedsAttention: delegationNeedsAttention(message.display_metadata) }
+            asyncResultNeedsAttention: delegationNeedsAttention(message.display_metadata),
+            ...(attentionAlreadyShown ? { asyncResultAttentionAlreadyShown: true } : {}) }
         : {}),
       timestamp: earliestTimestamp(message.timestamp, ...parts.map(part => part.timestamp)),
       ...(rowId !== undefined ? { rowId } : {}),

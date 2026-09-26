@@ -160,6 +160,7 @@ const COMPARED_FIELDS = [
   'asyncResult',
   'asyncResultKind',
   'asyncResultNeedsAttention',
+  'asyncResultAttentionAlreadyShown',
   'id',
   'role',
   'pending',

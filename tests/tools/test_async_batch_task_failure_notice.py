@@ -10,6 +10,7 @@ from unittest.mock import patch
 from tools import async_delegation as ad
 from tools.process_registry_notifications import format_process_notification
 from tui_gateway.session_notifications import _notification_event_dedup_key
+from tui_gateway.session_notifications import _async_delegation_display_metadata
 
 
 def _record(status="running"):
@@ -67,3 +68,25 @@ def test_gateway_dedup_identity_separates_notices_from_the_final_and_from_each_o
     n1 = {"type": "async_delegation", "delegation_id": "d", "task_failure_notice": True, "results": [{"task_index": 1}]}
     final = {"type": "async_delegation", "delegation_id": "d", "is_batch": True, "results": []}
     assert len({ident(n0), ident(n1), ident(final)}) == 3
+
+
+def test_display_metadata_identifies_announced_child_without_conflating_final_event():
+    notice = {"type": "async_delegation", "delegation_id": "d", "task_failure_notice": True,
+              "results": [{"task_index": 1, "status": "error"}]}
+    final = {"type": "async_delegation", "delegation_id": "d", "is_batch": True,
+             "results": [{"task_index": 0, "status": "completed"}, {"task_index": 1, "status": "error"}]}
+    notice_meta = _async_delegation_display_metadata(notice)
+    final_meta = _async_delegation_display_metadata(final)
+
+    assert notice_meta["task_failure_notice"] is True
+    assert final_meta["task_failure_notice"] is False
+    assert notice_meta["failure_task_indexes"] == final_meta["failure_task_indexes"] == [1]
+    assert final_meta["all_task_outcomes_known"] is True
+
+    timeout_meta = _async_delegation_display_metadata({
+        "type": "async_delegation", "delegation_id": "other", "is_batch": True,
+        "results": [{"task_index": 0, "status": "timeout"}],
+    })
+    assert timeout_meta["failed_count"] == 1
+    assert timeout_meta["failure_task_indexes"] == [0]
+    assert timeout_meta["all_task_outcomes_known"] is True

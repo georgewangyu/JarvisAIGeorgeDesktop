@@ -586,6 +586,9 @@ export type TimelineDisplayMetadata =
       task_count: number
       completed_count?: number
       failed_count?: number
+      task_failure_notice?: boolean
+      failure_task_indexes?: number[]
+      all_task_outcomes_known?: boolean
       duration_seconds?: number
       display_text?: string
     }

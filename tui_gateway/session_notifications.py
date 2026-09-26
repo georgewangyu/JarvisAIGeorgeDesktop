@@ -733,16 +733,24 @@ def _notification_poller_scoped_loop(stop_event: threading.Event, sid: str, sess
 
 def _async_delegation_display_metadata(evt: dict) -> dict:
     """Build display-only metadata before the completion event is formatted."""
+    from tools.delegate_tool_progress import SUBAGENT_FAILURE_STATUSES
     from tools.process_registry_notifications import async_delegation_display_text
     raw_results = evt.get("results")
     results: list[dict] = [r for r in raw_results if isinstance(r, dict)] if isinstance(raw_results, list) else []
     task_count = len(results) or 1
     completed_count = sum(1 for r in results if r.get("status") in {"completed", "success"})
-    failed_count = sum(1 for r in results if r.get("status") in {"failed", "error"})
+    failed_count = sum(1 for r in results if r.get("status") in SUBAGENT_FAILURE_STATUSES)
+    failure_task_indexes = [r["task_index"] for r in results
+                            if r.get("status") in SUBAGENT_FAILURE_STATUSES
+                            and isinstance(r.get("task_index"), int) and r["task_index"] >= 0]
     duration = evt.get("total_duration_seconds") or evt.get("duration_seconds")
     return {"display_text": async_delegation_display_text(evt),
             "delegation_id": str(evt.get("delegation_id") or ""), "task_count": task_count,
             "completed_count": completed_count or task_count - failed_count, "failed_count": failed_count,
+            "task_failure_notice": bool(evt.get("task_failure_notice")),
+            "failure_task_indexes": failure_task_indexes,
+            "all_task_outcomes_known": bool(results) and all(
+                r.get("status") in {"completed", "success"} | SUBAGENT_FAILURE_STATUSES for r in results),
             **({"duration_seconds": duration} if isinstance(duration, (int, float)) else {})}
 
 

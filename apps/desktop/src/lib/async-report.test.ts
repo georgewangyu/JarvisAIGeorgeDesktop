@@ -36,6 +36,41 @@ function hydrateWithOutcome(displayText: string, completed: number, failed: numb
 }
 
 describe('async report hydration', () => {
+  it('marks only repeated attention for the same delegation and failed child', () => {
+    const row = (delegationId: string, indexes: number[], notice: boolean) => ({
+      role: 'user' as const,
+      content: envelope(report),
+      display_kind: 'async_delegation_complete',
+      display_metadata: {
+        delegation_id: delegationId,
+        display_text: 'Subagent Task Failed',
+        task_count: indexes.length,
+        failed_count: indexes.length,
+        task_failure_notice: notice,
+        failure_task_indexes: indexes,
+        all_task_outcomes_known: true
+      }
+    })
+
+    const messages = toChatMessages([
+      row('batch-a', [0], true),
+      row('batch-a', [0], true),
+      row('batch-a', [0], false),
+      row('batch-b', [0], false),
+      row('batch-a', [0, 1], false)
+    ])
+
+    expect(messages.map(message => message.asyncResultAttentionAlreadyShown ?? false))
+      .toEqual([false, true, true, false, false])
+
+    const newFailure = toChatMessages([
+      row('batch-a', [0], true),
+      row('batch-a', [0, 1], false)
+    ])
+
+    expect(newFailure[1].asyncResultAttentionAlreadyShown).toBeUndefined()
+  })
+
   it('carries producer-owned delegation outcome without exposing its goal', () => {
     const done = hydrateWithOutcome('Subagent Task Completed: private goal', 1, 0)
     const failed = hydrateWithOutcome('Subagent Task Failed: private goal', 0, 1)

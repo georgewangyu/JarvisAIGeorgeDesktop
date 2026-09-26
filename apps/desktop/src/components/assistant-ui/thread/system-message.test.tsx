@@ -18,10 +18,11 @@ $displayTimestamps.set(true)
 const timestamp = new Date('2026-05-01T00:00:00.000Z')
 stubThreadEnvironment()
 
-function Harness({ text, asyncResult, delegationNeedsAttention }: {
+function Harness({ text, asyncResult, delegationNeedsAttention, attentionAlreadyShown }: {
   text: string
   asyncResult?: string
   delegationNeedsAttention?: boolean
+  attentionAlreadyShown?: boolean
 }) {
   const message = {
     id: 'system-1',
@@ -33,7 +34,8 @@ function Harness({ text, asyncResult, delegationNeedsAttention }: {
       asyncResult,
       ...(delegationNeedsAttention !== undefined
         ? { asyncResultKind: 'delegation', asyncResultNeedsAttention: delegationNeedsAttention }
-        : {})
+        : {}),
+      ...(attentionAlreadyShown ? { asyncResultAttentionAlreadyShown: true } : {})
     } }
   } as unknown as ThreadMessage
 
@@ -106,6 +108,16 @@ describe('background report disclosure', () => {
     expect(failed.container.textContent).toContain('Background work needs attention')
     expect(failed.container.textContent).not.toContain('private goal')
     expect(failed.container.textContent).not.toContain('Private worker failure detail')
+  })
+
+  it('hides a repeated attention signal after an earlier notice', () => {
+    const { container } = render(<Harness
+      attentionAlreadyShown
+      delegationNeedsAttention
+      text="Subagent Task Failed: private goal"
+    />)
+
+    expect(container.textContent).not.toContain('Background work needs attention')
   })
 
   it('keeps result bodies out of the transcript until opened and removes them when collapsed', () => {
