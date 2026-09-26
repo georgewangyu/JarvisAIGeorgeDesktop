@@ -85,9 +85,13 @@ export function VoiceMenu({
   const wakeLabel = wakeListening ? c.wakeWordListening(phrase) : c.wakeWordOff(phrase)
   const triggerLabel = !directDictation && dictating ? dictationLabel : wakeListening ? wakeLabel : c.voiceControls
 
+  const wakeNotice = consumer && wake.notice
+    ? 'Wake word could not start. Check microphone access and try again.'
+    : wake.notice
+
   return (
     <DropdownMenu>
-      <Tip label={wake.notice && (directDictation || !dictating) ? `${triggerLabel} — ${wake.notice}` : triggerLabel} placement="control">
+      <Tip label={wakeNotice && (directDictation || !dictating) ? `${triggerLabel} — ${wakeNotice}` : triggerLabel} placement="control">
         <DropdownMenuTrigger asChild>
           <Button
             aria-label={triggerLabel}

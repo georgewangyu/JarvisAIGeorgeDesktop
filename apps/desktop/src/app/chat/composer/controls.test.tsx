@@ -210,6 +210,21 @@ describe('consumer composer', () => {
     expect(screen.getByText('Read replies aloud')).toBeTruthy()
   })
 
+  it('does not put backend wake-word diagnostics in the consumer tooltip', async () => {
+    applyWakeStartResult({ hint: 'run a local installer at /private/path', reason: 'unavailable', started: false })
+
+    try {
+      renderControls({ consumer: true })
+      fireEvent.pointerMove(screen.getByRole('button', { name: 'Voice' }), { pointerType: 'mouse' })
+
+      const tooltip = await screen.findByRole('tooltip')
+      expect(tooltip.textContent).toContain('Check microphone access and try again.')
+      expect(tooltip.textContent).not.toContain('/private/path')
+    } finally {
+      resetWakeWordState()
+    }
+  })
+
   it('opens options for its own keyboard target, not another pane', () => {
     renderControls({ consumer: true })
     fireEvent(window, new CustomEvent('hermes:composer-model-menu', { detail: { target: 'tile:other' } }))
