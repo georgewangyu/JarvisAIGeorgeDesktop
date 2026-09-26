@@ -10,6 +10,12 @@ export interface FeedEdition {
   id: string
   prompt: string
   retrieved_source_urls?: string[]
+  source_events?: Array<{
+    tool_call_id: string
+    tool: 'web_extract'
+    requested_url: string
+    result_url: string
+  }>
   source_urls: string[]
   source_urls_verified: false
   status: 'completed' | 'denied' | 'failed' | 'generating' | 'interrupted'

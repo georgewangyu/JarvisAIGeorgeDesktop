@@ -180,27 +180,51 @@ it('labels generated links as unverified on completed editions only', async () =
   expect(screen.getByRole('link', { name: 'https://example.test/release' }).getAttribute('href')).toBe('https://example.test/release')
   expect(fetchLinkTitle).not.toHaveBeenCalled()
   expect(screen.getByRole('list', { name: 'Generated briefing links and retrieval status' }).textContent)
-    .toContain('https://example.test/release — Retrieval status unavailable')
+    .toContain('https://example.test/release — Page content not verified as retrieved')
+
+  vi.mocked(getFeedEditions).mockResolvedValue([{ ...linked, retrieved_source_urls: ['https://example.test/release'] }])
+  view.unmount()
+  const legacyView = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+  expect(await screen.findByText('Links mentioned in this generated briefing:')).toBeTruthy()
+  expect(screen.getByRole('list', { name: 'Generated briefing links and retrieval status' }).textContent)
+    .toContain('https://example.test/release — Page content not verified as retrieved')
 
   vi.mocked(getFeedEditions).mockResolvedValue([{
     ...linked,
     content: 'Read [release notes](https://example.test/release) and [another link](https://example.test/other).',
     source_urls: ['https://example.test/release', 'https://example.test/other'],
-    retrieved_source_urls: ['https://example.test/release']
+    retrieved_source_urls: ['https://example.test/release'],
+    source_events: [{
+      tool_call_id: 'call-1', tool: 'web_extract',
+      requested_url: 'https://example.test/release', result_url: 'https://example.test/release'
+    }]
   }])
-  view.unmount()
+  legacyView.unmount()
   const retrievedView = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
   expect(await screen.findByText('Links mentioned in this generated briefing:')).toBeTruthy()
   const sourceList = screen.getByRole('list', { name: 'Generated briefing links and retrieval status' })
   expect(sourceList.textContent).toContain('https://example.test/release — Page content retrieved; claims not verified')
-  expect(sourceList.textContent).toContain('https://example.test/other — Page content not retrieved')
+  expect(sourceList.textContent).toContain('https://example.test/other — Page content not verified as retrieved')
   expect(screen.getByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeTruthy()
   expect(fetchLinkTitle).not.toHaveBeenCalled()
 
   vi.mocked(getFeedEditions).mockResolvedValue([{
-    ...linked, content: null, error: 'Provider unavailable', status: 'failed'
+    ...linked,
+    source_events: [{
+      tool_call_id: 'other-call', tool: 'web_extract',
+      requested_url: 'https://example.test/other', result_url: 'https://example.test/release'
+    }]
   }])
   retrievedView.unmount()
+  const mismatchView = render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
+  expect(await screen.findByText('Links mentioned in this generated briefing:')).toBeTruthy()
+  expect(screen.getByRole('list', { name: 'Generated briefing links and retrieval status' }).textContent)
+    .toContain('https://example.test/release — Page content not verified as retrieved')
+
+  vi.mocked(getFeedEditions).mockResolvedValue([{
+    ...linked, content: null, error: 'Provider unavailable', status: 'failed'
+  }])
+  mismatchView.unmount()
   render(<MemoryRouter><ConsumerFeedEditions /></MemoryRouter>)
   expect(await screen.findByText('This briefing did not finish. Check your connection and try again.')).toBeTruthy()
   expect(screen.queryByText('Sources have not been verified. Links in this generated briefing may be inaccurate.')).toBeNull()

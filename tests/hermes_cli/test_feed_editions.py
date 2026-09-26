@@ -114,7 +114,10 @@ def test_failure_and_interruption_require_explicit_retry(tmp_path, monkeypatch):
 
     monkeypatch.setattr(scheduler, "run_job", fake_run_job)
     assert feed._run_real_agent("Deliberate request", "abcdef1234567890") == (
-        "Agent result", ["https://example.test/page"])
+        "Agent result", ["https://example.test/page"], [{
+            "tool_call_id": "call-1", "tool": "web_extract",
+            "requested_url": "https://example.test/page", "result_url": "https://example.test/page",
+        }])
     assert calls[0]["prompt"] == "Deliberate request"
     assert calls[0]["id"] == "abcdef123456"
     assert calls[0]["deliver"] == "local"
@@ -134,6 +137,7 @@ def test_generated_urls_are_only_unverified_mentions(tmp_path, monkeypatch):
 
     assert completed["content"] == content
     assert completed["source_urls"] == ["https://example.test/release"]
+    assert completed["source_events"] == []
     assert completed["source_urls_verified"] is False
 
 
@@ -144,8 +148,11 @@ def test_only_completed_exact_web_extract_results_record_retrieved_citations(tmp
     cited = "https://example.test/fetched"
     other = "https://example.test/unfetched"
     responses = [f"Read {cited} and {other}", f"Read {cited}"]
+    calls = 0
 
     def fake_run_job(_job, *, tool_complete_callback):
+        nonlocal calls
+        calls += 1
         tool_complete_callback("search", "web_search", {"query": "example"}, json.dumps({
             "success": True, "data": {"web": [{"url": other}]},
         }))
@@ -155,9 +162,10 @@ def test_only_completed_exact_web_extract_results_record_retrieved_citations(tmp
         tool_complete_callback("blocked", "web_extract", {"urls": [other]}, json.dumps({
             "results": [{"url": other, "content": "", "error": "Blocked: private address"}],
         }))
-        tool_complete_callback("fetched", "web_extract", {"urls": [cited]}, json.dumps({
-            "results": [{"url": cited, "content": "Actual page text", "error": None}],
-        }))
+        if calls == 1:
+            tool_complete_callback("fetched", "web_extract", {"urls": [cited]}, json.dumps({
+                "results": [{"url": cited, "content": "Actual page text", "error": None}],
+            }))
         return True, "response document", responses.pop(0), None
 
     monkeypatch.setattr(scheduler, "run_job", fake_run_job)
@@ -165,12 +173,20 @@ def test_only_completed_exact_web_extract_results_record_retrieved_citations(tmp
     partial = _eventually(lambda: feed.get_edition(first["id"]), "completed")
     assert partial["source_urls"] == [cited, other]
     assert partial["retrieved_source_urls"] == [cited]
+    assert partial["source_events"] == [{
+        "tool_call_id": "fetched", "tool": "web_extract",
+        "requested_url": cited, "result_url": cited,
+    }]
     assert partial["source_urls_verified"] is False
+    with feed._connect() as db:
+        stored = db.execute("SELECT source_events FROM editions WHERE id=?", (first["id"],)).fetchone()
+    assert json.loads(stored["source_events"]) == partial["source_events"]
 
     second = feed.request_edition("Two")
     retrieved = _eventually(lambda: feed.get_edition(second["id"]), "completed")
     assert retrieved["source_urls"] == [cited]
-    assert retrieved["retrieved_source_urls"] == [cited]
+    assert retrieved["retrieved_source_urls"] == []
+    assert retrieved["source_events"] == []
     assert retrieved["source_urls_verified"] is False
 
 
@@ -192,6 +208,7 @@ def test_retrieval_matches_web_extract_normalized_request(tmp_path, monkeypatch)
     completed = _eventually(lambda: feed.get_edition(row["id"]), "completed")
     assert completed["source_urls"] == [fetched]
     assert completed["retrieved_source_urls"] == [fetched]
+    assert completed["source_events"][0]["result_url"] == fetched
     assert completed["source_urls_verified"] is False
 
 
@@ -223,12 +240,14 @@ def test_failed_extract_and_retry_do_not_keep_retrieval_evidence(tmp_path, monke
     failed = _eventually(lambda: feed.get_edition(first["id"]), "failed")
     assert failed["source_urls"] == []
     assert failed["retrieved_source_urls"] == []
+    assert failed["source_events"] == []
 
     feed.request_edition("Summarize", retry_id=first["id"])
     completed = _eventually(lambda: feed.get_edition(first["id"]), "completed")
     assert completed["attempt"] == 2
     assert completed["source_urls"] == [url]
     assert completed["retrieved_source_urls"] == []
+    assert completed["source_events"] == []
     assert completed["source_urls_verified"] is False
 
 
@@ -249,7 +268,13 @@ def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
     monkeypatch.setattr(profiles, "_get_default_hermes_home", lambda: default_home)
     monkeypatch.setattr(profiles, "_get_profiles_root", lambda: profiles_root)
     monkeypatch.setenv("HERMES_HOME", str(default_home))
-    monkeypatch.setattr(feed, "_run_real_agent", lambda prompt, _: (f"Edition: {prompt}", None))
+    url = "https://example.test/source"
+    monkeypatch.setattr(feed, "_run_real_agent", lambda prompt, _: (
+        f"Edition: {prompt} {url}", [url], [{
+            "tool_call_id": prompt, "tool": "web_extract",
+            "requested_url": url, "result_url": url,
+        }],
+    ))
 
     client = TestClient(app)
     client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
@@ -274,6 +299,8 @@ def test_api_editions_are_profile_local_across_a_b_a(tmp_path, monkeypatch):
     assert [row["id"] for row in listed("worker_alpha")] == [b_id]
     assert [row["status"] for row in listed()] == ["completed"]
     assert [row["status"] for row in listed("worker_alpha")] == ["completed"]
+    assert listed()[0]["source_events"][0]["tool_call_id"] == "Default only"
+    assert listed("worker_alpha")[0]["source_events"][0]["tool_call_id"] == "Worker only"
     assert [row["id"] for row in listed()] == [a_id]
     assert client.get(f"/api/feed/editions/{b_id}").status_code == 404
     assert client.get(f"/api/feed/editions/{a_id}?profile=worker_alpha").status_code == 404
@@ -365,6 +392,7 @@ def test_existing_feed_database_migrates_without_losing_editions(tmp_path, monke
     assert feed.get_edition("old")["content"] == "Older output"
     assert feed.get_edition("old")["feedback_applied_count"] == 0
     assert feed.get_edition("old")["retrieved_source_urls"] == []
+    assert feed.get_edition("old")["source_events"] == []
     newer = feed.request_edition(
         "New prompt", liked_edition_ids=["old"], runner=lambda *_: ("New output", None),
     )

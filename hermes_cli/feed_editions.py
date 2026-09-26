@@ -45,12 +45,13 @@ def _connect() -> sqlite3.Connection:
         error TEXT, owner TEXT NOT NULL, attempt INTEGER NOT NULL,
         execution TEXT NOT NULL, source_urls TEXT NOT NULL DEFAULT '[]',
         retrieved_source_urls TEXT NOT NULL DEFAULT '[]',
+        source_events TEXT NOT NULL DEFAULT '[]',
         heartbeat_at REAL NOT NULL,
         feedback_context TEXT NOT NULL DEFAULT '',
         feedback_applied_count INTEGER NOT NULL DEFAULT 0
     )""")
     columns = {row[1] for row in db.execute("PRAGMA table_info(editions)")}
-    if {"feedback_context", "feedback_applied_count", "retrieved_source_urls"} - columns:
+    if {"feedback_context", "feedback_applied_count", "retrieved_source_urls", "source_events"} - columns:
         # Only old stores need a write lock. Recheck inside it because another
         # serve process may have completed the migration while we waited.
         db.execute("BEGIN IMMEDIATE")
@@ -61,6 +62,8 @@ def _connect() -> sqlite3.Connection:
             db.execute("ALTER TABLE editions ADD COLUMN feedback_applied_count INTEGER NOT NULL DEFAULT 0")
         if "retrieved_source_urls" not in columns:
             db.execute("ALTER TABLE editions ADD COLUMN retrieved_source_urls TEXT NOT NULL DEFAULT '[]'")
+        if "source_events" not in columns:
+            db.execute("ALTER TABLE editions ADD COLUMN source_events TEXT NOT NULL DEFAULT '[]'")
     db.commit()
     return db
 
@@ -70,6 +73,7 @@ def _row(row: sqlite3.Row) -> dict:
     item.pop("feedback_context", None)
     item["source_urls"] = json.loads(item["source_urls"])
     item["retrieved_source_urls"] = json.loads(item["retrieved_source_urls"])
+    item["source_events"] = json.loads(item["source_events"])
     # Retrieval proves a page was returned, not that the generated claims are true.
     item["source_urls_verified"] = False
     return item
@@ -160,7 +164,7 @@ def get_edition(edition_id: str) -> dict | None:
         return _row(row) if row else None
 
 
-def _run_real_agent(prompt: str, edition_id: str) -> tuple[str, list[str]]:
+def _run_real_agent(prompt: str, edition_id: str) -> tuple[str, list[str], list[dict]]:
     """Use the existing cron agent lifecycle, runtime preflight and watchdog.
 
     ``run_job`` creates a real isolated session and tears down the agent.  This
@@ -174,11 +178,13 @@ def _run_real_agent(prompt: str, edition_id: str) -> tuple[str, list[str]]:
         "deliver": "local", "schedule": {"kind": "once"},
     }
     retrieved_urls: set[str] = set()
+    source_events: list[dict] = []
 
-    def record_extract(_call_id, name, args, result) -> None:
+    def record_extract(call_id, name, args, result) -> None:
         # This callback receives the actual completed tool result, not model prose.
         # web_extract has already applied secret-URL and SSRF gates.
-        if name != "web_extract" or not isinstance(args, dict) or not isinstance(result, str):
+        if (name != "web_extract" or not isinstance(call_id, str) or not call_id
+                or not isinstance(args, dict) or not isinstance(result, str)):
             return
         from tools.url_safety import normalize_url_for_request
 
@@ -216,13 +222,17 @@ def _run_real_agent(prompt: str, edition_id: str) -> tuple[str, list[str]]:
                     and isinstance(entry.get("content"), str) and entry["content"].strip()
                     and not entry.get("error") and not entry.get("blocked_by_policy")):
                 retrieved_urls.add(url)
+                source_events.append({
+                    "tool_call_id": call_id, "tool": "web_extract",
+                    "requested_url": url, "result_url": url,
+                })
 
     success, _document, response, error = run_job(job, tool_complete_callback=record_extract)
     if not success:
         raise RuntimeError(error or "Agent did not complete the Feed edition")
     if not response or not response.strip():
         raise RuntimeError("Agent returned no Feed edition")
-    return response.strip(), sorted(retrieved_urls)
+    return response.strip(), sorted(retrieved_urls), source_events
 
 
 def _finish(edition_id: str, attempt: int, prompt: str, runner) -> None:
@@ -248,7 +258,12 @@ def _finish(edition_id: str, attempt: int, prompt: str, runner) -> None:
     )
     heartbeat_thread.start()
     try:
-        content, retrieved_urls = runner(prompt, edition_id)
+        result = runner(prompt, edition_id)
+        if len(result) == 3:
+            content, retrieved_urls, source_events = result
+        else:
+            content, retrieved_urls = result
+            source_events = []
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("Agent returned no Feed edition")
         status, error = "completed", None
@@ -259,18 +274,23 @@ def _finish(edition_id: str, attempt: int, prompt: str, runner) -> None:
         denied = isinstance(exc, PermissionError) or any(
             marker in str(exc) for marker in (BLOCKED_CONFIG_MARKER, BLOCKED_CONFIG_SILENT_MARKER)
         )
-        content, retrieved_urls, status, error = None, [], "denied" if denied else "failed", f"{type(exc).__name__}: {exc}"
+        content, retrieved_urls, source_events, status, error = None, [], [], "denied" if denied else "failed", f"{type(exc).__name__}: {exc}"
     finally:
         heartbeat_stop.set()
     # Keep agent mentions and tool retrieval evidence separate: neither proves claims.
     source_urls = _mentioned_urls(content or "")
     retrieved_urls = sorted(
         {url for url in (retrieved_urls or []) if isinstance(url, str)}.intersection(source_urls))
+    source_events = [event for event in (source_events or []) if isinstance(event, dict)
+                     and event.get("tool") == "web_extract"
+                     and isinstance(event.get("tool_call_id"), str) and event["tool_call_id"]
+                     and event.get("requested_url") == event.get("result_url")
+                     and event.get("result_url") in retrieved_urls]
     with _connect() as db:
         db.execute(
-            "UPDATE editions SET status=?, content=?, error=?, source_urls=?, retrieved_source_urls=?, finished_at=? "
+            "UPDATE editions SET status=?, content=?, error=?, source_urls=?, retrieved_source_urls=?, source_events=?, finished_at=? "
             "WHERE id=? AND owner=? AND attempt=? AND status='generating'",
-            (status, content, error, json.dumps(source_urls), json.dumps(retrieved_urls), _now(),
+            (status, content, error, json.dumps(source_urls), json.dumps(retrieved_urls), json.dumps(source_events), _now(),
              edition_id, _PROCESS_OWNER, attempt),
         )
 
@@ -308,7 +328,7 @@ def request_edition(
             db.execute(
                 "UPDATE editions SET status='generating', owner=?, attempt=?, "
                 "finished_at=NULL, content=NULL, error=NULL, source_urls='[]', "
-                "retrieved_source_urls='[]', heartbeat_at=? WHERE id=?",
+                "retrieved_source_urls='[]', source_events='[]', heartbeat_at=? WHERE id=?",
                 (_PROCESS_OWNER, attempt, time.time(), edition_id),
             )
         else:

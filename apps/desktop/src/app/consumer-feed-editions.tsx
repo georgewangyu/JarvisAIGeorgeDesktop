@@ -33,13 +33,12 @@ function feedFailureCopy(item: FeedEdition): string {
 }
 
 function feedRetrievalCopy(item: FeedEdition, url: string): string {
-  if (!Array.isArray(item.retrieved_source_urls)) {
-    return 'Retrieval status unavailable'
-  }
+  const retrieved = item.source_events?.some(event =>
+    event.tool === 'web_extract' && event.requested_url === url && event.result_url === url &&
+    typeof event.tool_call_id === 'string' && event.tool_call_id.length > 0
+  )
 
-  return item.retrieved_source_urls.includes(url)
-    ? 'Page content retrieved; claims not verified'
-    : 'Page content not retrieved'
+  return retrieved ? 'Page content retrieved; claims not verified' : 'Page content not verified as retrieved'
 }
 
 export function ConsumerFeedEditions() {
