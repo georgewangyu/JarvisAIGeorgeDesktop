@@ -210,7 +210,7 @@ export function JarvisSetupJourney({
           <p className="mt-6 text-xs leading-5 text-(--ui-text-tertiary)">
             {alreadyConnected
               ? 'Your existing connection and conversations will stay as they are.'
-              : 'You’ll sign in securely with ChatGPT before setup finishes. No API key is required.'}
+              : 'You can sign in securely with ChatGPT now or choose a provider later. No API key is required.'}
           </p>
           {startError ? <p className="mt-4 text-sm text-destructive">{startError}</p> : null}
         </div>
@@ -419,7 +419,7 @@ export function JarvisSetupJourney({
           {alreadyConnected
             ? 'Your account and conversations are unchanged. You can adjust access later in Connections.'
             : bootstrapComplete
-            ? 'One last step: sign in with ChatGPT to start using Jarvis.'
+            ? 'Sign in with ChatGPT to start asking Jarvis, or choose a provider later.'
             : bootstrapError
               ? 'Jarvis could not finish setup. Your permission choices were saved.'
               : 'Jarvis is finishing setup in the background. This can take a few minutes the first time.'}
