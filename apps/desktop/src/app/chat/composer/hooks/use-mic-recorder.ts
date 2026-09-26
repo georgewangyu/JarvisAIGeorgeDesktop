@@ -85,6 +85,7 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
   const silenceTriggeredRef = useRef(false)
   const silenceStartedAtRef = useRef<number | null>(null)
   const stopResolverRef = useRef<((recording: MicRecording | null) => void) | null>(null)
+  const startGenerationRef = useRef(0)
 
   const cleanup = () => {
     if (animationRef.current) {
@@ -102,7 +103,10 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
     silenceTriggeredRef.current = false
   }
 
-  useEffect(() => () => cleanup(), [])
+  useEffect(() => () => {
+    startGenerationRef.current++
+    cleanup()
+  }, [])
 
   const startMeter = (stream: MediaStream, options: MicRecorderOptions) => {
     const audioWindow = window as Window & { webkitAudioContext?: BrowserAudioContext }
@@ -179,6 +183,8 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
       return
     }
 
+    const generation = ++startGenerationRef.current
+
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       throw new Error(copy.microphoneUnsupported)
     }
@@ -188,7 +194,15 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
     try {
       permitted = await window.hermesDesktop?.requestMicrophoneAccess?.()
     } catch (error) {
+      if (generation !== startGenerationRef.current) {
+        return
+      }
+
       throw error instanceof DOMException ? micError(error, copy) : new Error(copy.microphoneStartFailed)
+    }
+
+    if (generation !== startGenerationRef.current) {
+      return
     }
 
     if (permitted === false) {
@@ -202,7 +216,17 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
         audio: { echoCancellation: true, noiseSuppression: true }
       })
     } catch (error) {
+      if (generation !== startGenerationRef.current) {
+        return
+      }
+
       throw micError(error, copy)
+    }
+
+    if (generation !== startGenerationRef.current) {
+      stream.getTracks().forEach(track => track.stop())
+
+      return
     }
 
     const mimeType =
@@ -294,6 +318,7 @@ export function useMicRecorder(copy: MicRecorderErrorCopy): {
     })
 
   const cancel: MicRecorderHandle['cancel'] = () => {
+    startGenerationRef.current++
     const recorder = recorderRef.current
     const resolver = stopResolverRef.current
     stopResolverRef.current = null

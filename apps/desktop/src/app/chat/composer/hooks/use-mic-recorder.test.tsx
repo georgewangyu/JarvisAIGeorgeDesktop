@@ -19,6 +19,54 @@ afterEach(() => {
 })
 
 describe('useMicRecorder startup recovery', () => {
+  it('discards a late microphone grant after cancel without replacing a retry', async () => {
+    let grantFirstStream!: (stream: MediaStream) => void
+    const firstStream = new Promise<MediaStream>(resolve => { grantFirstStream = resolve })
+    const firstTrackStop = vi.fn()
+    const secondTrackStop = vi.fn()
+    const secondStream = { getTracks: () => [{ stop: secondTrackStop }] } as unknown as MediaStream
+    const getUserMedia = vi.fn().mockReturnValueOnce(firstStream).mockResolvedValueOnce(secondStream)
+    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia } })
+    vi.stubGlobal('AudioContext', undefined)
+
+    class TestMediaRecorder {
+      static isTypeSupported = () => true
+      state = 'inactive'
+      mimeType = 'audio/webm'
+      ondataavailable: ((event: BlobEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+      onstop: (() => void) | null = null
+
+      start() { this.state = 'recording' }
+      stop() { this.state = 'inactive'; this.onstop?.() }
+    }
+    vi.stubGlobal('MediaRecorder', TestMediaRecorder)
+
+    const { result } = renderHook(() => useMicRecorder(copy))
+    let firstStart!: Promise<void>
+
+    await act(async () => {
+      firstStart = result.current.handle.start()
+      await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce())
+    })
+
+    act(() => result.current.handle.cancel())
+    await act(async () => result.current.handle.start())
+    expect(result.current.recording).toBe(true)
+
+    await act(async () => {
+      grantFirstStream({ getTracks: () => [{ stop: firstTrackStop }] } as unknown as MediaStream)
+      await firstStart
+    })
+
+    expect(firstTrackStop).toHaveBeenCalledOnce()
+    expect(secondTrackStop).not.toHaveBeenCalled()
+    expect(result.current.recording).toBe(true)
+
+    act(() => result.current.handle.cancel())
+    expect(secondTrackStop).toHaveBeenCalledOnce()
+  })
+
   it('keeps native permission denial ahead of capture and allows a granted retry', async () => {
     const requestMicrophoneAccess = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
     vi.stubGlobal('hermesDesktop', { requestMicrophoneAccess })
