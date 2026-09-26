@@ -53,8 +53,6 @@ import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import {
   Panel,
   PanelAction,
-  PanelAddButton,
-  PanelBlock,
   PanelBody,
   PanelDetail,
   PanelEmpty,
@@ -62,7 +60,6 @@ import {
   PanelList,
   PanelListRow,
   type PanelMenuItem,
-  PanelMeta,
   PanelPill,
   type PanelPillTone,
   PanelSectionLabel
@@ -644,8 +641,13 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
   return (
     <Panel closeLabel={c.close} inline={inline} onClose={onClose}>
       <PanelHeader
+        actions={
+          <Button onClick={() => setEditor({ mode: 'create' })} size="sm">
+            {c.newCron}
+          </Button>
+        }
         subtitle={inline ? <span className="text-sm">{c.count(totalCount)}</span> : c.count(totalCount)}
-        title={inline ? <span className="text-2xl font-semibold tracking-tight">{c.title}</span> : c.title}
+        title={inline ? <span className="text-[1.75rem] font-semibold tracking-tight">{c.title}</span> : c.title}
       />
 
       {loading && jobs.length === 0 ? (
@@ -674,6 +676,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
       ) : (
         <PanelBody>
           <PanelList
+            className="min-[47.5rem]:w-64"
             onSearchChange={setQuery}
             searchHints={jobs
               .map(jobTitle)
@@ -687,6 +690,7 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
             {visibleJobs.map(job => (
               <CronJobListRow
                 active={selectedJob?.id === job.id}
+                c={c}
                 job={job}
                 key={job.id}
                 menuItems={[
@@ -702,7 +706,6 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
                 {query.trim() ? c.emptyTitleSearch : c.emptyTitleNew}
               </p>
             )}
-            <PanelAddButton label={c.newCron} onClick={() => setEditor({ mode: 'create' })} />
             {visibleBlueprints.length > 0 && (
               <>
                 <PanelSectionLabel className="mt-4 px-2">
@@ -794,12 +797,14 @@ export function CronView({ inline = false, onClose, setStatusbarItemGroup: _setS
 
 function CronJobListRow({
   active,
+  c,
   job,
   menuItems,
   menuLabel,
   onSelect
 }: {
   active: boolean
+  c: Translations['cron']
   job: CronJob
   menuItems?: PanelMenuItem[]
   menuLabel?: string
@@ -808,15 +813,24 @@ function CronJobListRow({
   const state = jobState(job)
 
   return (
-    <PanelListRow
-      active={active}
-      dotClassName={STATE_DOT[state] ?? 'bg-muted-foreground'}
-      menuItems={menuItems}
-      menuLabel={menuLabel}
-      onSelect={onSelect}
-      rowKey={job.id}
-      title={jobTitle(job)}
-    />
+    <div className="mb-1 [&_[data-panel-row]]:h-14">
+      <PanelListRow
+        active={active}
+        dotClassName={STATE_DOT[state] ?? 'bg-muted-foreground'}
+        menuItems={menuItems}
+        menuLabel={menuLabel}
+        onSelect={onSelect}
+        rowKey={job.id}
+        title={
+          <span className="flex min-w-0 flex-col gap-0.5 py-1">
+            <span className="truncate text-sm font-medium text-foreground">{jobTitle(job)}</span>
+            <span className="truncate text-[0.72rem] font-normal text-(--ui-text-tertiary)">
+              {jobFrequencyDisplay(job, c.completedOneTimeFrequency)}
+            </span>
+          </span>
+        }
+      />
+    </div>
   )
 }
 
@@ -834,38 +848,54 @@ function CronJobDetail({ busy, c, job, onEdit, onPauseResume, onTrigger }: CronJ
   const deliver = jobDeliver(job)
   const prompt = jobPrompt(job)
   const modelOverride = jobModel(job)
+  const nextLabel = (nextRunOverdueMs(job) === null ? c.next : c.overdueSince).replace(/:$/, '')
 
   return (
-    <PanelDetail>
-      <header className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 className="text-[0.95rem] font-semibold tracking-tight text-foreground">{jobTitle(job)}</h3>
+    <PanelDetail className="min-w-0 [&>div]:mx-auto [&>div]:max-w-3xl">
+      <header className="space-y-5 rounded-2xl bg-primary/8 px-5 py-5 sm:px-6 sm:py-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 space-y-2">
             <PanelPill tone={STATE_TONE[state] ?? 'muted'}>{c.states[state] ?? state}</PanelPill>
+            <h3 className="break-words text-xl font-semibold leading-tight tracking-tight text-foreground sm:text-2xl">
+              {jobTitle(job)}
+            </h3>
           </div>
           <JobActions busy={busy} c={c} onPauseResume={onPauseResume} onTrigger={onTrigger} state={state} />
         </div>
 
-        <PanelMeta
-          rows={[
-            { label: c.frequencyLabel, value: jobFrequencyDisplay(job, c.completedOneTimeFrequency) },
-            { label: c.last.replace(/:$/, ''), value: formatTime(job.last_run_at) },
-            {
-              label: (nextRunOverdueMs(job) === null ? c.next : c.overdueSince).replace(/:$/, ''),
-              value: formatTime(job.next_run_at)
-            },
-            { label: c.deliverLabel, value: c.deliveryLabels[deliver] ?? deliver },
-            ...(modelOverride ? [{ label: c.modelLabel, value: modelOverride }] : [])
-          ]}
-        />
+        <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+          <div className="space-y-1 sm:col-span-2">
+            <dt className="text-xs font-medium text-(--ui-text-secondary)">{c.frequencyLabel}</dt>
+            <dd className="break-words text-base font-medium text-foreground">
+              {jobFrequencyDisplay(job, c.completedOneTimeFrequency)}
+            </dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs font-medium text-(--ui-text-secondary)">{nextLabel}</dt>
+            <dd className="break-words text-sm text-foreground">{formatTime(job.next_run_at)}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs font-medium text-(--ui-text-secondary)">{c.last.replace(/:$/, '')}</dt>
+            <dd className="break-words text-sm text-foreground">{formatTime(job.last_run_at)}</dd>
+          </div>
+        </dl>
+
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-(--ui-text-secondary)">
+          <span>
+            {c.deliverLabel}: {c.deliveryLabels[deliver] ?? deliver}
+          </span>
+          {modelOverride ? (
+            <span>
+              {c.modelLabel}: {modelOverride}
+            </span>
+          ) : null}
+        </div>
 
         {job.last_error ? (
           <div className="space-y-1.5 rounded bg-destructive/10 p-2 text-[0.7rem] text-destructive">
             <div className="flex items-start gap-1.5">
               <AlertTriangle className="mt-px size-3 shrink-0" />
-              <span className="min-w-0 break-words">
-                {c.lastRunFailed.replace(/:$/, '')}
-              </span>
+              <span className="min-w-0 break-words">{c.lastRunFailed.replace(/:$/, '')}</span>
             </div>
             <div className="flex items-center gap-0.5 pl-4">
               <PanelAction disabled={busy} icon="edit" onClick={onEdit}>
@@ -880,9 +910,11 @@ function CronJobDetail({ busy, c, job, onEdit, onPauseResume, onTrigger }: CronJ
       </header>
 
       {prompt ? (
-        <section className="space-y-1.5">
+        <section className="space-y-2 px-1">
           <PanelSectionLabel>{c.promptLabel}</PanelSectionLabel>
-          <PanelBlock>{prompt}</PanelBlock>
+          <p className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-sm leading-relaxed text-(--ui-text-secondary)">
+            {prompt}
+          </p>
         </section>
       ) : null}
 
