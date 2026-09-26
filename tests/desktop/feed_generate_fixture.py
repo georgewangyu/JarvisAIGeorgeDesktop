@@ -19,7 +19,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def serve(root: Path, port: int, *, fail_start_once: bool = False) -> None:
+def serve(root: Path, port: int, *, fail_start_once: bool = False,
+          mixed_sources: bool = False) -> None:
     if root.exists() and any(root.iterdir()):
         raise ValueError("Fixture root must be empty")
     root.mkdir(parents=True, exist_ok=True)
@@ -36,6 +37,11 @@ def serve(root: Path, port: int, *, fail_start_once: bool = False) -> None:
         if "fail once" in prompt.lower() and not (root / "failed-once").exists():
             (root / "failed-once").touch()
             raise RuntimeError("Synthetic provider interruption")
+        if mixed_sources:
+            retrieved = "https://example.test/retrieved"
+            mentioned = "https://example.test/mentioned"
+            return (f"Synthetic briefing for: {prompt}. Read {retrieved}; also mentioned {mentioned}.",
+                    [retrieved])
         return f"Synthetic briefing for: {prompt}", None
 
     feed_editions._run_real_agent = synthetic_agent
@@ -70,5 +76,10 @@ if __name__ == "__main__":
         "--fail-start-once", action="store_true",
         help="Return one synthetic HTTP 503 from POST /api/feed/editions, then recover",
     )
+    parser.add_argument(
+        "--mixed-sources", action="store_true",
+        help="Return a synthetic briefing with one retrieved and one mentioned-only URL",
+    )
     args = parser.parse_args()
-    serve(args.root.resolve(strict=False), args.port, fail_start_once=args.fail_start_once)
+    serve(args.root.resolve(strict=False), args.port,
+          fail_start_once=args.fail_start_once, mixed_sources=args.mixed_sources)
