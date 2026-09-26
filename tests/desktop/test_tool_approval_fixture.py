@@ -12,6 +12,8 @@ Manual rehearsal, from the repo root with its Python environment::
     # To rehearse one background child in the same saved chat, send the exact
     # text "Run the synthetic delegate check." The loopback model delays the
     # child's tool-free response so its running state can be inspected.
+    # "Run the synthetic failing delegate check." requests an isolated child
+    # whose loopback provider fails, without performing any external action.
     python tests/desktop/test_tool_approval_fixture.py status --root /tmp/hermes-approval-UNIQUE
     # After stopping/crashing only this fixture process, reuse its exact
     # test-owned root and token to inspect gateway-restart behavior:
@@ -58,6 +60,8 @@ MODEL_DELEGATE_PROMPT = "Run the synthetic delegate check."
 MODEL_DELEGATE_CHILD_GOAL = "Return the synthetic child check result. Do not use tools."
 MODEL_DELEGATE_CHILD_RESULT = "The synthetic child check finished."
 MODEL_DELEGATE_RESULT = "The synthetic delegate check finished."
+MODEL_DELEGATE_FAILURE_PROMPT = "Run the synthetic failing delegate check."
+MODEL_DELEGATE_FAILURE_CHILD_GOAL = "Attempt the synthetic unavailable child check. Do not use tools."
 
 
 def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
@@ -76,15 +80,17 @@ def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
     user_content = messages[user_index].get("content")
     if user_content == MODEL_DELEGATE_CHILD_GOAL:
         return {"role": "assistant", "content": MODEL_DELEGATE_CHILD_RESULT}, "stop"
-    if user_content == MODEL_DELEGATE_PROMPT:
+    if user_content in {MODEL_DELEGATE_PROMPT, MODEL_DELEGATE_FAILURE_PROMPT}:
         after_user = messages[user_index + 1:]
         if any(isinstance(item, dict) and item.get("role") == "tool" for item in after_user):
-            return {"role": "assistant", "content": "The synthetic child is running."}, "stop"
+            return {"role": "assistant", "content": "The background check is running."}, "stop"
+        child_goal = (MODEL_DELEGATE_CHILD_GOAL if user_content == MODEL_DELEGATE_PROMPT
+                      else MODEL_DELEGATE_FAILURE_CHILD_GOAL)
         return {
             "role": "assistant", "content": None,
             "tool_calls": [{"index": 0, "id": "call_synthetic_delegate", "type": "function",
                             "function": {"name": "delegate_task", "arguments": json.dumps({
-                                "tasks": [{"goal": MODEL_DELEGATE_CHILD_GOAL}],
+                                "tasks": [{"goal": child_goal}],
                             })}}],
         }, "tool_calls"
     if (isinstance(user_content, str)
@@ -92,6 +98,11 @@ def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
             and MODEL_DELEGATE_CHILD_GOAL in user_content
             and MODEL_DELEGATE_CHILD_RESULT in user_content):
         return {"role": "assistant", "content": MODEL_DELEGATE_RESULT}, "stop"
+    if (isinstance(user_content, str)
+            and user_content.startswith("[ASYNC DELEGATION BATCH COMPLETE — ")
+            and MODEL_DELEGATE_FAILURE_CHILD_GOAL in user_content
+            and "status=failed" in user_content):
+        return {"role": "assistant", "content": "The background check could not finish."}, "stop"
     if user_content != MODEL_APPROVAL_PROMPT:
         if user_content == MODEL_BACKGROUND_SUCCESS_PROMPT:
             return {"role": "assistant", "content": "The synthetic background check finished."}, "stop"
@@ -266,11 +277,11 @@ def serve(root: Path, *, resume: bool = False) -> None:
             latest_user = next((item.get("content") for item in reversed(messages)
                                 if isinstance(item, dict) and item.get("role") == "user"), None)
             if latest_user in {MODEL_BACKGROUND_SUCCESS_PROMPT, MODEL_BACKGROUND_FAILURE_PROMPT,
-                               MODEL_DELEGATE_CHILD_GOAL}:
+                               MODEL_DELEGATE_CHILD_GOAL, MODEL_DELEGATE_FAILURE_CHILD_GOAL}:
                 # Allow a native test to leave the owning chat before the
                 # provider returns. No external model or user data is touched.
                 await asyncio.sleep(8)
-                if latest_user == MODEL_BACKGROUND_FAILURE_PROMPT:
+                if latest_user in {MODEL_BACKGROUND_FAILURE_PROMPT, MODEL_DELEGATE_FAILURE_CHILD_GOAL}:
                     raise HTTPException(status_code=503, detail="synthetic provider unavailable")
         try:
             message, finish_reason = fixture_completion(body, root)
@@ -453,7 +464,7 @@ def test_model_delegate_rehearsal_routes_one_child_and_completion(tmp_path: Path
     dispatched, reason = fixture_completion({"messages": messages + [
         spawned, {"role": "tool", "content": '{"status":"dispatched"}'},
     ]}, root)
-    assert (dispatched, reason) == ({"role": "assistant", "content": "The synthetic child is running."}, "stop")
+    assert (dispatched, reason) == ({"role": "assistant", "content": "The background check is running."}, "stop")
 
     completion = ("[ASYNC DELEGATION BATCH COMPLETE — synthetic-id]\n"
                   f"--- TASK 1/1: {MODEL_DELEGATE_CHILD_GOAL} (status=completed) ---\n"
@@ -462,6 +473,27 @@ def test_model_delegate_rehearsal_routes_one_child_and_completion(tmp_path: Path
         {"role": "user", "content": completion},
     ]}, root)
     assert (final, reason) == ({"role": "assistant", "content": MODEL_DELEGATE_RESULT}, "stop")
+
+
+def test_model_delegate_failure_rehearsal_preserves_attention_outcome(tmp_path: Path) -> None:
+    root = tmp_path / "approval-fixture"
+    create_fixture(root)
+    messages = [{"role": "user", "content": MODEL_DELEGATE_FAILURE_PROMPT}]
+    spawned, reason = fixture_completion({"messages": messages}, root)
+    assert reason == "tool_calls"
+    assert json.loads(spawned["tool_calls"][0]["function"]["arguments"]) == {
+        "tasks": [{"goal": MODEL_DELEGATE_FAILURE_CHILD_GOAL}],
+    }
+
+    completion = ("[ASYNC DELEGATION BATCH COMPLETE — synthetic-id]\n"
+                  f"--- TASK 1/1: {MODEL_DELEGATE_FAILURE_CHILD_GOAL} (status=failed) ---\n"
+                  "Error: synthetic provider unavailable")
+    final, reason = fixture_completion({"messages": messages + [
+        {"role": "user", "content": completion},
+    ]}, root)
+    assert (final, reason) == (
+        {"role": "assistant", "content": "The background check could not finish."}, "stop",
+    )
 
 
 def test_loopback_gateway_denial_round_trip(tmp_path: Path) -> None:
