@@ -15,8 +15,8 @@ Manual rehearsal, from the repo root with its Python environment::
     # "Run the synthetic failing delegate check." requests an isolated child
     # whose loopback provider fails, without performing any external action.
     # "Run the synthetic delegated approval check." starts a child that asks
-    # twice to change only a dummy fixture file. Deny both approval cards to
-    # inspect the wait, retry, and final no-action outcome.
+    # to change only a dummy fixture file. Deny its single approval card to
+    # inspect the wait and final no-action outcome.
     python tests/desktop/test_tool_approval_fixture.py status --root /tmp/hermes-approval-UNIQUE
     # After stopping/crashing only this fixture process, reuse its exact
     # test-owned root and token to inspect gateway-restart behavior:
@@ -67,7 +67,7 @@ MODEL_DELEGATE_FAILURE_PROMPT = "Run the synthetic failing delegate check."
 MODEL_DELEGATE_FAILURE_CHILD_GOAL = "Attempt the synthetic unavailable child check. Do not use tools."
 MODEL_DELEGATE_APPROVAL_PROMPT = "Run the synthetic delegated approval check."
 MODEL_DELEGATE_APPROVAL_CHILD_GOAL = "Request the synthetic child action and report whether it was denied."
-MODEL_DELEGATE_APPROVAL_DENIED = "The background action was denied twice and did not run."
+MODEL_DELEGATE_APPROVAL_DENIED = "The background action was denied and did not run."
 MODEL_DELEGATE_APPROVAL_ALLOWED = "The background action was allowed and finished."
 MODEL_DELEGATE_APPROVAL_RESULT = "The background action could not run without permission."
 
@@ -100,10 +100,9 @@ def fixture_completion(body: dict, root: Path) -> tuple[dict, str]:
                 result = {}
             if isinstance(result, dict) and result.get("exit_code") == 0:
                 return {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_ALLOWED}, "stop"
-            if not isinstance(result, dict) or result.get("status") != "blocked":
-                return {"role": "assistant", "content": "The background action could not finish."}, "stop"
-        if len(tool_results) >= 2:
-            return {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_DENIED}, "stop"
+            if isinstance(result, dict) and result.get("status") == "blocked":
+                return {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_DENIED}, "stop"
+            return {"role": "assistant", "content": "The background action could not finish."}, "stop"
         command = f"chmod 666 {root / 'sandbox-target' / 'delegate-approval-marker'}"
         return {
             "role": "assistant", "content": None,
@@ -545,7 +544,7 @@ def test_model_delegate_failure_rehearsal_preserves_attention_outcome(tmp_path: 
     )
 
 
-def test_model_delegate_approval_retries_only_a_denied_fixture_action(tmp_path: Path) -> None:
+def test_model_delegate_approval_stops_after_denial(tmp_path: Path) -> None:
     root = tmp_path / "approval-fixture"
     create_fixture(root)
     messages = [{"role": "user", "content": MODEL_DELEGATE_APPROVAL_PROMPT}]
@@ -563,11 +562,6 @@ def test_model_delegate_approval_retries_only_a_denied_fixture_action(tmp_path: 
     assert command == f"chmod 666 {root / 'sandbox-target' / 'delegate-approval-marker'}"
 
     child_messages.extend([first, {"role": "tool", "content": '{"status":"blocked"}'}])
-    retried, reason = fixture_completion({"messages": child_messages}, root)
-    assert reason == "tool_calls"
-    assert retried["tool_calls"][0]["id"] != first["tool_calls"][0]["id"]
-    assert json.loads(retried["tool_calls"][0]["function"]["arguments"])["command"] == command
-    child_messages.extend([retried, {"role": "tool", "content": '{"status":"blocked"}'}])
     child_final, reason = fixture_completion({"messages": child_messages}, root)
     assert (child_final, reason) == (
         {"role": "assistant", "content": MODEL_DELEGATE_APPROVAL_DENIED}, "stop",
@@ -585,7 +579,7 @@ def test_model_delegate_approval_retries_only_a_denied_fixture_action(tmp_path: 
     )
 
 
-def test_loopback_delegated_child_waits_for_two_real_gateway_denials(tmp_path: Path) -> None:
+def test_loopback_delegated_child_stops_after_one_gateway_denial(tmp_path: Path) -> None:
     """A delegated child uses the owner's live approval queue, and denial never runs its command."""
     from urllib.error import URLError
     from websockets.sync.client import connect
@@ -641,18 +635,14 @@ def test_loopback_delegated_child_waits_for_two_real_gateway_denials(tmp_path: P
                     assert time.monotonic() < deadline, "delegated child never requested approval"
                     seen.append(json.loads(ws.recv(timeout=10)))
 
-            requests = []
-            for rid in (4, 5):
-                approval_frame = next_approval()
-                params = approval_frame["params"]
-                assert "delegate-approval-marker" in params["command"]
-                requests.append(params["request_id"])
-                denied = call("approval.respond", {
-                    "session_id": params["session_id"],
-                    "request_id": params["request_id"], "choice": "deny",
-                }, rid)
-                assert denied.get("result") == {"resolved": 1}, denied
-            assert requests[0] != requests[1]
+            approval_frame = next_approval()
+            params = approval_frame["params"]
+            assert "delegate-approval-marker" in params["command"]
+            denied = call("approval.respond", {
+                "session_id": params["session_id"],
+                "request_id": params["request_id"], "choice": "deny",
+            }, 4)
+            assert denied.get("result") == {"resolved": 1}, denied
             assert ((root / "sandbox-target" / "delegate-approval-marker").stat().st_mode & 0o777) == 0o600
 
         assert request(root, "stop") == {"stopping": True}
