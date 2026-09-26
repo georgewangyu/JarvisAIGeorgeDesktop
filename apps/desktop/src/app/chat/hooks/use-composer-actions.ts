@@ -25,6 +25,16 @@ import type { ImageDetachResponse } from '../../types'
 
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|ico)$/i
 
+async function assertPickedFileImport(filePath: string): Promise<void> {
+  if (!window.hermesDesktop) {return}
+
+  const check = window.hermesDesktop.jarvisFileImports?.assertAllowed
+
+  if (!check) {throw new Error('Attachment import permissions are unavailable. Restart Jarvis and retry.')}
+
+  await check(filePath)
+}
+
 const BLOB_MIME_EXTENSION: Record<string, string> = {
   'image/bmp': '.bmp',
   'image/gif': '.gif',
@@ -407,6 +417,19 @@ export function useComposerActions({
       }
 
       for (const path of paths) {
+        if (kind === 'file') {
+          try {await assertPickedFileImport(path)}
+          catch (error) {
+            notify({
+              kind: 'warning',
+              title: 'Could not attach file',
+              message: error instanceof Error ? error.message : 'Check attachment access in Connections & permissions.'
+            })
+
+            continue
+          }
+        }
+
         const rel = contextPath(path, currentCwd)
 
         attachToMain({
@@ -559,6 +582,17 @@ export function useComposerActions({
     }
 
     for (const path of paths) {
+      try {await assertPickedFileImport(path)}
+      catch (error) {
+        notify({
+          kind: 'warning',
+          title: 'Could not attach image',
+          message: error instanceof Error ? error.message : 'Check attachment access in Connections & permissions.'
+        })
+
+        continue
+      }
+
       await attachImagePath(path)
     }
   }, [attachImagePath, copy.attachImages, currentCwd, t.composer.images])

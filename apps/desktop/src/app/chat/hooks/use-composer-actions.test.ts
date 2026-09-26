@@ -23,6 +23,40 @@ import {
 const osDrop = (path: string): DroppedFile => ({ file: new File(['x'], path.split('/').pop() || 'f'), path })
 const inAppRef = (path: string, extra: Partial<DroppedFile> = {}): DroppedFile => ({ path, ...extra })
 
+describe('native picker attachment access', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'hermesDesktop')
+    vi.clearAllMocks()
+  })
+
+  it('does not leave a blocked picker choice as a misleading attachment chip', async () => {
+    const filePath = '/tmp/synthetic-note.txt'
+    const add = vi.fn<(attachment: ComposerAttachment) => void>()
+
+    const assertAllowed = vi.fn().mockRejectedValueOnce(new Error('Attachment import blocked for this folder.'))
+      .mockResolvedValueOnce(true)
+
+    Object.defineProperty(window, 'hermesDesktop', {
+      configurable: true,
+      value: { selectPaths: vi.fn(async () => [filePath]), jarvisFileImports: { assertAllowed } }
+    })
+
+    const { result } = renderHook(() => useComposerActions({
+      activeSessionId: null,
+      currentCwd: '/tmp',
+      requestGateway: vi.fn(),
+      scope: { add, remove: vi.fn(() => null), target: 'main', update: vi.fn(() => true), updateIfCurrent: vi.fn(() => true) }
+    }))
+
+    await act(async () => {await result.current.pickContextPaths('file')})
+    expect(add).not.toHaveBeenCalled()
+
+    await act(async () => {await result.current.pickContextPaths('file')})
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({ path: filePath, kind: 'file' }))
+    expect(assertAllowed).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('partitionDroppedFiles', () => {
   it('routes File-bearing OS drops to osDrops and path-only in-app drags to inAppRefs', () => {
     const finderPdf = osDrop('/Users/mahmoud/Downloads/DEVIS_signed.pdf')
@@ -302,12 +336,14 @@ describe('useComposerActions native image drops', () => {
     const saveImageBuffer = vi.fn(() => new Promise<string>(resolve => { finishSave = resolve }))
     const add = vi.fn()
     Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { saveImageBuffer } })
+
     const { result } = renderHook(() => useComposerActions({
       activeSessionId: null,
       currentCwd: '/test',
       requestGateway: vi.fn(),
       scope: { add, remove: vi.fn(() => null), target: 'main', update: vi.fn(() => true), updateIfCurrent: vi.fn(() => true) }
     }))
+
     let current = true
     const pending = result.current.attachImageBlob(new Blob([new Uint8Array([1])], { type: 'image/png' }), () => current)
     await vi.waitFor(() => expect(saveImageBuffer).toHaveBeenCalledOnce())
@@ -396,6 +432,7 @@ describe('useComposerActions generated paste title metadata', () => {
     const savePastedText = vi.fn(async () => '/tmp/composer-pastes/pasted-content.txt')
     const add = vi.fn<(attachment: ComposerAttachment) => void>()
     Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { savePastedText } })
+
     const { result } = renderHook(() => useComposerActions({
       activeSessionId: null,
       currentCwd: '/test',
