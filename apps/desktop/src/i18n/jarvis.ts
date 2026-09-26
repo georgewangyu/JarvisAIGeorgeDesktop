@@ -144,10 +144,26 @@ const copy = {
     theme: 'Jarvis appearance',
     themeDetail: 'Warm neutrals, soft lavender, and a little room to think.',
     restore: 'Use Jarvis theme',
+    setupReview: {
+      title: 'Review setup',
+      detail: 'Revisit Mac access and app detection. This does not reset your account, chats, or permissions.',
+      open: 'Review setup steps'
+    },
+    approval: {
+      title: 'Action approvals', detail: 'Choose how Jarvis asks before acting with this AI profile.', modeLabel: 'Approval mode',
+      smart: { label: 'Balanced', description: 'Handle routine actions and ask when approval is needed.' },
+      manual: { label: 'Ask more often', description: 'Ask before actions that require tool approval.' },
+      off: { label: 'Fewer prompts', description: 'Skip normal tool approval prompts. Mac permissions still apply; some destructive terminal commands remain blocked.' },
+      confirmTitle: 'Use fewer approval prompts?',
+      confirmDetail: 'Jarvis will skip normal tool approval prompts for this AI profile. Mac permissions still apply; some destructive terminal commands remain blocked. You can change this later.',
+      confirmLabel: 'Use fewer prompts', loadError: 'Couldn’t load approval settings.', retry: 'Retry',
+      loading: 'Loading approval settings…', saveError: 'Couldn’t save that choice. Your previous setting is still in effect.'
+    },
     connections: 'Connections & permissions',
     connectionsDetail: 'Manage your AI account, files, apps, and microphone.',
     open: 'Manage connections',
     advancedDetail: 'Provider, safety, voice, and runtime controls for when you need them.',
+    advancedPreviewDetail: 'Jarvis keeps provider and runtime details managed automatically in this preview.',
     advancedOpen: 'Open advanced settings',
     local: 'Tasks send relevant context to your connected AI provider. Chat storage depends on your connection setup.'
   },
@@ -290,10 +306,26 @@ const copy = {
     theme: 'Jarvisの外観',
     themeDetail: '落ち着いた色、柔らかなラベンダー、心地よい余白。',
     restore: 'Jarvisテーマを使う',
+    setupReview: {
+      title: 'セットアップを確認',
+      detail: 'Macへのアクセスとアプリの検出を再確認できます。アカウント、チャット、アクセス権はリセットされません。',
+      open: 'セットアップ手順を確認'
+    },
+    approval: {
+      title: '操作の承認', detail: 'このAIプロファイルで、Jarvisが操作前に確認する頻度を選びます。', modeLabel: '承認モード',
+      smart: { label: 'バランス重視', description: '通常の操作は進め、承認が必要なときに確認します。' },
+      manual: { label: '確認を増やす', description: 'ツールの承認が必要な操作の前に確認します。' },
+      off: { label: '確認を減らす', description: '通常のツール承認の確認を省略します。Macのアクセス権は引き続き適用され、一部の破壊的なターミナルコマンドはブロックされます。' },
+      confirmTitle: '承認の確認を減らしますか？',
+      confirmDetail: 'このAIプロファイルでは、Jarvisが通常のツール承認の確認を省略します。Macのアクセス権は引き続き適用され、一部の破壊的なターミナルコマンドはブロックされます。後から変更できます。',
+      confirmLabel: '確認を減らす', loadError: '承認設定を読み込めませんでした。', retry: '再試行',
+      loading: '承認設定を読み込み中…', saveError: '選択を保存できませんでした。以前の設定が引き続き有効です。'
+    },
     connections: '接続とアクセス権',
     connectionsDetail: 'AIアカウント、ファイル、アプリ、マイクを管理します。',
     open: '接続を管理',
     advancedDetail: '必要に応じてプロバイダー、安全性、音声、実行環境を設定します。',
+    advancedPreviewDetail: 'このプレビューでは、プロバイダーと実行環境の詳細をJarvisが自動的に管理します。',
     advancedOpen: '詳細設定を開く',
     local: 'タスクに関連する情報は接続先のAIプロバイダーに送信されます。チャットの保存先は接続設定によって異なります。'
   },
@@ -436,10 +468,26 @@ const copy = {
     theme: 'Jarvis 外观',
     themeDetail: '柔和的中性色、淡紫色与舒适的留白。',
     restore: '使用 Jarvis 主题',
+    setupReview: {
+      title: '检查设置',
+      detail: '重新检查 Mac 访问权限和应用检测。这不会重置你的账户、聊天或权限。',
+      open: '检查设置步骤'
+    },
+    approval: {
+      title: '操作审批', detail: '选择 Jarvis 使用此 AI 配置文件执行操作前如何征求同意。', modeLabel: '审批模式',
+      smart: { label: '平衡', description: '处理常规操作，并在需要审批时询问。' },
+      manual: { label: '更频繁地询问', description: '在需要工具审批的操作前询问。' },
+      off: { label: '减少提示', description: '跳过常规工具审批提示。Mac 权限仍然适用；部分破坏性终端命令仍会被阻止。' },
+      confirmTitle: '减少审批提示？',
+      confirmDetail: 'Jarvis 将针对这个 AI 配置文件跳过常规工具审批提示。Mac 权限仍然适用；部分破坏性终端命令仍会被阻止。之后可以更改。',
+      confirmLabel: '减少提示', loadError: '无法加载审批设置。', retry: '重试',
+      loading: '正在加载审批设置…', saveError: '无法保存此选项。之前的设置仍然有效。'
+    },
     connections: '连接与权限',
     connectionsDetail: '管理 AI 账户、文件、应用和麦克风。',
     open: '管理连接',
     advancedDetail: '按需配置提供商、安全、语音和运行环境。',
+    advancedPreviewDetail: '在此预览版中，Jarvis 会自动管理提供商和运行环境的详细设置。',
     advancedOpen: '打开高级设置',
     local: '任务会将相关内容发送给已连接的 AI 提供商。聊天存储位置取决于连接设置。'
   },
@@ -582,10 +630,26 @@ const copy = {
     theme: 'Jarvis 外觀',
     themeDetail: '柔和的中性色、淡紫色與舒適的留白。',
     restore: '使用 Jarvis 主題',
+    setupReview: {
+      title: '檢查設定',
+      detail: '重新檢查 Mac 存取權限和 App 偵測。這不會重設你的帳號、聊天或權限。',
+      open: '檢查設定步驟'
+    },
+    approval: {
+      title: '操作核准', detail: '選擇 Jarvis 使用此 AI 設定檔執行操作前如何徵求同意。', modeLabel: '核准模式',
+      smart: { label: '平衡', description: '處理例行操作，並在需要核准時詢問。' },
+      manual: { label: '更常詢問', description: '在需要工具核准的操作前詢問。' },
+      off: { label: '減少提示', description: '略過一般工具核准提示。Mac 權限仍然適用；部分具破壞性的終端機指令仍會遭到封鎖。' },
+      confirmTitle: '減少核准提示？',
+      confirmDetail: 'Jarvis 將針對這個 AI 設定檔略過一般工具核准提示。Mac 權限仍然適用；部分具破壞性的終端機指令仍會遭到封鎖。之後可以變更。',
+      confirmLabel: '減少提示', loadError: '無法載入核准設定。', retry: '重試',
+      loading: '正在載入核准設定…', saveError: '無法儲存此選項。先前的設定仍然有效。'
+    },
     connections: '連線與權限',
     connectionsDetail: '管理 AI 帳戶、檔案、應用程式和麥克風。',
     open: '管理連線',
     advancedDetail: '按需設定供應商、安全、語音和執行環境。',
+    advancedPreviewDetail: '在此預覽版中，Jarvis 會自動管理供應商和執行環境的詳細設定。',
     advancedOpen: '開啟進階設定',
     local: '任務會將相關內容傳送給已連線的 AI 供應商。聊天儲存位置取決於連線設定。'
   }

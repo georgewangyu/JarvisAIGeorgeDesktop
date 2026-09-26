@@ -99,6 +99,20 @@ it('reopens setup for review without resetting app state', () => {
   expect($consumerSetupReview.get()).toBe(true)
 })
 
+it('localizes the remaining General setup and preview copy in Japanese', () => {
+  render(
+    <I18nProvider configClient={null} initialLocale="ja">
+      <MemoryRouter><PreferencesView /></MemoryRouter>
+    </I18nProvider>
+  )
+
+  expect(screen.getByRole('heading', { name: 'セットアップを確認' })).toBeTruthy()
+  expect(screen.getByText(/アカウント、チャット、アクセス権はリセットされません/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'セットアップ手順を確認' }))
+  expect($consumerSetupReview.get()).toBe(true)
+  expect(screen.getByText(/プロバイダーと実行環境の詳細をJarvisが自動的に管理します/)).toBeTruthy()
+})
+
 it('shows the running app version from the desktop bridge without offering an updater', async () => {
   const getVersion = vi.fn().mockResolvedValue({
     appVersion: '0.21.3', desktopAppVersion: '0.17.6', electronVersion: '40', nodeVersion: '24',

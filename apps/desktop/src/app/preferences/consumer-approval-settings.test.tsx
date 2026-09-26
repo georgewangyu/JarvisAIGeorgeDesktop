@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import { I18nProvider } from '@/i18n'
 import { $approvalModes } from '@/store/approval-mode'
 
 import { ConsumerApprovalSettings } from './consumer-approval-settings'
@@ -103,4 +104,26 @@ it('expires a pending fewer-prompts confirmation across an A→B→A profile swi
     'personal', 'config.set', { key: 'approvals.mode', value: 'off' }, undefined, undefined,
     { spawnPriority: 'foreground' }
   )
+})
+
+it('shows Japanese approval copy while keeping the same permission limits and confirmation', async () => {
+  requestGatewayForProfile.mockResolvedValue({ value: 'manual' })
+  confirm.mockResolvedValue(false)
+
+  render(
+    <I18nProvider configClient={null} initialLocale="ja">
+      <ConsumerApprovalSettings profile="work" />
+    </I18nProvider>
+  )
+
+  expect(await screen.findByRole('heading', { name: '操作の承認' })).toBeTruthy()
+  expect(screen.getByRole('radiogroup', { name: '承認モード' })).toBeTruthy()
+  expect(screen.getByText(/一部の破壊的なターミナルコマンドはブロックされます/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('radio', { name: /確認を減らす/ }))
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.objectContaining({
+    title: '承認の確認を減らしますか？',
+    description: expect.stringContaining('Macのアクセス権は引き続き適用され'),
+    confirmLabel: '確認を減らす'
+  })))
+  expect(requestGatewayForProfile).toHaveBeenCalledTimes(1)
 })

@@ -104,18 +104,18 @@ export function PreferencesView() {
         </Button>
       </section>
       <section className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
-        <h2 className="text-base font-semibold">Review setup</h2>
+        <h2 className="text-base font-semibold">{s.setupReview.title}</h2>
         <p className="mb-4 mt-2 text-sm text-muted-foreground">
-          Revisit Mac access and app detection. This does not reset your account, chats, or permissions.
+          {s.setupReview.detail}
         </p>
-        <Button onClick={openConsumerSetupReview} variant="secondary">Review setup steps</Button>
+        <Button onClick={openConsumerSetupReview} variant="secondary">{s.setupReview.open}</Button>
       </section>
       <ConsumerApprovalSettings key={profile} profile={profile} />
       <details className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
         <summary className="cursor-pointer text-base font-semibold">{t.settings.sections.advanced}</summary>
         <p className="mb-4 mt-3 text-sm text-muted-foreground">{s.advancedDetail}</p>
         <p className="text-sm text-muted-foreground">
-          Jarvis keeps provider and runtime details managed automatically in this preview.
+          {s.advancedPreviewDetail}
         </p>
       </details>
       <footer className="mt-10 space-y-6 border-t border-(--ui-stroke-tertiary) pt-8">

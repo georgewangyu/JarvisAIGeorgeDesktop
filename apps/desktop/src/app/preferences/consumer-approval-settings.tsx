@@ -2,17 +2,20 @@ import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { useJarvisCopy } from '@/i18n/jarvis'
 import { $approvalModes, type ApprovalMode, setApprovalModeForProfile, syncApprovalModeForProfile } from '@/store/approval-mode'
 import { confirm } from '@/store/confirm'
 import { requestGatewayForProfile } from '@/store/gateway'
 
-const OPTIONS: { description: string; label: string; mode: ApprovalMode }[] = [
-  { mode: 'smart', label: 'Balanced', description: 'Handle routine actions and ask when approval is needed.' },
-  { mode: 'manual', label: 'Ask more often', description: 'Ask before actions that require tool approval.' },
-  { mode: 'off', label: 'Fewer prompts', description: 'Skip normal tool approval prompts. Mac permissions still apply; some destructive terminal commands remain blocked.' }
-]
-
 export function ConsumerApprovalSettings({ profile }: { profile: string }) {
+  const s = useJarvisCopy().approval
+
+  const options: { description: string; label: string; mode: ApprovalMode }[] = [
+    { mode: 'smart', ...s.smart },
+    { mode: 'manual', ...s.manual },
+    { mode: 'off', ...s.off }
+  ]
+
   const modes = useStore($approvalModes)
   const mode = modes[profile.trim() || 'default']
   const [state, setState] = useState<'error' | 'loading' | 'ready' | 'saving'>('loading')
@@ -53,9 +56,9 @@ export function ConsumerApprovalSettings({ profile }: { profile: string }) {
     const epoch = scopeEpoch.current
 
     if (next === 'off' && !await confirm({
-      title: 'Use fewer approval prompts?',
-      description: 'Jarvis will skip normal tool approval prompts for this AI profile. Mac permissions still apply; some destructive terminal commands remain blocked. You can change this later.',
-      confirmLabel: 'Use fewer prompts'
+      title: s.confirmTitle,
+      description: s.confirmDetail,
+      confirmLabel: s.confirmLabel
     })) {
       return
     }
@@ -77,19 +80,19 @@ export function ConsumerApprovalSettings({ profile }: { profile: string }) {
   }
 
   return (
-    <section aria-label="Action approvals" className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
-      <h2 className="text-base font-semibold">Action approvals</h2>
-      <p className="mt-2 text-sm text-muted-foreground">Choose how Jarvis asks before acting with this AI profile.</p>
+    <section aria-label={s.title} className="mt-10 border-t border-(--ui-stroke-tertiary) pt-8">
+      <h2 className="text-base font-semibold">{s.title}</h2>
+      <p className="mt-2 text-sm text-muted-foreground">{s.detail}</p>
       {state === 'error' ? (
         <div className="mt-4 flex items-center gap-4 text-sm" role="alert">
-          <span>Couldn’t load approval settings.</span>
-          <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="secondary">Retry</Button>
+          <span>{s.loadError}</span>
+          <Button onClick={() => setRetry(value => value + 1)} size="sm" variant="secondary">{s.retry}</Button>
         </div>
       ) : state === 'loading' ? (
-        <p className="mt-4 text-sm text-muted-foreground" role="status">Loading approval settings…</p>
+        <p className="mt-4 text-sm text-muted-foreground" role="status">{s.loading}</p>
       ) : (
-        <div aria-label="Approval mode" className="mt-4 divide-y divide-(--ui-stroke-tertiary)" role="radiogroup">
-          {OPTIONS.map(option => (
+        <div aria-label={s.modeLabel} className="mt-4 divide-y divide-(--ui-stroke-tertiary)" role="radiogroup">
+          {options.map(option => (
             <label className="flex cursor-pointer items-start gap-4 py-4" key={option.mode}>
               <input
                 checked={mode === option.mode}
@@ -108,7 +111,7 @@ export function ConsumerApprovalSettings({ profile }: { profile: string }) {
           ))}
         </div>
       )}
-      {writeError ? <p className="mt-3 text-sm text-(--ui-text-danger)" role="alert">Couldn’t save that choice. Your previous setting is still in effect.</p> : null}
+      {writeError ? <p className="mt-3 text-sm text-(--ui-text-danger)" role="alert">{s.saveError}</p> : null}
     </section>
   )
 }
