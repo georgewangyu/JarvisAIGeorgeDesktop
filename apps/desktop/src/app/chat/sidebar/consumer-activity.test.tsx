@@ -10,7 +10,7 @@ import type { SessionDotState } from '@/store/session-dot-state'
 import { clearAllSessionStates, publishSessionState } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
 
-import { buildConsumerActivityRows, buildUnavailableApprovalRows, ConsumerActivity, consumerChatCue, openConsumerActivityRow } from './consumer-activity'
+import { buildConsumerActivityRows, buildPendingApprovalRows, buildUnavailableApprovalRows, ConsumerActivity, consumerChatCue, openConsumerActivityRow } from './consumer-activity'
 
 afterEach(() => {
   cleanup()
@@ -20,6 +20,8 @@ afterEach(() => {
   dismissApprovalRecovery({ connectionId: 'local', profile: 'default' }, 'approval-chat')
   dismissApprovalRecovery({ connectionId: 'remote', profile: 'default' }, 'approval-chat')
   dismissApprovalRecovery({ connectionId: 'local', profile: 'default' }, 'worker-chat')
+  $approvalRecoveryReceipts.set([])
+  window.localStorage.removeItem('hermes.desktop.approvalRecovery.v1')
   _resetSessionOwnerHintsForTests({ storage: true })
 })
 
@@ -40,6 +42,48 @@ const session = (id: string, title: string, lastActive: number): SessionInfo => 
 })
 
 describe('consumer activity rows', () => {
+  it('keeps a persisted pending approval visible as an exact-owner chat check after Activity remounts', () => {
+    const local = { connectionId: 'local', profile: 'default' }
+    const visible = { ...session('approval-chat', 'Plan a trip', 10), connection_id: 'local', profile: 'default' }
+    const foreign = { ...session('approval-chat', 'Foreign chat', 11), connection_id: 'remote', profile: 'default' }
+    const worker = { ...session('worker-chat', 'Private worker', 9), connection_id: 'local', profile: 'default', source: 'subagent' }
+    const onOpenChat = vi.fn()
+
+    noteApprovalPending(local, visible.id, visible.id, 'request-local')
+    noteApprovalPending(local, worker.id, worker.id, 'request-worker')
+    expect(window.localStorage.getItem('hermes.desktop.approvalRecovery.v1')).toContain('request-local')
+    expect(buildPendingApprovalRows([foreign, worker, visible], $approvalRecoveryReceipts.get())).toEqual([{
+      id: visible.id, title: 'Plan a trip', connectionId: 'local', profile: 'default', session: visible
+    }])
+
+    const first = render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={onOpenChat} sessions={[foreign, worker, visible]} />)
+    first.unmount()
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={onOpenChat} sessions={[foreign, worker, visible]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    expect(screen.getByText('Check this chat · An earlier approval may still need attention')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /Plan a trip/ })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: /Plan a trip/ }))
+    expect(onOpenChat).toHaveBeenCalledWith(visible.id, visible)
+    expect(onOpenChat).not.toHaveBeenCalledWith(foreign.id, foreign)
+  })
+
+  it('does not duplicate a pending receipt when the live chat already needs input', () => {
+    const local = { connectionId: 'local', profile: 'default' }
+    const visible = { ...session('approval-chat', 'Plan a trip', 10), connection_id: 'local', profile: 'default' }
+    setSessionOwnerHint(visible.id, local)
+    noteApprovalPending(local, visible.id, visible.id, 'request-local')
+    expect(consumerChatCue([visible], { 'approval-chat': 'needs-input' }, $approvalRecoveryReceipts.get(), 'local', 'default')).toBe('needs-input')
+    expect(consumerChatCue([visible], {}, $approvalRecoveryReceipts.get(), 'remote', 'default')).toBeNull()
+
+    const pending = { ...createClientSessionState(null), storedSessionId: visible.id, busy: true, needsInput: true }
+    act(() => publishSessionState('approval-runtime', pending))
+    render(<ConsumerActivity onOpenAutomations={vi.fn()} onOpenChat={vi.fn()} sessions={[visible]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Jarvis activity' }))
+    expect(screen.getByText('Needs your input')).toBeTruthy()
+    expect(screen.queryByText('Check this chat · An earlier approval may still need attention')).toBeNull()
+    expect(screen.getAllByRole('button', { name: /Plan a trip/ })).toHaveLength(1)
+  })
+
   it('lights only the owning connection for a consumer approval needing input', () => {
     const local = { connectionId: 'local', profile: 'default' }
     const remote = { connectionId: 'remote', profile: 'default' }

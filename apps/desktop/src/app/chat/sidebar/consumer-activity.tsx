@@ -31,7 +31,7 @@ export interface ConsumerActivityRow {
   title: string
 }
 
-export interface UnavailableApprovalRow {
+export interface ApprovalRecoveryRow {
   id: string
   title: string
   connectionId: string
@@ -45,16 +45,17 @@ function activityTitle(session: SessionInfo, kind: ConsumerActivityRow['kind']):
   return session.title?.trim() || (kind === 'automation' ? 'Scheduled update' : 'Jarvis chat')
 }
 
-/** A lost approval has no executable control. Surface it only beside a
+/** Recovery receipts have no executable control. Surface them only beside a
  *  visible consumer chat whose exact owner matches the persisted receipt. */
-export function buildUnavailableApprovalRows(
+function buildApprovalRecoveryRows(
   sessions: readonly SessionInfo[],
-  receipts: readonly ApprovalRecoveryReceipt[]
-): UnavailableApprovalRow[] {
-  const latestBySession = new Map<string, { row: UnavailableApprovalRow; seenAt: number }>()
+  receipts: readonly ApprovalRecoveryReceipt[],
+  state: ApprovalRecoveryReceipt['state']
+): ApprovalRecoveryRow[] {
+  const latestBySession = new Map<string, { row: ApprovalRecoveryRow; seenAt: number }>()
 
   for (const receipt of receipts) {
-    if (receipt.state !== 'interrupted') {continue}
+    if (receipt.state !== state) {continue}
 
     const matchingSessions = sessions.filter(candidate => {
       const source = normalizeSessionSource(candidate.source)
@@ -93,6 +94,22 @@ export function buildUnavailableApprovalRows(
     .sort((a, b) => b.seenAt - a.seenAt)
     .slice(0, 6)
     .map(item => item.row)
+}
+
+export function buildUnavailableApprovalRows(
+  sessions: readonly SessionInfo[],
+  receipts: readonly ApprovalRecoveryReceipt[]
+): ApprovalRecoveryRow[] {
+  return buildApprovalRecoveryRows(sessions, receipts, 'interrupted')
+}
+
+/** A persisted pending receipt is only a reason to check the exact chat. It
+ *  cannot assert that the approval is still actionable after a restart. */
+export function buildPendingApprovalRows(
+  sessions: readonly SessionInfo[],
+  receipts: readonly ApprovalRecoveryReceipt[]
+): ApprovalRecoveryRow[] {
+  return buildApprovalRecoveryRows(sessions, receipts, 'pending')
 }
 
 export function openConsumerActivityRow(
@@ -205,7 +222,8 @@ export function consumerChatCue(
   const activityRows = buildConsumerActivityRows(owned, states)
 
   if (activityRows.some(row => row.status === 'needs-input') ||
-    buildUnavailableApprovalRows(owned, receipts.filter(row => row.connectionId === connectionId && row.profile === profile)).length > 0) {
+    buildUnavailableApprovalRows(owned, receipts.filter(row => row.connectionId === connectionId && row.profile === profile)).length > 0 ||
+    buildPendingApprovalRows(owned, receipts.filter(row => row.connectionId === connectionId && row.profile === profile)).length > 0) {
     return 'needs-input'
   }
 
@@ -338,11 +356,18 @@ export function ConsumerActivity({
   const rows = buildConsumerActivityRows(sessions, states, automationSessions)
   const unavailableApprovals = buildUnavailableApprovalRows(sessions, approvalReceipts)
   const unavailableIds = new Set(unavailableApprovals.map(row => row.id))
-  const visibleRows = rows.filter(row => !unavailableIds.has(row.id))
+
+  const pendingApprovals = buildPendingApprovalRows(sessions, approvalReceipts).filter(row =>
+    !unavailableIds.has(row.id) && !rows.some(activity => activity.id === row.id && activity.status === 'needs-input')
+  )
+
+  const recoveryIds = new Set([...unavailableIds, ...pendingApprovals.map(row => row.id)])
+  const visibleRows = rows.filter(row => !recoveryIds.has(row.id))
+
   const sessionById = new Map([...sessions, ...automationSessions].map(session => [session.id, session]))
 
   const attentionCount = interrupted.filter(event => event.retry_status !== 'settled').length +
-    visibleRows.filter(row => row.status === 'needs-input').length + unavailableApprovals.length
+    visibleRows.filter(row => row.status === 'needs-input').length + unavailableApprovals.length + pendingApprovals.length
 
   return (
     <>
@@ -354,7 +379,7 @@ export function ConsumerActivity({
       <PopoverTrigger asChild>
         <Button aria-label={copy.activity} className="relative" size="icon-sm" variant="ghost">
           <Activity className={iconSize.sm} />
-          {visibleRows.length > 0 || interrupted.length > 0 || unavailableApprovals.length > 0 ? (
+          {visibleRows.length > 0 || interrupted.length > 0 || unavailableApprovals.length > 0 || pendingApprovals.length > 0 ? (
             <span
               aria-hidden="true"
               className={cn(
@@ -369,7 +394,7 @@ export function ConsumerActivity({
         <div className="px-3 pb-2 pt-3">
           <p className="text-sm font-medium">{copy.activity}</p>
           <p className="mt-0.5 text-xs text-(--ui-text-tertiary)">
-            {visibleRows.length > 0 || interrupted.length > 0 || unavailableApprovals.length > 0 ? copy.activityDetail : copy.activityReadyDetail}
+            {visibleRows.length > 0 || interrupted.length > 0 || unavailableApprovals.length > 0 || pendingApprovals.length > 0 ? copy.activityDetail : copy.activityReadyDetail}
           </p>
         </div>
         {interrupted.map(event => (
@@ -407,13 +432,24 @@ export function ConsumerActivity({
             <span className="mt-1 text-xs text-(--ui-text-secondary)">Approval no longer available · Review chat before retrying</span>
           </button>
         ))}
+        {pendingApprovals.map(row => (
+          <button
+            className="flex w-full flex-col border-t border-(--ui-stroke-tertiary) px-3 py-3 text-left hover:bg-(--ui-control-hover-background)"
+            key={JSON.stringify([row.connectionId, row.profile, row.id])}
+            onClick={() => onOpenChat(row.id, row.session)}
+            type="button"
+          >
+            <span className="text-sm font-medium text-foreground">{row.title}</span>
+            <span className="mt-1 text-xs text-(--ui-text-secondary)">Check this chat · An earlier approval may still need attention</span>
+          </button>
+        ))}
         {interruptedLoadError ? (
           <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3 text-xs text-(--ui-text-secondary)">
             Could not check interrupted activity.{' '}
             <Button onClick={() => setRefreshIndex(index => index + 1)} size="inline" variant="textStrong">Retry</Button>
           </div>
         ) : null}
-        {visibleRows.length === 0 && unavailableApprovals.length === 0 && interrupted.length === 0 && !interruptedLoadError ? (
+        {visibleRows.length === 0 && unavailableApprovals.length === 0 && pendingApprovals.length === 0 && interrupted.length === 0 && !interruptedLoadError ? (
           <div className="border-t border-(--ui-stroke-tertiary) px-3 py-3 text-sm text-(--ui-text-secondary)">
             {copy.activityReady}
           </div>
