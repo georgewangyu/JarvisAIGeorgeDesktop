@@ -48,15 +48,51 @@ it('shows scoped attachment import folders, revokes a grant, and offers retry af
 
   render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
   await screen.findByText('Attachments Jarvis imports')
+  expect(await screen.findByText('No allowed folders.')).toBeTruthy()
+  expect(screen.getByText('No blocked folders.')).toBeTruthy()
+  expect(screen.getByText(/choices apply to this profile’s chat attachments/)).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Allow folder' }))
   await screen.findByText('Could not change attachment import access. Retry from this profile.')
   expect(screen.queryByText(/private path/)).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Allow folder' }))
-  await screen.findByText('Allowed: /safe')
-  fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
-  await screen.findByText('Blocked: /safe')
+  expect(await within(await screen.findByRole('list', { name: 'Allowed attachment folders' })).findByText('/safe')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Revoke access to /safe' }))
+  expect(await within(await screen.findByRole('list', { name: 'Blocked attachment folders' })).findByText('/safe')).toBeTruthy()
+  expect(screen.getByText('No allowed folders.')).toBeTruthy()
   expect(revokeFolder).toHaveBeenCalledWith('/safe')
-  expect(screen.getByText(/does not control terminal, tools, or inline file references/)).toBeTruthy()
+  expect(screen.getByText(/do not control terminal, tools, or inline file references/)).toBeTruthy()
+})
+
+it('shows an honest unavailable state without folder controls', async () => {
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  await screen.findByText('Attachment import settings are unavailable. Refresh to check again.')
+  expect(screen.queryByRole('button', { name: 'Allow folder' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Block folder' })).toBeNull()
+})
+
+it('clears an in-flight folder choice when the active profile changes', async () => {
+  let finishChoice!: (value: { allowed: string[]; blocked: string[] }) => void
+  const pendingChoice = new Promise<{ allowed: string[]; blocked: string[] }>(resolve => {finishChoice = resolve})
+  const chooseFolder = vi.fn().mockReturnValue(pendingChoice)
+
+  const list = vi.fn()
+    .mockResolvedValueOnce({ allowed: ['/alpha'], blocked: [] })
+    .mockResolvedValue({ allowed: [], blocked: ['/beta'] })
+
+  Object.defineProperty(window, 'hermesDesktop', {
+    configurable: true,
+    value: { jarvisFileImports: { list, chooseFolder, revokeFolder: vi.fn() } }
+  })
+
+  render(<MemoryRouter><ConnectionsView /></MemoryRouter>)
+  expect(await within(await screen.findByRole('list', { name: 'Allowed attachment folders' })).findByText('/alpha')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Allow folder' }))
+  act(() => $activeGatewayProfile.set('beta'))
+  expect(await within(await screen.findByRole('list', { name: 'Blocked attachment folders' })).findByText('/beta')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Allow folder' })).toHaveProperty('disabled', false)
+  await act(async () => finishChoice({ allowed: ['/alpha', '/late'], blocked: [] }))
+  expect(screen.queryByText('/late')).toBeNull()
+  expect(screen.queryByText('/alpha')).toBeNull()
 })
 
 it('does not treat a selected model as proof of an authenticated account', async () => {

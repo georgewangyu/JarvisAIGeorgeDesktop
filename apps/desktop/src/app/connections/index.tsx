@@ -202,6 +202,7 @@ export function ConnectionsView() {
     setError(null)
     setCalendar(null)
     setFileImports(null)
+    setFileImportBusy(false)
     setFileImportError(null)
     setCalendarEvents(null)
     setCalendarError(null)
@@ -564,29 +565,57 @@ export function ConnectionsView() {
               />
             ) : null}
             {importsMatch ? (
-              <div className="border-t border-(--ui-stroke-tertiary)">
-                <ConnectionRow
-                  action={fileImports ? (
-                    <div className="flex gap-2">
-                      <Button disabled={fileImportBusy} onClick={() => void changeFileImportFolder('allow')} size="sm" variant="secondary">Allow folder</Button>
-                      <Button disabled={fileImportBusy} onClick={() => void changeFileImportFolder('block')} size="sm" variant="secondary">Block folder</Button>
+              <div className="border-t border-(--ui-stroke-tertiary) p-4 sm:p-5">
+                <div className="rounded-2xl bg-[color-mix(in_srgb,var(--ui-accent)_9%,var(--ui-bg-secondary))] p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--ui-accent)_18%,var(--ui-bg-secondary))]">
+                        <FileText className="size-5 text-(--ui-text-primary)" />
+                      </div>
+                      <h3 className="font-medium tracking-tight">Attachments Jarvis imports</h3>
                     </div>
-                  ) : null}
-                  detail="Selected files and allowed folders can be imported as chat attachments. A blocked folder wins over either choice. This does not control terminal, tools, or inline file references."
-                  icon={FileText}
-                  label="Attachments Jarvis imports"
-                  status={<Status>{fileImports ? 'Managed here' : 'Unavailable'}</Status>}
-                />
-                {fileImports?.allowed.map(folder => (
-                  <div className="flex items-center justify-between gap-4 border-t border-(--ui-stroke-tertiary) px-5 py-3" key={`allow:${folder}`}>
-                    <span className="min-w-0 break-all text-sm">Allowed: {folder}</span>
-                    <Button disabled={fileImportBusy} onClick={() => void changeFileImportFolder('block', folder)} size="sm" variant="secondary">Revoke</Button>
+                    <Status>{fileImports ? 'Managed here' : 'Unavailable'}</Status>
                   </div>
-                ))}
-                {fileImports?.blocked.map(folder => (
-                  <p className="border-t border-(--ui-stroke-tertiary) px-5 py-3 text-sm" key={`block:${folder}`}>Blocked: {folder}</p>
-                ))}
-                {fileImportError ? <p className="px-5 pb-3 text-sm text-destructive" role="alert">{fileImportError}</p> : null}
+                  <p className="mt-4 max-w-2xl text-sm leading-6 text-(--ui-text-secondary)">
+                    When you attach a file in chat, Jarvis can import that selected file or files in folders you allow. Blocked folders take priority. These choices apply to this profile’s chat attachments; they do not control terminal, tools, or inline file references.
+                  </p>
+                  {fileImports ? (
+                    <>
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <Button disabled={fileImportBusy} onClick={() => void changeFileImportFolder('allow')} size="lg">Allow folder</Button>
+                        <Button disabled={fileImportBusy} onClick={() => void changeFileImportFolder('block')} size="lg" variant="secondary">Block folder</Button>
+                      </div>
+                      <div className="mt-6 grid gap-6 sm:grid-cols-2">
+                        <div>
+                          <h4 className="text-sm font-medium">Allowed folders</h4>
+                          <p className="mt-1 text-xs leading-5 text-(--ui-text-tertiary)">Files here can be imported as chat attachments.</p>
+                          {fileImports.allowed.length ? (
+                            <ul aria-label="Allowed attachment folders" className="mt-3 space-y-3">
+                              {fileImports.allowed.map(folder => (
+                                <li className="flex min-w-0 items-start justify-between gap-3" key={`allow:${folder}`}>
+                                  <span className="min-w-0 break-all text-sm leading-5">{folder}</span>
+                                  <Button aria-label={`Revoke access to ${folder}`} disabled={fileImportBusy} onClick={() => void changeFileImportFolder('block', folder)} size="sm" variant="textStrong">Revoke</Button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : <p className="mt-3 text-sm text-(--ui-text-tertiary)">No allowed folders.</p>}
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium">Blocked folders</h4>
+                          <p className="mt-1 text-xs leading-5 text-(--ui-text-tertiary)">Files here cannot be imported, even if selected.</p>
+                          {fileImports.blocked.length ? (
+                            <ul aria-label="Blocked attachment folders" className="mt-3 space-y-3">
+                              {fileImports.blocked.map(folder => (
+                                <li className="min-w-0 break-all text-sm leading-5" key={`block:${folder}`}>{folder}</li>
+                              ))}
+                            </ul>
+                          ) : <p className="mt-3 text-sm text-(--ui-text-tertiary)">No blocked folders.</p>}
+                        </div>
+                      </div>
+                    </>
+                  ) : <p className="mt-4 text-sm text-(--ui-text-tertiary)">Attachment import settings are unavailable. Refresh to check again.</p>}
+                  {fileImportError ? <p className="mt-4 text-sm text-destructive" role="alert">{fileImportError}</p> : null}
+                </div>
               </div>
             ) : null}
             {microphoneMatch ? (
