@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { $connection } from '@/store/session'
 
@@ -8,10 +8,15 @@ import { ConsumerBackupSettings } from './consumer-backup-settings'
 const exportFlow = vi.hoisted(() => vi.fn())
 vi.mock('@/store/profile-share', () => ({ runExportProfileFlow: exportFlow }))
 
+beforeEach(() => {
+  Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { selectSavePath: vi.fn() } })
+})
+
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   $connection.set(null)
+  Reflect.deleteProperty(window, 'hermesDesktop')
 })
 
 it('exports the selected local profile only after an explicit click', async () => {
@@ -42,6 +47,22 @@ it('shows a retryable picker error without exporting', async () => {
   expect((await screen.findByRole('alert')).textContent).toContain('Couldn’t save assistant setup.')
   fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
   await waitFor(() => expect(exportFlow).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+})
+
+it('reports an unavailable save dialog and recovers when it becomes available', async () => {
+  $connection.set({ mode: 'local' } as NonNullable<ReturnType<typeof $connection.get>>)
+  exportFlow.mockResolvedValue('/synthetic/backup.tar.gz')
+  render(<ConsumerBackupSettings profile="writer" />)
+
+  Reflect.deleteProperty(window, 'hermesDesktop')
+  fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('save dialog is unavailable')
+  expect(exportFlow).not.toHaveBeenCalled()
+
+  Object.defineProperty(window, 'hermesDesktop', { configurable: true, value: { selectSavePath: vi.fn() } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save setup backup' }))
+  await waitFor(() => expect(exportFlow).toHaveBeenCalledWith('writer', expect.objectContaining({ consumer: true })))
   await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
 })
 

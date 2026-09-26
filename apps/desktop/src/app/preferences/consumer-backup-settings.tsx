@@ -8,7 +8,7 @@ import { $connection } from '@/store/session'
 export function ConsumerBackupSettings({ profile }: { profile: string }) {
   const connection = useStore($connection)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState('')
   const local = connection?.mode === 'local'
   const request = useRef(0)
 
@@ -18,7 +18,7 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
     const current = ++request.current
 
     setSaving(false)
-    setError(false)
+    setError('')
 
     return () => { request.current = current + 1 }
   }, [local, profile])
@@ -28,15 +28,21 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
       return
     }
 
+    if (!window.hermesDesktop?.selectSavePath) {
+      setError('The Mac save dialog is unavailable. Try again.')
+
+      return
+    }
+
     const current = request.current
 
     setSaving(true)
-    setError(false)
+    setError('')
 
     try {
       await runExportProfileFlow(profile, { consumer: true, shouldContinue: () => request.current === current })
     } catch {
-      if (request.current === current) {setError(true)}
+      if (request.current === current) {setError('Couldn’t save assistant setup. Choose another location and try again.')}
     } finally {
       if (request.current === current) {setSaving(false)}
     }
@@ -52,7 +58,7 @@ export function ConsumerBackupSettings({ profile }: { profile: string }) {
         {saving ? 'Saving…' : 'Save setup backup'}
       </Button>
       {!local && <p className="mt-2 text-xs text-muted-foreground">Available when Jarvis is running on this Mac.</p>}
-      {error && <p className="mt-2 text-sm text-destructive" role="alert">Couldn’t save assistant setup. Choose another location and try again.</p>}
+      {error && <p className="mt-2 text-sm text-destructive" role="alert">{error}</p>}
     </section>
   )
 }
